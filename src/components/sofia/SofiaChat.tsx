@@ -33,7 +33,7 @@ export default function SofiaChat() {
     }
   }, [isOpen, isMinimized]);
 
-  // Initial greeting when opened
+  // Initial greeting when opened - sales focused
   useEffect(() => {
     if (isOpen && messages.length === 0) {
       const greeting: Message = {
@@ -41,8 +41,8 @@ export default function SofiaChat() {
         role: "assistant",
         content:
           language === "es"
-            ? "¡Hola! 👋 Soy Sofia, la asistente de IA de MachineMind.\n\nPuedo ayudarte con:\n• Nuestros servicios de automatización\n• Resultados de clientes reales\n• Precios y paquetes\n• Agendar una demo gratis\n\n¿Qué te gustaría saber?"
-            : "Hey! 👋 I'm Sofia, MachineMind's AI assistant.\n\nI can help you with:\n• Our AI automation services\n• Real client results\n• Pricing and packages\n• Booking a free demo\n\nWhat would you like to know?",
+            ? "¡Hey! 👋 Pregunta rápida antes de empezar:\n\nCuando alguien le escribe a tu negocio a las 2am queriendo reservar... ¿quién responde?\n\nPorque ahí es donde la mayoría pierde $2,000-4,000 al mes sin darse cuenta.\n\n¿Qué tipo de negocio tienes?"
+            : "Hey! 👋 Quick question before we dive in:\n\nWhen someone messages your business at 2am wanting to book... who answers?\n\nBecause that's where most businesses lose $2,000-4,000/month without realizing it.\n\nWhat type of business are you running?",
         timestamp: new Date(),
       };
       setMessages([greeting]);
@@ -52,12 +52,17 @@ export default function SofiaChat() {
   const quickQuestions =
     language === "es"
       ? [
-          "¿Qué servicios ofrecen?",
-          "¿Cuánto cuesta?",
-          "Ver resultados",
-          "Agendar demo",
+          "Tengo un hotel",
+          "Tengo un restaurante",
+          "Cuánto pierdo?",
+          "Agendar llamada",
         ]
-      : ["What services?", "Pricing?", "See results", "Book demo"];
+      : [
+          "I have a hotel",
+          "I have a restaurant",
+          "How much am I losing?",
+          "Book a call",
+        ];
 
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
