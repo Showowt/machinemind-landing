@@ -1,0 +1,61 @@
+"use client";
+
+import Image from "next/image";
+import Link from "next/link";
+import { useLanguage } from "@/store/portfolio";
+import LanguageSwitcher from "@/components/hero/LanguageSwitcher";
+
+export default function Header() {
+  const language = useLanguage();
+
+  const navItems = [
+    { href: "#portfolio", label: language === "es" ? "Proyectos" : "Projects" },
+    {
+      href: "#capabilities",
+      label: language === "es" ? "Servicios" : "Services",
+    },
+    { href: "#contact", label: language === "es" ? "Contacto" : "Contact" },
+  ];
+
+  return (
+    <header className="fixed top-0 left-0 right-0 z-50 bg-[var(--mm-background)]/90 backdrop-blur-sm border-b border-[var(--mm-border)]">
+      <div className="container-luxury flex items-center justify-between h-20">
+        {/* Logo */}
+        <Link href="/" className="flex items-center">
+          <Image
+            src="/logo-horizontal.png"
+            alt="MachineMind"
+            width={200}
+            height={50}
+            className="h-10 w-auto"
+            priority
+          />
+        </Link>
+
+        {/* Navigation */}
+        <nav className="hidden md:flex items-center gap-8">
+          {navItems.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="text-sm font-medium text-muted hover:text-white transition-colors"
+            >
+              {item.label}
+            </a>
+          ))}
+        </nav>
+
+        {/* Right side */}
+        <div className="flex items-center gap-4">
+          <LanguageSwitcher />
+          <a
+            href="#contact"
+            className="hidden sm:inline-flex items-center justify-center min-h-[44px] px-6 bg-[var(--mm-cyan)] text-[var(--mm-background)] font-semibold text-sm transition-all duration-200 hover:bg-[var(--mm-cyan-light)]"
+          >
+            {language === "es" ? "Hablar con Sofia" : "Talk to Sofia"}
+          </a>
+        </div>
+      </div>
+    </header>
+  );
+}
