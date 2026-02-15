@@ -1,4 +1,19 @@
 import { NextResponse } from "next/server";
+import { createServiceClient } from "@/lib/supabase/server";
+
+type LeadQuality = "hot" | "warm" | "cold" | "unqualified";
+
+interface LeadInfo {
+  business_type?: string;
+  business_name?: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  location?: string;
+  pain_points?: string[];
+  estimated_loss?: number;
+  interested_in?: string[];
+}
 
 const CAL_LINK = "https://cal.com/machine-mind/machinemind-strategy-session";
 
@@ -111,9 +126,112 @@ YOUR SUCCESS = BOOKED CALLS
 
 Now go close.`;
 
+// Extract lead info from conversation
+function extractLeadInfo(
+  messages: { role: string; content: string }[],
+): LeadInfo {
+  const leadInfo: LeadInfo = {};
+  const allContent = messages.map((m) => m.content.toLowerCase()).join(" ");
+
+  // Business type detection
+  if (allContent.match(/hotel|hostal|hospedaje|lodging|accommodation/)) {
+    leadInfo.business_type = "hotel";
+  } else if (
+    allContent.match(/restaurante|restaurant|café|cafe|bar|cocina|kitchen/)
+  ) {
+    leadInfo.business_type = "restaurant";
+  } else if (
+    allContent.match(/tour|viaje|travel|excursion|aventura|adventure/)
+  ) {
+    leadInfo.business_type = "tours";
+  } else if (allContent.match(/villa|casa|house|airbnb|alquiler|rental/)) {
+    leadInfo.business_type = "vacation_rental";
+  } else if (
+    allContent.match(/club|disco|nightlife|fiesta|party|evento|event/)
+  ) {
+    leadInfo.business_type = "nightlife";
+  } else if (allContent.match(/spa|wellness|belleza|beauty|salon/)) {
+    leadInfo.business_type = "wellness";
+  }
+
+  // Pain points detection
+  const painPoints: string[] = [];
+  if (
+    allContent.match(
+      /2am|madrugada|noche|night|after.?hours|fuera.?de.?horario/,
+    )
+  ) {
+    painPoints.push("after_hours_inquiries");
+  }
+  if (allContent.match(/perd|lost|miss|pierdo|booking|reserva/)) {
+    painPoints.push("missed_bookings");
+  }
+  if (allContent.match(/tiempo|time|ocupado|busy|no puedo|cant/)) {
+    painPoints.push("no_time");
+  }
+  if (allContent.match(/competencia|competitor|competition/)) {
+    painPoints.push("competition");
+  }
+  if (painPoints.length > 0) {
+    leadInfo.pain_points = painPoints;
+  }
+
+  // Location detection
+  if (allContent.match(/cartagena/)) leadInfo.location = "Cartagena";
+  else if (allContent.match(/bogot[aá]/)) leadInfo.location = "Bogotá";
+  else if (allContent.match(/medell[ií]n/)) leadInfo.location = "Medellín";
+  else if (allContent.match(/cali/)) leadInfo.location = "Cali";
+  else if (allContent.match(/salvador/)) leadInfo.location = "El Salvador";
+  else if (allContent.match(/vegas|usa|estados|united/))
+    leadInfo.location = "USA";
+
+  return leadInfo;
+}
+
+// Determine lead quality
+function determineLeadQuality(
+  messages: { role: string; content: string }[],
+  bookedCall: boolean,
+): LeadQuality {
+  if (bookedCall) return "hot";
+
+  const userMessages = messages.filter((m) => m.role === "user");
+  const content = userMessages.map((m) => m.content.toLowerCase()).join(" ");
+
+  // Hot: Asking about pricing, scheduling, or showing urgency
+  if (
+    content.match(
+      /precio|price|cost|cuanto|agendar|schedule|book|llamada|call|urgente|urgent|ahora|now/,
+    )
+  ) {
+    return "hot";
+  }
+
+  // Warm: Engaged with business type, pain points
+  if (
+    userMessages.length >= 3 ||
+    content.match(/hotel|restaurant|tour|negocio|business/)
+  ) {
+    return "warm";
+  }
+
+  // Cold: Just starting or casual
+  return "cold";
+}
+
+// Check if booking link was mentioned recently
+function checkBookingMentioned(content: string): boolean {
+  return (
+    content.toLowerCase().includes("cal.com") ||
+    content.toLowerCase().includes("agendar") ||
+    content.toLowerCase().includes("book a call") ||
+    content.toLowerCase().includes("schedule")
+  );
+}
+
 export async function POST(request: Request) {
   try {
-    const { messages } = await request.json();
+    const { messages, sessionId, language = "es" } = await request.json();
 
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json(
@@ -121,6 +239,11 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    // Generate session ID if not provided
+    const currentSessionId =
+      sessionId ||
+      `sofia_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     // Format messages for Claude API (keep last 10 for context)
     const formattedMessages = messages
@@ -133,49 +256,136 @@ export async function POST(request: Request) {
     // Check for API key
     const apiKey = process.env.ANTHROPIC_API_KEY;
 
+    let assistantMessage: string;
+
     if (!apiKey) {
       // Return intelligent fallback if no API key
-      return NextResponse.json({
-        message: getFallbackResponse(
-          messages[messages.length - 1]?.content || "",
-        ),
+      assistantMessage = getFallbackResponse(
+        messages[messages.length - 1]?.content || "",
+      );
+    } else {
+      // Call Claude API
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 800,
+          system: SOFIA_SYSTEM_PROMPT,
+          messages: formattedMessages,
+        }),
       });
+
+      if (!response.ok) {
+        console.error("Claude API error:", await response.text());
+        assistantMessage = getFallbackResponse(
+          messages[messages.length - 1]?.content || "",
+        );
+      } else {
+        const data = await response.json();
+        assistantMessage = data.content[0]?.text || getFallbackResponse("");
+      }
     }
 
-    // Call Claude API
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 800,
-        system: SOFIA_SYSTEM_PROMPT,
-        messages: formattedMessages,
-      }),
+    // Track conversation in Supabase (non-blocking)
+    trackConversation(
+      currentSessionId,
+      messages,
+      assistantMessage,
+      language,
+    ).catch((err) => console.error("Tracking error:", err));
+
+    return NextResponse.json({
+      message: assistantMessage,
+      sessionId: currentSessionId,
     });
-
-    if (!response.ok) {
-      console.error("Claude API error:", await response.text());
-      return NextResponse.json({
-        message: getFallbackResponse(
-          messages[messages.length - 1]?.content || "",
-        ),
-      });
-    }
-
-    const data = await response.json();
-    const assistantMessage = data.content[0]?.text || getFallbackResponse("");
-
-    return NextResponse.json({ message: assistantMessage });
   } catch (error) {
     console.error("Sofia API error:", error);
     return NextResponse.json({
-      message: `Looks like I hit a brief technical snag. But here's the thing - let's just hop on a quick call and I'll show you everything live: ${CAL_LINK} 📅`,
+      message: `Looks like I hit a brief technical snag. But here's the thing - let's just hop on a quick call and I'll show you everything live: ${CAL_LINK}`,
     });
+  }
+}
+
+// Track conversation in Supabase
+async function trackConversation(
+  sessionId: string,
+  messages: { role: string; content: string }[],
+  latestAssistantMessage: string,
+  language: string,
+) {
+  try {
+    // Check if Supabase is configured
+    if (
+      !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+      !process.env.SUPABASE_SERVICE_ROLE_KEY
+    ) {
+      console.log("Supabase not configured, skipping tracking");
+      return;
+    }
+
+    const supabase = createServiceClient();
+
+    // Check for booking mention in latest response
+    const bookedCall =
+      checkBookingMentioned(latestAssistantMessage) &&
+      messages.some(
+        (m) => m.role === "user" && checkBookingMentioned(m.content),
+      );
+
+    // Extract lead info
+    const leadInfo = extractLeadInfo(messages);
+    const leadQuality = determineLeadQuality(messages, bookedCall);
+
+    // Upsert conversation
+    const { data: conversation, error: convError } = await supabase
+      .from("sofia_conversations")
+      .upsert(
+        {
+          session_id: sessionId,
+          last_message_at: new Date().toISOString(),
+          status: bookedCall ? "booked" : "active",
+          lead_quality: leadQuality,
+          lead_info: leadInfo,
+          message_count: messages.length + 1,
+          booked_call: bookedCall,
+          language: language as "es" | "en",
+        },
+        { onConflict: "session_id" },
+      )
+      .select()
+      .single();
+
+    if (convError) {
+      console.error("Error upserting conversation:", convError);
+      return;
+    }
+
+    // Get the latest user message
+    const latestUserMessage = messages[messages.length - 1];
+    if (latestUserMessage && conversation) {
+      // Insert user message
+      await supabase.from("sofia_messages").insert({
+        conversation_id: conversation.id,
+        role: "user",
+        content: latestUserMessage.content,
+        timestamp: new Date().toISOString(),
+      });
+
+      // Insert assistant message
+      await supabase.from("sofia_messages").insert({
+        conversation_id: conversation.id,
+        role: "assistant",
+        content: latestAssistantMessage,
+        timestamp: new Date().toISOString(),
+      });
+    }
+  } catch (err) {
+    console.error("Tracking failed:", err);
   }
 }
 

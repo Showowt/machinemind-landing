@@ -11,6 +11,11 @@ interface Message {
   timestamp: Date;
 }
 
+// Generate unique session ID
+function generateSessionId(): string {
+  return `sofia_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
 export default function SofiaChat() {
   const language = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
@@ -18,8 +23,33 @@ export default function SofiaChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string>("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Initialize session ID on mount
+  useEffect(() => {
+    // Check for existing session in localStorage
+    const existingSession = localStorage.getItem("sofia_session_id");
+    const sessionExpiry = localStorage.getItem("sofia_session_expiry");
+
+    if (
+      existingSession &&
+      sessionExpiry &&
+      Date.now() < parseInt(sessionExpiry)
+    ) {
+      setSessionId(existingSession);
+    } else {
+      const newSession = generateSessionId();
+      setSessionId(newSession);
+      localStorage.setItem("sofia_session_id", newSession);
+      // Session expires after 30 minutes of inactivity
+      localStorage.setItem(
+        "sofia_session_expiry",
+        (Date.now() + 30 * 60 * 1000).toString(),
+      );
+    }
+  }, []);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -67,6 +97,12 @@ export default function SofiaChat() {
   const handleSend = async () => {
     if (!input.trim() || isLoading) return;
 
+    // Extend session expiry on activity
+    localStorage.setItem(
+      "sofia_session_expiry",
+      (Date.now() + 30 * 60 * 1000).toString(),
+    );
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
@@ -87,12 +123,20 @@ export default function SofiaChat() {
             role: m.role,
             content: m.content,
           })),
+          sessionId,
+          language,
         }),
       });
 
       if (!response.ok) throw new Error("Failed to get response");
 
       const data = await response.json();
+
+      // Update session ID if returned
+      if (data.sessionId && data.sessionId !== sessionId) {
+        setSessionId(data.sessionId);
+        localStorage.setItem("sofia_session_id", data.sessionId);
+      }
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -123,11 +167,6 @@ export default function SofiaChat() {
       e.preventDefault();
       handleSend();
     }
-  };
-
-  const handleQuickQuestion = (question: string) => {
-    setInput(question);
-    setTimeout(() => handleSend(), 100);
   };
 
   return (
