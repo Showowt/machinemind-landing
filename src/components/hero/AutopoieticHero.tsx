@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useLanguage } from "@/store/portfolio";
 import { translations } from "@/lib/i18n";
 import {
@@ -9,6 +8,7 @@ import {
 } from "@/lib/projects-data";
 import dynamic from "next/dynamic";
 import LanguageSwitcher from "./LanguageSwitcher";
+import { LogoStacked } from "@/components/brand";
 
 // Dynamic import for canvas (client-only)
 const NeuralCanvas = dynamic(() => import("./NeuralCanvas"), {
@@ -38,8 +38,8 @@ export default function AutopoieticHero() {
         {/* Badge */}
         <div className="animate-fade-in-up mb-8">
           <span
-            className="inline-flex items-center px-4 py-2 text-sm font-medium
-                       border border-[var(--mm-border)] text-gold"
+            className="inline-flex items-center px-4 py-2 text-sm font-medium font-mono uppercase tracking-wider
+                       border border-[var(--mm-border)] text-[var(--mm-blue-core)]"
           >
             <span className="w-2 h-2 bg-[var(--mm-healthy)] mr-2 animate-status-pulse" />
             {t.badge}
@@ -51,19 +51,12 @@ export default function AutopoieticHero() {
           className="mb-6 animate-fade-in-up flex justify-center"
           style={{ animationDelay: "100ms" }}
         >
-          <Image
-            src="/logo-stacked.png"
-            alt="MachineMind"
-            width={400}
-            height={400}
-            className="w-64 md:w-80 lg:w-96 h-auto"
-            priority
-          />
+          <LogoStacked size={320} />
         </div>
 
         {/* Tagline */}
         <p
-          className="text-2xl md:text-3xl lg:text-4xl text-gold font-heading mb-6 animate-fade-in-up"
+          className="text-2xl md:text-3xl lg:text-4xl text-[var(--mm-blue-core)] font-heading mb-6 animate-fade-in-up"
           style={{ animationDelay: "200ms" }}
         >
           {t.tagline}
@@ -93,11 +86,11 @@ export default function AutopoieticHero() {
             href="#portfolio"
             className="inline-flex items-center justify-center
                        min-h-[56px] px-8 py-4
-                       bg-[var(--mm-gold)] text-[var(--mm-background)]
+                       bg-[var(--mm-blue-core)] text-[var(--mm-background)]
                        font-semibold text-lg
                        transition-all duration-200
-                       hover:bg-[var(--mm-gold-light)]
-                       focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mm-gold)]"
+                       hover:bg-[var(--mm-blue-bright)]
+                       focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mm-blue-core)]"
           >
             {t.cta}
             <svg
@@ -122,7 +115,7 @@ export default function AutopoieticHero() {
           style={{ animationDelay: "700ms" }}
         >
           <div className="w-6 h-10 border-2 border-[var(--mm-border)] flex items-start justify-center p-1">
-            <div className="w-1 h-2 bg-gold animate-bounce" />
+            <div className="w-1 h-2 bg-[var(--mm-blue-core)] animate-bounce" />
           </div>
         </div>
       </div>
@@ -134,10 +127,12 @@ export default function AutopoieticHero() {
 function Stat({ value, label }: { value: string; label: string }) {
   return (
     <div className="text-center">
-      <div className="text-4xl md:text-5xl font-bold text-white mb-1">
+      <div className="text-4xl md:text-5xl font-bold text-white mb-1 font-heading">
         {value}
       </div>
-      <div className="text-sm text-muted uppercase tracking-wider">{label}</div>
+      <div className="text-sm text-muted uppercase tracking-wider font-mono">
+        {label}
+      </div>
     </div>
   );
 }

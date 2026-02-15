@@ -67,8 +67,8 @@ export default function NeuralCanvas({
       createNode(i),
     );
 
-    // Cyan brand color
-    const cyanColor = { r: 0, g: 166, b: 237 };
+    // Blue core brand color (#00B4FF)
+    const blueCore = { r: 0, g: 180, b: 255 };
 
     // Animation loop
     const animate = () => {
@@ -91,7 +91,7 @@ export default function NeuralCanvas({
             ctx.beginPath();
             ctx.moveTo(nodes[i].x, nodes[i].y);
             ctx.lineTo(nodes[j].x, nodes[j].y);
-            ctx.strokeStyle = `rgba(${cyanColor.r}, ${cyanColor.g}, ${cyanColor.b}, ${opacity})`;
+            ctx.strokeStyle = `rgba(${blueCore.r}, ${blueCore.g}, ${blueCore.b}, ${opacity})`;
             ctx.lineWidth = 0.5;
             ctx.stroke();
           }
@@ -146,13 +146,13 @@ export default function NeuralCanvas({
         );
         gradient.addColorStop(
           0,
-          `rgba(${cyanColor.r}, ${cyanColor.g}, ${cyanColor.b}, ${pulseGlow * 0.5})`,
+          `rgba(${blueCore.r}, ${blueCore.g}, ${blueCore.b}, ${pulseGlow * 0.5})`,
         );
         gradient.addColorStop(
           0.5,
-          `rgba(${cyanColor.r}, ${cyanColor.g}, ${cyanColor.b}, ${pulseGlow * 0.2})`,
+          `rgba(${blueCore.r}, ${blueCore.g}, ${blueCore.b}, ${pulseGlow * 0.2})`,
         );
-        gradient.addColorStop(1, "rgba(0, 166, 237, 0)");
+        gradient.addColorStop(1, "rgba(0, 180, 255, 0)");
 
         ctx.beginPath();
         ctx.arc(node.x, node.y, node.size * 4, 0, Math.PI * 2);
@@ -162,7 +162,7 @@ export default function NeuralCanvas({
         // Draw node core
         ctx.beginPath();
         ctx.arc(node.x, node.y, node.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${cyanColor.r}, ${cyanColor.g}, ${cyanColor.b}, ${0.8 + pulseGlow * 0.2})`;
+        ctx.fillStyle = `rgba(${blueCore.r}, ${blueCore.g}, ${blueCore.b}, ${0.8 + pulseGlow * 0.2})`;
         ctx.fill();
       });
 

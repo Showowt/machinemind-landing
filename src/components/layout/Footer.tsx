@@ -2,6 +2,7 @@
 
 import { useLanguage } from "@/store/portfolio";
 import { translations } from "@/lib/i18n";
+import { LogoEmblemSimple } from "@/components/brand";
 
 export default function Footer() {
   const language = useLanguage();
@@ -13,13 +14,16 @@ export default function Footer() {
       <div className="container-luxury">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           {/* Logo */}
-          <div className="font-heading text-xl font-bold">
-            <span className="text-white">Machine</span>
-            <span className="text-gold">Mind</span>
+          <div className="flex items-center gap-3">
+            <LogoEmblemSimple size={32} />
+            <div className="font-heading text-xl font-bold">
+              <span className="text-[#00B4FF]">Machine</span>
+              <span className="text-white">Mind</span>
+            </div>
           </div>
 
           {/* Copyright */}
-          <div className="text-muted text-sm">
+          <div className="text-muted text-sm font-mono">
             {t.copyright.replace("{year}", currentYear.toString())}
           </div>
 

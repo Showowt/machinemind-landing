@@ -29,7 +29,7 @@ const capabilities: Capability[] = [
       "Implementamos agentes de IA que manejan reservas, consultas y ventas automáticamente. Integración nativa con Claude y GPT para respuestas contextuales y naturales.",
     detailEn:
       "We implement AI agents that handle bookings, inquiries, and sales automatically. Native integration with Claude and GPT for contextual, natural responses.",
-    color: "#d4af37",
+    color: "#00B4FF",
   },
   {
     id: "whatsapp",

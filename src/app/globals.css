@@ -6,26 +6,35 @@
    ============================================ */
 
 :root {
-  /* Core Colors - Cyan Blue Brand */
-  --mm-background: #0d0d14;
-  --mm-cyan: #00a6ed;
-  --mm-cyan-light: #4dc3ff;
-  --mm-cyan-dark: #0084c7;
-  --mm-cyan-glow: rgba(0, 166, 237, 0.3);
+  /* Core Colors - Singularity Brand System */
+  --mm-void: #0a0a0f;
+  --mm-surface: #0f0f18;
+  --mm-background: #0a0a0f;
 
-  /* Legacy aliases for compatibility */
-  --mm-gold: var(--mm-cyan);
-  --mm-gold-light: var(--mm-cyan-light);
-  --mm-gold-dark: var(--mm-cyan-dark);
+  /* Blue Spectrum */
+  --mm-blue-deep: #0066CC;
+  --mm-blue-core: #00B4FF;
+  --mm-blue-bright: #00D4FF;
+  --mm-blue-glow: rgba(0, 180, 255, 0.15);
+  --mm-blue-subtle: rgba(0, 180, 255, 0.06);
+
+  /* Legacy aliases */
+  --mm-cyan: var(--mm-blue-core);
+  --mm-cyan-light: var(--mm-blue-bright);
+  --mm-cyan-dark: var(--mm-blue-deep);
+  --mm-cyan-glow: var(--mm-blue-glow);
+  --mm-gold: var(--mm-blue-core);
+  --mm-gold-light: var(--mm-blue-bright);
+  --mm-gold-dark: var(--mm-blue-deep);
 
   /* Text */
   --mm-text: #ffffff;
-  --mm-text-muted: rgba(255, 255, 255, 0.6);
-  --mm-text-subtle: rgba(255, 255, 255, 0.4);
+  --mm-text-muted: #8892a4;
+  --mm-text-subtle: #4a5568;
 
   /* Borders */
-  --mm-border: rgba(0, 166, 237, 0.2);
-  --mm-border-hover: rgba(0, 166, 237, 0.4);
+  --mm-border: rgba(0, 180, 255, 0.08);
+  --mm-border-hover: rgba(0, 180, 255, 0.25);
 
   /* Status */
   --mm-healthy: #22c55e;
@@ -56,6 +65,7 @@
   /* Fonts */
   --font-heading: var(--font-playfair);
   --font-body: var(--font-inter);
+  --font-mono: var(--font-space-mono);
 }
 
 /* ============================================
@@ -76,13 +86,13 @@ body {
 
 /* Selection */
 ::selection {
-  background: var(--mm-gold);
+  background: var(--mm-blue-core);
   color: var(--mm-background);
 }
 
 /* Focus styles */
 :focus-visible {
-  outline: 2px solid var(--mm-gold);
+  outline: 2px solid var(--mm-blue-core);
   outline-offset: 2px;
 }
 
@@ -102,6 +112,10 @@ h1, h2, h3, h4, h5, h6 {
 
 .font-body {
   font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+.font-mono {
+  font-family: var(--font-space-mono), monospace;
 }
 
 /* Gold text */

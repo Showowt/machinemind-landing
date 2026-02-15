@@ -1,9 +1,9 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useLanguage } from "@/store/portfolio";
 import LanguageSwitcher from "@/components/hero/LanguageSwitcher";
+import { LogoHorizontal } from "@/components/brand";
 
 export default function Header() {
   const language = useLanguage();
@@ -22,14 +22,7 @@ export default function Header() {
       <div className="container-luxury flex items-center justify-between h-20">
         {/* Logo */}
         <Link href="/" className="flex items-center">
-          <Image
-            src="/logo-horizontal.png"
-            alt="MachineMind"
-            width={200}
-            height={50}
-            className="h-10 w-auto"
-            priority
-          />
+          <LogoHorizontal size={40} />
         </Link>
 
         {/* Navigation */}
@@ -50,7 +43,7 @@ export default function Header() {
           <LanguageSwitcher />
           <a
             href="#contact"
-            className="hidden sm:inline-flex items-center justify-center min-h-[44px] px-6 bg-[var(--mm-cyan)] text-[var(--mm-background)] font-semibold text-sm transition-all duration-200 hover:bg-[var(--mm-cyan-light)]"
+            className="hidden sm:inline-flex items-center justify-center min-h-[44px] px-6 bg-[var(--mm-blue-core)] text-[var(--mm-background)] font-semibold text-sm transition-all duration-200 hover:bg-[var(--mm-blue-bright)]"
           >
             {language === "es" ? "Hablar con Sofia" : "Talk to Sofia"}
           </a>
