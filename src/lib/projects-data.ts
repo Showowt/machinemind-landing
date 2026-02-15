@@ -44,7 +44,7 @@ export const projects: Project[] = [
       "Twilio",
       "Claude AI",
     ],
-    liveUrl: "https://movvia.vercel.app",
+    liveUrl: "https://movvia-pi.vercel.app",
     colorAccent: "#00B4FF",
     isActive: true,
     isFeatured: true,
