@@ -8,12 +8,25 @@ interface LoadingSequenceProps {
   skipDelay?: number;
 }
 
+// Detect mobile device
+function isMobileDevice(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.innerWidth < 768 || "ontouchstart" in window;
+}
+
+// Detect reduced motion preference
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
 export default function LoadingSequence({
   onComplete,
   skipDelay = 5000,
 }: LoadingSequenceProps) {
   const [phase, setPhase] = useState(0);
   const [canSkip, setCanSkip] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     // Check if already loaded this session
@@ -22,20 +35,36 @@ export default function LoadingSequence({
       return;
     }
 
-    // Phase progression
-    const phases = [500, 1500, 2500, 3500, 4500];
+    // Check for reduced motion - skip animation entirely
+    if (prefersReducedMotion()) {
+      sessionStorage.setItem("mm-loaded", "true");
+      onComplete();
+      return;
+    }
+
+    const mobile = isMobileDevice();
+    setIsMobile(mobile);
+
+    // Faster timing on mobile (3s vs 5s)
+    const mobileMultiplier = mobile ? 0.6 : 1;
+    const adjustedSkipDelay = skipDelay * mobileMultiplier;
+
+    // Phase progression (faster on mobile)
+    const phases = [300, 900, 1500, 2100, 2700].map((t) =>
+      Math.round(t * mobileMultiplier),
+    );
     phases.forEach((delay, i) => {
       setTimeout(() => setPhase(i + 1), delay);
     });
 
-    // Enable skip after delay
-    setTimeout(() => setCanSkip(true), 1000);
+    // Enable skip after short delay
+    setTimeout(() => setCanSkip(true), 500);
 
     // Auto-complete
     setTimeout(() => {
       sessionStorage.setItem("mm-loaded", "true");
       onComplete();
-    }, skipDelay);
+    }, adjustedSkipDelay);
   }, [onComplete, skipDelay]);
 
   const handleSkip = () => {
@@ -45,6 +74,9 @@ export default function LoadingSequence({
     }
   };
 
+  // Particle count based on device
+  const particleCount = isMobile ? 8 : 20;
+
   return (
     <AnimatePresence>
       <motion.div
@@ -52,13 +84,13 @@ export default function LoadingSequence({
         initial={{ opacity: 1 }}
         exit={{
           opacity: 0,
-          transition: { duration: 0.8, ease: [0.4, 0, 0.2, 1] },
+          transition: { duration: 0.6, ease: [0.4, 0, 0.2, 1] },
         }}
         onClick={handleSkip}
       >
         {/* Neural particles background */}
         <div className="absolute inset-0 overflow-hidden">
-          {Array.from({ length: 20 }).map((_, i) => (
+          {Array.from({ length: particleCount }).map((_, i) => (
             <motion.div
               key={i}
               className="absolute w-1 h-1 bg-[var(--mm-blue-core)]"
@@ -82,16 +114,16 @@ export default function LoadingSequence({
         </div>
 
         {/* Main content */}
-        <div className="relative text-center">
+        <div className="relative text-center px-4">
           {/* Singularity Ring Animation */}
-          <div className="relative w-40 h-40 mx-auto mb-8">
+          <div className="relative w-28 h-28 md:w-40 md:h-40 mx-auto mb-6 md:mb-8">
             {/* Outer ring */}
             <motion.svg
               className="absolute inset-0 w-full h-full"
               viewBox="0 0 160 160"
               initial={{ opacity: 0, scale: 0.8 }}
               animate={phase >= 1 ? { opacity: 1, scale: 1 } : {}}
-              transition={{ duration: 0.8, ease: [0.25, 0.4, 0.25, 1] }}
+              transition={{ duration: 0.6, ease: [0.25, 0.4, 0.25, 1] }}
             >
               <circle
                 cx="80"
@@ -105,7 +137,7 @@ export default function LoadingSequence({
 
             {/* Core singularity */}
             <motion.div
-              className="absolute top-1/2 left-1/2 w-4 h-4 -translate-x-1/2 -translate-y-1/2 bg-[var(--mm-blue-core)]"
+              className="absolute top-1/2 left-1/2 w-3 h-3 md:w-4 md:h-4 -translate-x-1/2 -translate-y-1/2 bg-[var(--mm-blue-core)]"
               initial={{ opacity: 0, scale: 0 }}
               animate={
                 phase >= 2
@@ -115,7 +147,7 @@ export default function LoadingSequence({
                     }
                   : {}
               }
-              transition={{ duration: 0.6, ease: [0.25, 0.4, 0.25, 1] }}
+              transition={{ duration: 0.5, ease: [0.25, 0.4, 0.25, 1] }}
             />
 
             {/* MM Monogram */}
@@ -124,7 +156,7 @@ export default function LoadingSequence({
               viewBox="0 0 160 160"
               initial={{ opacity: 0 }}
               animate={phase >= 2 ? { opacity: 1 } : {}}
-              transition={{ duration: 0.5, delay: 0.3 }}
+              transition={{ duration: 0.4, delay: 0.2 }}
             >
               {/* Blue M */}
               <motion.path
@@ -136,7 +168,7 @@ export default function LoadingSequence({
                 strokeLinejoin="round"
                 initial={{ pathLength: 0 }}
                 animate={phase >= 2 ? { pathLength: 1 } : {}}
-                transition={{ duration: 0.8, delay: 0.3, ease: "easeOut" }}
+                transition={{ duration: 0.6, delay: 0.2, ease: "easeOut" }}
               />
               {/* White M */}
               <motion.path
@@ -148,17 +180,17 @@ export default function LoadingSequence({
                 strokeLinejoin="round"
                 initial={{ pathLength: 0 }}
                 animate={phase >= 2 ? { pathLength: 1 } : {}}
-                transition={{ duration: 0.8, delay: 0.5, ease: "easeOut" }}
+                transition={{ duration: 0.6, delay: 0.4, ease: "easeOut" }}
               />
             </motion.svg>
           </div>
 
           {/* Wordmark */}
           <motion.div
-            className="font-heading text-4xl md:text-5xl font-bold mb-6"
+            className="font-heading text-3xl md:text-4xl lg:text-5xl font-bold mb-4 md:mb-6"
             initial={{ opacity: 0, y: 20 }}
             animate={phase >= 3 ? { opacity: 1, y: 0 } : {}}
-            transition={{ duration: 0.6 }}
+            transition={{ duration: 0.5 }}
           >
             <span className="text-[#00B4FF]">Machine</span>
             <span className="text-white">Mind</span>
@@ -166,17 +198,17 @@ export default function LoadingSequence({
 
           {/* Tagline */}
           <motion.p
-            className="text-muted text-lg md:text-xl mb-12 font-mono tracking-wider uppercase"
+            className="text-muted text-base md:text-lg lg:text-xl mb-8 md:mb-12 font-mono tracking-wider uppercase"
             initial={{ opacity: 0 }}
             animate={phase >= 4 ? { opacity: 1 } : {}}
-            transition={{ duration: 0.8 }}
+            transition={{ duration: 0.6 }}
           >
             Self-Sustaining Intelligence
           </motion.p>
 
           {/* Progress bar */}
           <motion.div
-            className="w-48 h-[2px] bg-[var(--mm-border)] mx-auto overflow-hidden"
+            className="w-32 md:w-48 h-[2px] bg-[var(--mm-border)] mx-auto overflow-hidden"
             initial={{ opacity: 0 }}
             animate={phase >= 3 ? { opacity: 1 } : {}}
           >
@@ -184,33 +216,33 @@ export default function LoadingSequence({
               className="h-full bg-[var(--mm-blue-core)]"
               initial={{ width: "0%" }}
               animate={phase >= 3 ? { width: "100%" } : {}}
-              transition={{ duration: 2, ease: "linear" }}
+              transition={{ duration: isMobile ? 1.5 : 2, ease: "linear" }}
             />
           </motion.div>
 
           {/* Skip hint */}
           <motion.p
-            className="text-xs text-muted mt-8 font-mono"
+            className="text-xs text-muted mt-6 md:mt-8 font-mono min-h-[44px] flex items-center justify-center"
             initial={{ opacity: 0 }}
             animate={canSkip ? { opacity: 0.5 } : {}}
             transition={{ duration: 0.5 }}
           >
-            Click anywhere to skip
+            Tap anywhere to skip
           </motion.p>
         </div>
 
-        {/* Corner decoration - hex style */}
+        {/* Corner decoration - hidden on mobile for cleaner look */}
         <motion.div
-          className="absolute top-8 left-8 w-16 h-16 border-l-2 border-t-2 border-[var(--mm-blue-core)] opacity-20"
+          className="hidden md:block absolute top-8 left-8 w-16 h-16 border-l-2 border-t-2 border-[var(--mm-blue-core)] opacity-20"
           initial={{ scale: 0 }}
           animate={phase >= 4 ? { scale: 1 } : {}}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.4 }}
         />
         <motion.div
-          className="absolute bottom-8 right-8 w-16 h-16 border-r-2 border-b-2 border-[var(--mm-blue-core)] opacity-20"
+          className="hidden md:block absolute bottom-8 right-8 w-16 h-16 border-r-2 border-b-2 border-[var(--mm-blue-core)] opacity-20"
           initial={{ scale: 0 }}
           animate={phase >= 4 ? { scale: 1 } : {}}
-          transition={{ duration: 0.5 }}
+          transition={{ duration: 0.4 }}
         />
       </motion.div>
     </AnimatePresence>

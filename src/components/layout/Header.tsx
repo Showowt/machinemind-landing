@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useLanguage } from "@/store/portfolio";
 import LanguageSwitcher from "@/components/hero/LanguageSwitcher";
 import { LogoHorizontal } from "@/components/brand";
+import MobileMenu from "./MobileMenu";
 
 export default function Header() {
   const language = useLanguage();
@@ -19,13 +20,14 @@ export default function Header() {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-[var(--mm-background)]/90 backdrop-blur-sm border-b border-[var(--mm-border)]">
-      <div className="container-luxury flex items-center justify-between h-20">
+      <div className="container-luxury flex items-center justify-between h-16 md:h-20">
         {/* Logo */}
         <Link href="/" className="flex items-center">
-          <LogoHorizontal size={40} />
+          <LogoHorizontal size={32} className="md:hidden" />
+          <LogoHorizontal size={40} className="hidden md:flex" />
         </Link>
 
-        {/* Navigation */}
+        {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-8">
           {navItems.map((item) => (
             <a
@@ -39,14 +41,19 @@ export default function Header() {
         </nav>
 
         {/* Right side */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4">
           <LanguageSwitcher />
+
+          {/* Desktop CTA */}
           <a
             href="#contact"
-            className="hidden sm:inline-flex items-center justify-center min-h-[44px] px-6 bg-[var(--mm-blue-core)] text-[var(--mm-background)] font-semibold text-sm transition-all duration-200 hover:bg-[var(--mm-blue-bright)]"
+            className="hidden md:inline-flex items-center justify-center min-h-[44px] px-6 bg-[var(--mm-blue-core)] text-[var(--mm-background)] font-semibold text-sm transition-all duration-200 hover:bg-[var(--mm-blue-bright)]"
           >
             {language === "es" ? "Hablar con Sofia" : "Talk to Sofia"}
           </a>
+
+          {/* Mobile Menu */}
+          <MobileMenu />
         </div>
       </div>
     </header>

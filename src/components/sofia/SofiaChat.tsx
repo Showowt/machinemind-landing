@@ -130,7 +130,7 @@ export default function SofiaChat() {
       {/* Chat Toggle Button */}
       <motion.button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-6 right-6 z-50 w-16 h-16 bg-gradient-to-br from-[var(--mm-cyan)] to-[#0084c7] text-white flex items-center justify-center transition-all duration-300 hover:scale-105"
+        className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 w-14 h-14 md:w-16 md:h-16 bg-gradient-to-br from-[var(--mm-cyan)] to-[#0084c7] text-white flex items-center justify-center transition-all duration-300 hover:scale-105"
         style={{ boxShadow: "0 0 30px rgba(0, 166, 237, 0.4)" }}
         whileTap={{ scale: 0.95 }}
         aria-label={isOpen ? "Close chat" : "Open chat"}
@@ -157,7 +157,7 @@ export default function SofiaChat() {
       {/* Pulse indicator when closed */}
       {!isOpen && (
         <motion.div
-          className="fixed bottom-6 right-6 z-40 w-16 h-16 bg-[var(--mm-cyan)]"
+          className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-40 w-14 h-14 md:w-16 md:h-16 bg-[var(--mm-cyan)]"
           animate={{ scale: [1, 1.4, 1], opacity: [0.4, 0, 0.4] }}
           transition={{ duration: 2, repeat: Infinity }}
         />
@@ -171,10 +171,10 @@ export default function SofiaChat() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className={`fixed bottom-24 right-6 z-50 bg-[#0d0d14] border border-[var(--mm-border)] flex flex-col overflow-hidden transition-all duration-300 ${
+            className={`fixed bottom-20 right-4 md:bottom-24 md:right-6 z-50 bg-[#0d0d14] border border-[var(--mm-border)] flex flex-col overflow-hidden transition-all duration-300 ${
               isMinimized
-                ? "w-72 h-14"
-                : "w-[380px] max-w-[calc(100vw-3rem)] h-[520px] max-h-[calc(100vh-8rem)]"
+                ? "w-64 md:w-72 h-14"
+                : "w-[calc(100vw-2rem)] sm:w-[360px] md:w-[380px] h-[60vh] sm:h-[480px] md:h-[520px] max-h-[calc(100vh-6rem)]"
             }`}
           >
             {/* Header */}
@@ -322,8 +322,8 @@ export default function SofiaChat() {
 
                 {/* Quick Questions */}
                 {messages.length <= 2 && (
-                  <div className="px-4 py-2 border-t border-[var(--mm-border)]">
-                    <div className="flex flex-wrap gap-2">
+                  <div className="px-3 md:px-4 py-2 border-t border-[var(--mm-border)]">
+                    <div className="flex flex-wrap gap-1.5 md:gap-2">
                       {quickQuestions.map((q) => (
                         <button
                           key={q}
@@ -333,7 +333,7 @@ export default function SofiaChat() {
                               handleSend();
                             }, 100);
                           }}
-                          className="text-xs bg-[rgba(0,166,237,0.1)] hover:bg-[rgba(0,166,237,0.2)] text-[var(--mm-cyan)] px-3 py-1.5 transition-colors"
+                          className="text-xs bg-[rgba(0,166,237,0.1)] hover:bg-[rgba(0,166,237,0.2)] text-[var(--mm-cyan)] px-3 py-2.5 md:py-1.5 transition-colors min-h-[44px] flex items-center"
                         >
                           {q}
                         </button>

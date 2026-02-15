@@ -36,9 +36,9 @@ export default function AutopoieticHero() {
         </div>
 
         {/* Badge */}
-        <div className="animate-fade-in-up mb-8">
+        <div className="animate-fade-in-up mb-6 md:mb-8">
           <span
-            className="inline-flex items-center px-4 py-2 text-sm font-medium font-mono uppercase tracking-wider
+            className="inline-flex items-center px-3 md:px-4 py-2 text-xs md:text-sm font-medium font-mono uppercase tracking-wider
                        border border-[var(--mm-border)] text-[var(--mm-blue-core)]"
           >
             <span className="w-2 h-2 bg-[var(--mm-healthy)] mr-2 animate-status-pulse" />
@@ -46,17 +46,24 @@ export default function AutopoieticHero() {
           </span>
         </div>
 
-        {/* Logo */}
+        {/* Logo - Responsive sizing */}
         <div
-          className="mb-6 animate-fade-in-up flex justify-center"
+          className="mb-4 md:mb-6 animate-fade-in-up flex justify-center"
           style={{ animationDelay: "100ms" }}
         >
-          <LogoStacked size={320} />
+          {/* Mobile logo */}
+          <div className="md:hidden">
+            <LogoStacked size={220} />
+          </div>
+          {/* Desktop logo */}
+          <div className="hidden md:block">
+            <LogoStacked size={320} />
+          </div>
         </div>
 
         {/* Tagline */}
         <p
-          className="text-2xl md:text-3xl lg:text-4xl text-[var(--mm-blue-core)] font-heading mb-6 animate-fade-in-up"
+          className="text-xl md:text-2xl lg:text-4xl text-[var(--mm-blue-core)] font-heading mb-4 md:mb-6 animate-fade-in-up px-4"
           style={{ animationDelay: "200ms" }}
         >
           {t.tagline}
@@ -64,7 +71,7 @@ export default function AutopoieticHero() {
 
         {/* Subtitle */}
         <p
-          className="text-muted text-lg md:text-xl max-w-2xl mx-auto mb-12 animate-fade-in-up"
+          className="text-muted text-base md:text-lg lg:text-xl max-w-2xl mx-auto mb-8 md:mb-12 animate-fade-in-up px-4"
           style={{ animationDelay: "300ms" }}
         >
           {t.subtitle}
@@ -72,7 +79,7 @@ export default function AutopoieticHero() {
 
         {/* Stats Bar */}
         <div
-          className="flex flex-wrap justify-center gap-8 md:gap-16 mb-12 animate-fade-in-up"
+          className="flex flex-wrap justify-center gap-4 sm:gap-8 md:gap-16 mb-8 md:mb-12 animate-fade-in-up"
           style={{ animationDelay: "400ms" }}
         >
           <Stat value={projectCount.toString()} label={t.stats.projects} />
@@ -126,11 +133,11 @@ export default function AutopoieticHero() {
 // Stat component
 function Stat({ value, label }: { value: string; label: string }) {
   return (
-    <div className="text-center">
-      <div className="text-4xl md:text-5xl font-bold text-white mb-1 font-heading">
+    <div className="text-center min-w-[80px]">
+      <div className="text-2xl sm:text-3xl md:text-5xl font-bold text-white mb-1 font-heading">
         {value}
       </div>
-      <div className="text-sm text-muted uppercase tracking-wider font-mono">
+      <div className="text-xs sm:text-sm text-muted uppercase tracking-wider font-mono">
         {label}
       </div>
     </div>

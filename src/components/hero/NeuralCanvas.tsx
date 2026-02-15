@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface Node {
   x: number;
@@ -18,21 +18,47 @@ interface NeuralCanvasProps {
   connectionDistance?: number;
 }
 
+// Detect if device prefers reduced motion
+function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+
+// Detect mobile device
+function isMobileDevice(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.innerWidth < 768 || "ontouchstart" in window;
+}
+
 export default function NeuralCanvas({
-  nodeCount = 40,
-  connectionDistance = 150,
+  nodeCount = 45,
+  connectionDistance = 140,
 }: NeuralCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const nodesRef = useRef<Node[]>([]);
   const mouseRef = useRef({ x: 0, y: 0 });
   const animationRef = useRef<number | null>(null);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
+    // Check for reduced motion preference
+    if (prefersReducedMotion()) {
+      setIsReady(true);
+      return;
+    }
+
     const canvas = canvasRef.current;
     if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    // Mobile optimization: reduce particle count and connection distance
+    const isMobile = isMobileDevice();
+    const actualNodeCount = isMobile ? Math.min(20, nodeCount) : nodeCount;
+    const actualConnectionDistance = isMobile
+      ? Math.min(100, connectionDistance)
+      : connectionDistance;
 
     // Set canvas size
     const resize = () => {
@@ -42,14 +68,18 @@ export default function NeuralCanvas({
     resize();
     window.addEventListener("resize", resize);
 
-    // Track mouse
+    // Track mouse (only on desktop)
     const handleMouseMove = (e: MouseEvent) => {
-      mouseRef.current = { x: e.clientX, y: e.clientY };
+      if (!isMobile) {
+        mouseRef.current = { x: e.clientX, y: e.clientY };
+      }
     };
-    window.addEventListener("mousemove", handleMouseMove);
+    if (!isMobile) {
+      window.addEventListener("mousemove", handleMouseMove);
+    }
 
     // Create nodes
-    const createNode = (index: number): Node => {
+    const createNode = (): Node => {
       return {
         x: Math.random() * canvas.width,
         y: Math.random() * canvas.height,
@@ -63,15 +93,28 @@ export default function NeuralCanvas({
     };
 
     // Initialize nodes
-    nodesRef.current = Array.from({ length: nodeCount }, (_, i) =>
-      createNode(i),
+    nodesRef.current = Array.from({ length: actualNodeCount }, () =>
+      createNode(),
     );
 
     // Blue core brand color (#00B4FF)
     const blueCore = { r: 0, g: 180, b: 255 };
 
+    // Pre-calculate gradient (optimization)
+    let lastFrameTime = 0;
+    const targetFPS = isMobile ? 30 : 60;
+    const frameInterval = 1000 / targetFPS;
+
     // Animation loop
-    const animate = () => {
+    const animate = (currentTime: number) => {
+      // Throttle FPS on mobile
+      const elapsed = currentTime - lastFrameTime;
+      if (elapsed < frameInterval) {
+        animationRef.current = requestAnimationFrame(animate);
+        return;
+      }
+      lastFrameTime = currentTime - (elapsed % frameInterval);
+
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const nodes = nodesRef.current;
@@ -84,8 +127,8 @@ export default function NeuralCanvas({
           const dy = nodes[j].y - nodes[i].y;
           const distance = Math.sqrt(dx * dx + dy * dy);
 
-          if (distance < connectionDistance) {
-            const opacity = (1 - distance / connectionDistance) * 0.3;
+          if (distance < actualConnectionDistance) {
+            const opacity = (1 - distance / actualConnectionDistance) * 0.3;
 
             // Draw connection line
             ctx.beginPath();
@@ -103,16 +146,18 @@ export default function NeuralCanvas({
         // Update pulse
         node.pulse += node.pulseSpeed;
 
-        // Mouse attraction/repulsion
-        const dx = mouse.x - node.x;
-        const dy = mouse.y - node.y;
-        const mouseDistance = Math.sqrt(dx * dx + dy * dy);
+        // Mouse attraction/repulsion (desktop only)
+        if (!isMobile) {
+          const dx = mouse.x - node.x;
+          const dy = mouse.y - node.y;
+          const mouseDistance = Math.sqrt(dx * dx + dy * dy);
 
-        if (mouseDistance < 200 && mouseDistance > 0) {
-          // Gentle attraction
-          const force = (200 - mouseDistance) / 200;
-          node.vx += (dx / mouseDistance) * force * 0.01;
-          node.vy += (dy / mouseDistance) * force * 0.01;
+          if (mouseDistance < 200 && mouseDistance > 0) {
+            // Gentle attraction
+            const force = (200 - mouseDistance) / 200;
+            node.vx += (dx / mouseDistance) * force * 0.01;
+            node.vy += (dy / mouseDistance) * force * 0.01;
+          }
         }
 
         // Apply velocity with damping
@@ -135,29 +180,38 @@ export default function NeuralCanvas({
         // Calculate pulse glow
         const pulseGlow = 0.5 + Math.sin(node.pulse) * 0.3;
 
-        // Draw outer glow
-        const gradient = ctx.createRadialGradient(
-          node.x,
-          node.y,
-          0,
-          node.x,
-          node.y,
-          node.size * 4,
-        );
-        gradient.addColorStop(
-          0,
-          `rgba(${blueCore.r}, ${blueCore.g}, ${blueCore.b}, ${pulseGlow * 0.5})`,
-        );
-        gradient.addColorStop(
-          0.5,
-          `rgba(${blueCore.r}, ${blueCore.g}, ${blueCore.b}, ${pulseGlow * 0.2})`,
-        );
-        gradient.addColorStop(1, "rgba(0, 180, 255, 0)");
+        // Simplified glow on mobile (no gradient)
+        if (isMobile) {
+          // Simple circle glow
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.size * 2, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(${blueCore.r}, ${blueCore.g}, ${blueCore.b}, ${pulseGlow * 0.3})`;
+          ctx.fill();
+        } else {
+          // Draw outer glow with gradient (desktop)
+          const gradient = ctx.createRadialGradient(
+            node.x,
+            node.y,
+            0,
+            node.x,
+            node.y,
+            node.size * 4,
+          );
+          gradient.addColorStop(
+            0,
+            `rgba(${blueCore.r}, ${blueCore.g}, ${blueCore.b}, ${pulseGlow * 0.5})`,
+          );
+          gradient.addColorStop(
+            0.5,
+            `rgba(${blueCore.r}, ${blueCore.g}, ${blueCore.b}, ${pulseGlow * 0.2})`,
+          );
+          gradient.addColorStop(1, "rgba(0, 180, 255, 0)");
 
-        ctx.beginPath();
-        ctx.arc(node.x, node.y, node.size * 4, 0, Math.PI * 2);
-        ctx.fillStyle = gradient;
-        ctx.fill();
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, node.size * 4, 0, Math.PI * 2);
+          ctx.fillStyle = gradient;
+          ctx.fill();
+        }
 
         // Draw node core
         ctx.beginPath();
@@ -169,22 +223,47 @@ export default function NeuralCanvas({
       animationRef.current = requestAnimationFrame(animate);
     };
 
-    animate();
+    setIsReady(true);
+    animationRef.current = requestAnimationFrame(animate);
 
     return () => {
       window.removeEventListener("resize", resize);
-      window.removeEventListener("mousemove", handleMouseMove);
+      if (!isMobile) {
+        window.removeEventListener("mousemove", handleMouseMove);
+      }
       if (animationRef.current) {
         cancelAnimationFrame(animationRef.current);
       }
     };
   }, [nodeCount, connectionDistance]);
 
+  // For reduced motion, show static dots
+  if (prefersReducedMotion()) {
+    return (
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ zIndex: 1 }}
+        aria-hidden="true"
+      >
+        {Array.from({ length: 15 }).map((_, i) => (
+          <div
+            key={i}
+            className="absolute w-2 h-2 bg-[var(--mm-blue-core)] opacity-30"
+            style={{
+              left: `${10 + i * 6}%`,
+              top: `${15 + ((i * 5) % 70)}%`,
+            }}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <canvas
       ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      style={{ zIndex: 1 }}
+      style={{ zIndex: 1, opacity: isReady ? 1 : 0 }}
       aria-hidden="true"
     />
   );

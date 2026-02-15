@@ -74,6 +74,7 @@
 
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: var(--mm-header-height);
 }
 
 body {
@@ -341,4 +342,49 @@ h1, h2, h3, h4, h5, h6 {
 
 .client-logos-scroll:hover {
   animation-play-state: paused;
+}
+
+/* ============================================
+   ACCESSIBILITY - REDUCED MOTION
+   ============================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .client-logos-scroll {
+    animation: none;
+  }
+}
+
+/* ============================================
+   ULTRA-SMALL SCREENS (320px)
+   ============================================ */
+
+@media (max-width: 359px) {
+  :root {
+    --mm-header-height: 64px;
+    --mm-section-padding: 3rem;
+  }
+
+  .container-luxury {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* ============================================
+   MOBILE HEADER HEIGHT ADJUSTMENT
+   ============================================ */
+
+@media (max-width: 767px) {
+  :root {
+    --mm-header-height: 64px;
+  }
 }

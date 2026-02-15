@@ -112,18 +112,18 @@ export default function CapabilitiesGrid() {
     <section className="section-padding bg-[rgba(0,0,0,0.2)]">
       <div className="container-luxury">
         {/* Header */}
-        <RevealOnScroll direction="up" className="text-center mb-16">
-          <h2 className="font-heading text-4xl md:text-5xl font-bold text-white mb-4">
+        <RevealOnScroll direction="up" className="text-center mb-8 md:mb-16">
+          <h2 className="font-heading text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">
             {title}
           </h2>
-          <p className="text-muted text-lg">{subtitle}</p>
+          <p className="text-muted text-base md:text-lg">{subtitle}</p>
           <div className="gold-line w-24 mx-auto mt-6" />
         </RevealOnScroll>
 
-        {/* Hexagonal Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 max-w-5xl mx-auto">
+        {/* Mobile: List view, Desktop: Hexagonal Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 max-w-5xl mx-auto">
           {capabilities.map((cap, index) => {
-            const title = language === "es" ? cap.titleEs : cap.titleEn;
+            const capTitle = language === "es" ? cap.titleEs : cap.titleEn;
             const desc = language === "es" ? cap.descEs : cap.descEn;
             const detail = language === "es" ? cap.detailEs : cap.detailEn;
             const isExpanded = expanded === cap.id;
@@ -132,17 +132,20 @@ export default function CapabilitiesGrid() {
               <RevealOnScroll key={cap.id} direction="up" delay={index * 0.1}>
                 <motion.button
                   onClick={() => setExpanded(isExpanded ? null : cap.id)}
-                  className="relative w-full aspect-square p-6
+                  className="relative w-full min-h-[120px] sm:min-h-0 sm:aspect-square p-4 sm:p-6
                              border border-[var(--mm-border)]
                              bg-[rgba(15,15,26,0.8)]
                              transition-all duration-300
                              hover:border-[var(--mm-border-hover)]
-                             text-left"
+                             text-left sm:text-center
+                             flex sm:block items-center gap-4"
                   style={{
                     clipPath:
-                      "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)",
+                      typeof window !== "undefined" && window.innerWidth >= 640
+                        ? "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)"
+                        : "none",
                   }}
-                  whileHover={{ scale: 1.05 }}
+                  whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.98 }}
                 >
                   {/* Glow effect */}
@@ -153,12 +156,27 @@ export default function CapabilitiesGrid() {
                     }}
                   />
 
-                  <div className="relative z-10 h-full flex flex-col items-center justify-center text-center">
-                    <span className="text-4xl mb-3">{cap.icon}</span>
-                    <h3 className="font-heading text-lg font-semibold text-white mb-2">
-                      {title}
-                    </h3>
-                    <p className="text-muted text-xs">{desc}</p>
+                  {/* Mobile: Horizontal layout */}
+                  <div className="relative z-10 flex sm:flex-col items-center sm:justify-center sm:h-full gap-3 sm:gap-0">
+                    <span className="text-3xl sm:text-4xl sm:mb-3 flex-shrink-0">
+                      {cap.icon}
+                    </span>
+                    <div className="sm:text-center">
+                      <h3 className="font-heading text-base sm:text-lg font-semibold text-white sm:mb-2">
+                        {capTitle}
+                      </h3>
+                      <p className="text-muted text-xs sm:text-xs">{desc}</p>
+                    </div>
+                  </div>
+
+                  {/* Expand indicator for mobile */}
+                  <div className="sm:hidden ml-auto flex-shrink-0">
+                    <motion.span
+                      className="text-[var(--mm-blue-core)] text-xl"
+                      animate={{ rotate: isExpanded ? 45 : 0 }}
+                    >
+                      +
+                    </motion.span>
                   </div>
                 </motion.button>
 
@@ -170,7 +188,7 @@ export default function CapabilitiesGrid() {
                       animate={{ opacity: 1, height: "auto" }}
                       exit={{ opacity: 0, height: 0 }}
                       transition={{ duration: 0.3 }}
-                      className="mt-4 p-6 border border-[var(--mm-border)] bg-[rgba(15,15,26,0.9)]"
+                      className="mt-2 sm:mt-4 p-4 sm:p-6 border border-[var(--mm-border)] bg-[rgba(15,15,26,0.9)]"
                     >
                       <p className="text-muted text-sm leading-relaxed">
                         {detail}
