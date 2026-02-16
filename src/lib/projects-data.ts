@@ -215,6 +215,24 @@ export const projects: Project[] = [
     isActive: true,
     isFeatured: false,
   },
+  {
+    slug: "dharma",
+    nameEs: "Dharma Beach Club",
+    nameEn: "Dharma Beach Club",
+    taglineEs: "Club de playa de lujo en Islas del Rosario",
+    taglineEn: "Luxury beach club in Islas del Rosario",
+    descriptionEs:
+      "Experiencia de día completo con transporte en lancha, gastronomía gourmet, y conexión espiritual en el Caribe colombiano.",
+    descriptionEn:
+      "Full day experience with boat transportation, gourmet gastronomy, and spiritual connection in the Colombian Caribbean.",
+    category: "demo",
+    subcategory: "hospitality",
+    techStack: ["Next.js 16", "Supabase", "Stripe", "Framer Motion", "Zustand"],
+    liveUrl: "https://dharma-topaz.vercel.app",
+    colorAccent: "#d4af37",
+    isActive: true,
+    isFeatured: false,
+  },
 
   // ============================================
   // AUTOMATION PLATFORMS
