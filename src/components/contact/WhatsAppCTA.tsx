@@ -2,7 +2,7 @@
 
 import { useLanguage } from "@/store/portfolio";
 
-const WHATSAPP_NUMBER = "573153993293";
+const WHATSAPP_NUMBER = "19544451638";
 
 export default function WhatsAppCTA() {
   const language = useLanguage();

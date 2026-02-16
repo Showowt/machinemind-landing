@@ -152,8 +152,8 @@ export default function SofiaChat() {
         role: "assistant",
         content:
           language === "es"
-            ? "Disculpa, tuve un problema de conexión. Puedes contactarnos directamente:\n📱 +57 315 399 3293\n📧 hello@machinemind.ai"
-            : "Sorry, I had a connection issue. You can reach us directly:\n📱 +57 315 399 3293\n📧 hello@machinemind.ai",
+            ? "Disculpa, tuve un problema de conexión. Puedes contactarnos directamente:\n📱 +1 (954) 445-1638\n📧 Phil@machinemindconsulting.com"
+            : "Sorry, I had a connection issue. You can reach us directly:\n📱 +1 (954) 445-1638\n📧 Phil@machinemindconsulting.com",
         timestamp: new Date(),
       };
       setMessages((prev) => [...prev, errorMessage]);

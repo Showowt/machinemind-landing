@@ -186,7 +186,7 @@ export default function ContactSection() {
             <p className="text-muted mb-4">{t.alternative}</p>
             <div className="flex flex-wrap justify-center gap-4">
               <a
-                href="https://wa.me/573153993293?text=Hola%2C%20me%20interesa%20saber%20m%C3%A1s%20sobre%20MachineMind"
+                href="https://wa.me/19544451638?text=Hola%2C%20me%20interesa%20saber%20m%C3%A1s%20sobre%20MachineMind"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-6 py-3 border border-[var(--mm-border)] text-white hover:border-[#25D366] hover:text-[#25D366] transition-colors min-h-[48px]"
