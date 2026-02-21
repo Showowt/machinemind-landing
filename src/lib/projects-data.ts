@@ -513,13 +513,13 @@ export const projects: Project[] = [
       "Calificación de leads 24/7, respuestas instantáneas en WhatsApp, seguimiento automático, generación de documentos.",
     descriptionEn:
       "24/7 lead qualification, instant WhatsApp responses, automatic follow-up, document generation.",
-    category: "flagship",
+    category: "enterprise",
     subcategory: "real-estate",
     techStack: ["Next.js 16", "Supabase", "Claude AI", "WhatsApp", "Twilio"],
-    liveUrl: "https://sofia-realestate.vercel.app",
+    liveUrl: null,
     colorAccent: "#0891b2",
     isActive: true,
-    isFeatured: true,
+    isFeatured: false,
   },
   {
     slug: "pangea",
