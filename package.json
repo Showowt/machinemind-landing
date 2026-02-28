@@ -16,6 +16,7 @@
     "framer-motion": "^12.34.0",
     "gsap": "^3.14.2",
     "next": "16.1.6",
+    "puppeteer": "^24.37.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "split-type": "^0.3.4",
