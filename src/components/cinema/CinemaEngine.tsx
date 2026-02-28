@@ -85,6 +85,17 @@ export default function CinemaEngine({
         src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"
         strategy="afterInteractive"
       />
+      {/* 3D Engine */}
+      <Script
+        src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"
+        strategy="afterInteractive"
+      />
+      {/* Physics Engine */}
+      <Script
+        src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js"
+        strategy="afterInteractive"
+      />
+      {/* 2D WebGL */}
       <Script
         src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"
         strategy="afterInteractive"

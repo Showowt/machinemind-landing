@@ -10,10 +10,16 @@ import dynamic from "next/dynamic";
 import LanguageSwitcher from "./LanguageSwitcher";
 import { LogoStacked } from "@/components/brand";
 
-// Dynamic import for canvas (client-only)
+// Dynamic imports for canvas (client-only)
 const NeuralCanvas = dynamic(() => import("./NeuralCanvas"), {
   ssr: false,
 });
+
+// Cinema Engine - Three.js Particle System
+const ThreeParticles = dynamic(
+  () => import("@/components/cinema/ThreeParticles"),
+  { ssr: false },
+);
 
 export default function AutopoieticHero() {
   const language = useLanguage();
@@ -25,6 +31,9 @@ export default function AutopoieticHero() {
 
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
+      {/* Three.js Particle System - Cinema Engine */}
+      <ThreeParticles />
+
       {/* Neural Network Background */}
       <NeuralCanvas nodeCount={45} connectionDistance={140} />
 

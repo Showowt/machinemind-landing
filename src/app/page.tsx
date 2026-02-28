@@ -23,10 +23,21 @@ const LoadingSequence = dynamic(
   { ssr: false },
 );
 
-// Cinema Engine replaces custom cursor
+// Cinema Engine - 25 Layer Cinematic System
 const CinemaEngine = dynamic(() => import("@/components/cinema/CinemaEngine"), {
   ssr: false,
 });
+
+// Cinema Components
+const GravityCollapse = dynamic(
+  () => import("@/components/cinema/GravityCollapse"),
+  { ssr: false },
+);
+
+const HorizontalScroll = dynamic(
+  () => import("@/components/cinema/HorizontalScroll"),
+  { ssr: false },
+);
 
 const SofiaChat = dynamic(() => import("@/components/sofia/SofiaChat"), {
   ssr: false,
@@ -78,11 +89,17 @@ export default function Home() {
         {/* Why MachineMind - Differentiators */}
         <WhyMachineMind />
 
+        {/* Gravity Collapse - The $120K Loss Pitch (Matter.js Physics) */}
+        <GravityCollapse />
+
         {/* Portfolio Grid */}
         <PortfolioGrid />
 
         {/* Capabilities - Hexagonal Grid */}
         <CapabilitiesGrid />
+
+        {/* Horizontal Scroll - Capabilities Showcase (GSAP ScrollTrigger) */}
+        <HorizontalScroll />
 
         {/* Live Metrics */}
         <LiveMetrics />
