@@ -388,3 +388,14 @@ h1, h2, h3, h4, h5, h6 {
     --mm-header-height: 64px;
   }
 }
+
+/* ============================================
+   CINEMA ENGINE FALLBACKS
+   Ensure text is visible if Cinema fails to load
+   ============================================ */
+
+[data-text] { opacity: 1 !important; }
+[data-magnetic] { cursor: pointer; }
+[data-velocity] { opacity: 1 !important; }
+[data-reveal] { opacity: 1 !important; }
+[data-reveal-item] { opacity: 1 !important; }

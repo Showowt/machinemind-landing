@@ -158,7 +158,7 @@ export default function CapabilitiesGrid() {
 
                   {/* Mobile: Horizontal layout */}
                   <div className="relative z-10 flex sm:flex-col items-center sm:justify-center sm:h-full gap-3 sm:gap-0">
-                    <span className="text-3xl sm:text-4xl sm:mb-3 flex-shrink-0">
+                    <span className="text-2xl sm:text-3xl md:text-4xl sm:mb-3 flex-shrink-0">
                       {cap.icon}
                     </span>
                     <div className="sm:text-center">

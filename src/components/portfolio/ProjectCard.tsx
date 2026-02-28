@@ -45,7 +45,7 @@ export default function ProjectCard({ project, index }: ProjectCardProps) {
           {/* Status indicator */}
           {project.liveUrl && (
             <span
-              className="w-2 h-2 rounded-full bg-[var(--mm-healthy)] animate-status-pulse"
+              className="w-2 h-2 bg-[var(--mm-healthy)] animate-status-pulse"
               title="Live"
             />
           )}

@@ -71,7 +71,7 @@ export default function TestimonialsCarousel() {
                   &ldquo;
                 </span>
 
-                <p className="text-xl md:text-2xl text-white leading-relaxed mb-8 px-8">
+                <p className="text-base sm:text-lg md:text-xl lg:text-2xl text-white leading-relaxed mb-8 px-8">
                   {quote.split(current.highlightPhrase).map((part, i, arr) => (
                     <span key={i}>
                       {part}
@@ -105,7 +105,7 @@ export default function TestimonialsCarousel() {
 
                 {/* Metric */}
                 {current.metric && (
-                  <div className="mt-4 px-6 py-3 border border-[var(--mm-gold)] bg-[rgba(212,175,55,0.1)]">
+                  <div className="mt-4 px-6 py-3 border border-[var(--mm-blue-core)] bg-[rgba(0,180,255,0.1)]">
                     <span className="text-2xl font-bold text-gold">
                       {current.metric.value}
                     </span>
@@ -142,11 +142,12 @@ export default function TestimonialsCarousel() {
                   (prev - 1 + testimonials.length) % testimonials.length,
               )
             }
-            className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-4 md:-translate-x-12
+            className="absolute left-0 top-1/2 -translate-y-1/2 translate-x-0 sm:-translate-x-4 md:-translate-x-12
                        w-12 h-12 border border-[var(--mm-border)]
                        flex items-center justify-center
                        text-muted hover:text-gold hover:border-[var(--mm-gold)]
-                       transition-all duration-200"
+                       transition-all duration-200
+                       focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mm-blue-core)]"
             aria-label="Previous testimonial"
           >
             <svg
@@ -167,11 +168,12 @@ export default function TestimonialsCarousel() {
             onClick={() =>
               setActiveIndex((prev) => (prev + 1) % testimonials.length)
             }
-            className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-4 md:translate-x-12
+            className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-0 sm:translate-x-4 md:translate-x-12
                        w-12 h-12 border border-[var(--mm-border)]
                        flex items-center justify-center
                        text-muted hover:text-gold hover:border-[var(--mm-gold)]
-                       transition-all duration-200"
+                       transition-all duration-200
+                       focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mm-blue-core)]"
             aria-label="Next testimonial"
           >
             <svg

@@ -12,7 +12,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 const variantStyles: Record<ButtonVariant, string> = {
   gold: "bg-[var(--mm-gold)] text-[var(--mm-background)] hover:bg-[var(--mm-gold-light)] active:bg-[var(--mm-gold-dark)]",
   outline:
-    "bg-transparent text-[var(--mm-gold)] border border-[var(--mm-border)] hover:border-[var(--mm-gold)] hover:bg-[rgba(212,175,55,0.1)]",
+    "bg-transparent text-[var(--mm-blue-core)] border border-[var(--mm-border)] hover:border-[var(--mm-blue-core)] hover:bg-[rgba(0,180,255,0.1)]",
   ghost:
     "bg-transparent text-[var(--mm-text-muted)] hover:text-[var(--mm-text)] hover:bg-[rgba(255,255,255,0.05)]",
 };

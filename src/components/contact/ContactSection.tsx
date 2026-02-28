@@ -90,11 +90,11 @@ export default function ContactSection() {
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ delay: 0.2 }}
-            className="grid grid-cols-3 gap-4 md:gap-8 mb-12"
+            className="grid grid-cols-3 gap-2 sm:gap-4 md:gap-8 mb-12"
           >
             {t.stats.map((stat, i) => (
               <div key={i} className="text-center">
-                <div className="text-2xl md:text-4xl font-bold text-[var(--mm-blue-core)] font-heading">
+                <div className="text-lg sm:text-2xl md:text-4xl font-bold text-[var(--mm-blue-core)] font-heading">
                   {stat.value}
                 </div>
                 <div className="text-xs md:text-sm text-muted mt-1">

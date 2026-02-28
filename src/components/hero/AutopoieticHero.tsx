@@ -72,7 +72,7 @@ export default function AutopoieticHero() {
 
         {/* Tagline - Cinema Engine text animation */}
         <p
-          className="text-xl md:text-2xl lg:text-4xl text-[var(--mm-blue-core)] font-heading mb-4 md:mb-6 animate-fade-in-up px-4"
+          className="text-lg sm:text-xl md:text-2xl lg:text-4xl text-[var(--mm-blue-core)] font-heading mb-4 md:mb-6 animate-fade-in-up px-4"
           style={{ animationDelay: "200ms" }}
           data-text="rotate-in"
         >

@@ -30,18 +30,6 @@ export default function Footer() {
           {/* Links */}
           <div className="flex gap-6 text-sm">
             <a
-              href="#"
-              className="text-muted hover:text-white transition-colors"
-            >
-              {t.privacy}
-            </a>
-            <a
-              href="#"
-              className="text-muted hover:text-white transition-colors"
-            >
-              {t.terms}
-            </a>
-            <a
               href="#contact"
               className="text-muted hover:text-white transition-colors"
             >

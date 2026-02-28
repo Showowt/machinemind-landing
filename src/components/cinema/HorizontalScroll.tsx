@@ -1,70 +1,87 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useLanguage } from "@/store/portfolio";
 
-/**
- * Horizontal Scroll Section
- * GSAP ScrollTrigger pinned horizontal scrolling
- * WORLD-CLASS $50M AESTHETIC
- */
-export default function HorizontalScroll() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const trackRef = useRef<HTMLDivElement>(null);
-  const [isVisible, setIsVisible] = useState(false);
+// Bilingual translations
+const translations = {
+  es: {
+    badge: "Capacidades",
+    title: "Lo Que Entregamos",
+    scroll: "Desliza",
+  },
+  en: {
+    badge: "Capabilities",
+    title: "What We Deliver",
+    scroll: "Scroll",
+  },
+};
 
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) setIsVisible(true);
-      },
-      { threshold: 0.1 },
-    );
-    if (containerRef.current) observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const gsap = (window as unknown as { gsap?: unknown }).gsap;
-    const ScrollTrigger = (window as unknown as { ScrollTrigger?: unknown })
-      .ScrollTrigger;
-
-    if (!gsap || !ScrollTrigger || !containerRef.current || !trackRef.current)
-      return;
-
-    const g = gsap as {
-      registerPlugin: (p: unknown) => void;
-      to: (
-        t: unknown,
-        c: object,
-      ) => { scrollTrigger?: { kill: () => void } } | null;
-    };
-    const ST = ScrollTrigger as { create: (c: object) => { kill: () => void } };
-
-    g.registerPlugin(ST);
-
-    const track = trackRef.current;
-    const panels = track.querySelectorAll(".h-panel");
-    const totalWidth = (panels.length - 1) * window.innerWidth;
-
-    const tween = g.to(track, {
-      x: -totalWidth,
-      ease: "none",
-      scrollTrigger: {
-        trigger: containerRef.current,
-        pin: true,
-        scrub: 1,
-        end: () => "+=" + totalWidth,
-      },
-    });
-
-    return () => {
-      if (tween && tween.scrollTrigger) {
-        tween.scrollTrigger.kill();
-      }
-    };
-  }, []);
-
-  const capabilities = [
+// Bilingual capability data
+const capabilitiesData = {
+  es: [
+    {
+      number: "01",
+      title: "Sofia AI Concierge",
+      subtitle: "Inteligencia Bilingüe 24/7",
+      description:
+        "Maneja reservas, responde preguntas, cierra ventas mientras duermes. Fluidez en español e inglés con entrenamiento específico de industria.",
+      stat: "50K+",
+      statLabel: "Conversaciones Manejadas",
+      features: [
+        "Integración WhatsApp",
+        "Automatización de Reservas",
+        "Calificación de Leads",
+        "Multi-Idioma",
+      ],
+    },
+    {
+      number: "02",
+      title: "Sistemas Autopoiéticos",
+      subtitle: "Arquitectura Auto-Mantenida",
+      description:
+        "Sistemas que se monitorean, sanan y optimizan solos. Infraestructura cero-mantenimiento que evoluciona con tu negocio.",
+      stat: "99.9%",
+      statLabel: "Disponibilidad del Sistema",
+      features: [
+        "Auto-Reparación",
+        "Auto-Escalado",
+        "Mantenimiento Predictivo",
+        "Monitoreo en Tiempo Real",
+      ],
+    },
+    {
+      number: "03",
+      title: "Entrega Full-Stack",
+      subtitle: "Excelencia de Principio a Fin",
+      description:
+        "Del concepto al despliegue en semanas, no meses. Interfaces hermosas respaldadas por infraestructura a prueba de balas.",
+      stat: "44+",
+      statLabel: "Proyectos Entregados",
+      features: [
+        "Next.js + React",
+        "Backend Supabase",
+        "Deploy en Vercel",
+        "Integraciones Personalizadas",
+      ],
+    },
+    {
+      number: "04",
+      title: "Recuperación de Ingresos",
+      subtitle: "Captura Cada Dólar",
+      description:
+        "Deja de perder $120,000+ anuales por reservas perdidas y respuestas lentas. Nuestra IA captura ingresos 24/7/365.",
+      stat: "$2.4M+",
+      statLabel: "Ingresos Recuperados",
+      features: [
+        "Ventas Fuera de Horario",
+        "Respuesta Instantánea",
+        "Nutrición de Leads",
+        "Optimización de Conversión",
+      ],
+    },
+  ],
+  en: [
     {
       number: "01",
       title: "Sofia AI Concierge",
@@ -125,8 +142,218 @@ export default function HorizontalScroll() {
         "Conversion Optimization",
       ],
     },
-  ];
+  ],
+};
 
+/**
+ * Horizontal Scroll Section
+ * GSAP ScrollTrigger pinned horizontal scrolling
+ * WORLD-CLASS $50M AESTHETIC
+ */
+export default function HorizontalScroll() {
+  const language = useLanguage();
+  const t = translations[language];
+  const capabilities = capabilitiesData[language];
+  const containerRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  // Detect mobile on mount and resize
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setIsVisible(true);
+      },
+      { threshold: 0.1 },
+    );
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    // Skip GSAP on mobile - use vertical layout instead
+    if (isMobile) return;
+
+    // Check for prefers-reduced-motion - disable GSAP animations if user prefers reduced motion
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    if (prefersReducedMotion) {
+      console.info(
+        "[HorizontalScroll] Reduced motion preference detected - skipping GSAP",
+      );
+      return;
+    }
+
+    const gsap = (window as unknown as { gsap?: unknown }).gsap;
+    const ScrollTrigger = (window as unknown as { ScrollTrigger?: unknown })
+      .ScrollTrigger;
+
+    if (!gsap || !ScrollTrigger || !containerRef.current || !trackRef.current)
+      return;
+
+    const g = gsap as {
+      registerPlugin: (p: unknown) => void;
+      to: (
+        t: unknown,
+        c: object,
+      ) => { scrollTrigger?: { kill: () => void } } | null;
+    };
+    const ST = ScrollTrigger as { create: (c: object) => { kill: () => void } };
+
+    g.registerPlugin(ST);
+
+    const track = trackRef.current;
+    const panels = track.querySelectorAll(".h-panel");
+    const totalWidth = (panels.length - 1) * window.innerWidth;
+
+    const tween = g.to(track, {
+      x: -totalWidth,
+      ease: "none",
+      scrollTrigger: {
+        trigger: containerRef.current,
+        pin: true,
+        scrub: 1,
+        end: () => "+=" + totalWidth,
+      },
+    });
+
+    return () => {
+      if (tween && tween.scrollTrigger) {
+        tween.scrollTrigger.kill();
+      }
+    };
+  }, [isMobile]);
+
+  // Mobile vertical layout
+  if (isMobile) {
+    return (
+      <section
+        ref={containerRef}
+        className="py-16 px-4"
+        style={{ background: "var(--mm-background)" }}
+      >
+        <div className="container-luxury">
+          {/* Section header */}
+          <div className="mb-8">
+            <span
+              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-mono uppercase tracking-[0.2em] mb-4"
+              style={{
+                border: "1px solid var(--mm-border-hover)",
+                color: "var(--mm-blue-core)",
+              }}
+            >
+              <span className="w-1.5 h-1.5 bg-[var(--mm-blue-core)] animate-pulse" />
+              {t.badge}
+            </span>
+            <h2
+              className="font-heading text-2xl sm:text-3xl font-bold"
+              style={{ color: "var(--mm-text)" }}
+            >
+              {t.title}
+            </h2>
+          </div>
+
+          {/* Vertical cards */}
+          <div className="space-y-6">
+            {capabilities.map((cap, i) => (
+              <div
+                key={i}
+                className="p-4 sm:p-6"
+                style={{
+                  border: "1px solid var(--mm-border)",
+                  background: "rgba(0, 180, 255, 0.03)",
+                }}
+              >
+                <div className="flex items-start gap-4 mb-4">
+                  <span
+                    className="text-3xl sm:text-4xl font-bold font-mono"
+                    style={{ color: "var(--mm-blue-core)", opacity: 0.3 }}
+                  >
+                    {cap.number}
+                  </span>
+                  <div className="flex-1">
+                    <div
+                      className="text-xs font-mono uppercase tracking-wider mb-1"
+                      style={{ color: "var(--mm-blue-core)" }}
+                    >
+                      {cap.subtitle}
+                    </div>
+                    <h3
+                      className="font-heading text-xl sm:text-2xl font-bold"
+                      style={{ color: "var(--mm-text)" }}
+                    >
+                      {cap.title}
+                    </h3>
+                  </div>
+                </div>
+
+                <p
+                  className="text-sm sm:text-base mb-4 leading-relaxed"
+                  style={{ color: "var(--mm-text-muted)" }}
+                >
+                  {cap.description}
+                </p>
+
+                {/* Stat */}
+                <div
+                  className="inline-block px-4 py-2 mb-4"
+                  style={{
+                    border: "1px solid var(--mm-border-hover)",
+                    background: "rgba(0, 180, 255, 0.05)",
+                  }}
+                >
+                  <span
+                    className="text-2xl sm:text-3xl font-bold font-mono mr-2"
+                    style={{
+                      color: "var(--mm-blue-bright)",
+                      textShadow: "0 0 20px rgba(0, 212, 255, 0.4)",
+                    }}
+                  >
+                    {cap.stat}
+                  </span>
+                  <span
+                    className="text-xs uppercase tracking-wider font-mono"
+                    style={{ color: "var(--mm-text-muted)" }}
+                  >
+                    {cap.statLabel}
+                  </span>
+                </div>
+
+                {/* Features */}
+                <div className="flex flex-wrap gap-2">
+                  {cap.features.map((feature, j) => (
+                    <span
+                      key={j}
+                      className="px-2 py-1 text-xs font-mono"
+                      style={{
+                        border: "1px solid var(--mm-border)",
+                        color: "var(--mm-text-muted)",
+                      }}
+                    >
+                      {feature}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  // Desktop horizontal scroll layout
   return (
     <section
       ref={containerRef}
@@ -161,7 +388,7 @@ export default function HorizontalScroll() {
               }}
             >
               <span className="w-1.5 h-1.5 bg-[var(--mm-blue-core)] animate-pulse" />
-              Capabilities
+              {t.badge}
             </span>
           </div>
           <h2
@@ -173,7 +400,7 @@ export default function HorizontalScroll() {
               transition: "all 0.6s ease-out 0.1s",
             }}
           >
-            What We Deliver
+            {t.title}
           </h2>
         </div>
       </div>
@@ -289,7 +516,7 @@ export default function HorizontalScroll() {
         className="absolute bottom-8 right-8 z-20 flex items-center gap-2 text-sm font-mono"
         style={{ color: "var(--mm-text-subtle)" }}
       >
-        <span>Scroll</span>
+        <span>{t.scroll}</span>
         <svg
           className="w-4 h-4"
           fill="none"

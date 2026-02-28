@@ -56,7 +56,7 @@ export default function MobileMenu() {
           <>
             {/* Backdrop */}
             <motion.div
-              className="fixed inset-0 bg-[var(--mm-void)]/95 backdrop-blur-md z-40"
+              className="fixed inset-0 bg-[var(--mm-void)]/95 z-40"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}

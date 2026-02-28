@@ -70,6 +70,19 @@ export default function CinemaEngine({
     };
   }, [brandName, accentColor, skipPreloader, sound]);
 
+  // Timeout fallback - if scripts haven't loaded after 10 seconds, fire event anyway
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      if (!initialized.current) {
+        console.warn(
+          "[Cinema Engine] Scripts timeout - initializing without CDN",
+        );
+        window.dispatchEvent(new CustomEvent("cinema:scriptsLoaded"));
+      }
+    }, 10000);
+    return () => clearTimeout(timeout);
+  }, []);
+
   return (
     <>
       {/* CDN Dependencies */}
@@ -100,7 +113,10 @@ export default function CinemaEngine({
         src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"
         strategy="afterInteractive"
       />
-      <Script src="https://unpkg.com/split-type" strategy="afterInteractive" />
+      <Script
+        src="https://unpkg.com/split-type@0.3.4"
+        strategy="afterInteractive"
+      />
       <Script
         src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js"
         strategy="afterInteractive"

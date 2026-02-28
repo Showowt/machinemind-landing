@@ -3,16 +3,18 @@
 import { useLanguage } from "@/store/portfolio";
 import { RevealOnScroll } from "@/components/animation";
 
-// Client logo data (placeholder for real logos)
+// Real client names from MachineMind portfolio
 const clients = [
-  { name: "Four Seasons", category: "hotel" },
+  { name: "Four Seasons Bogotá", category: "hotel" },
   { name: "Movvia", category: "hospitality" },
+  { name: "Dharma Beach Club", category: "hospitality" },
+  { name: "Simmer Down Pizza", category: "restaurant" },
+  { name: "SEVEN 7 TIMES", category: "nightlife" },
+  { name: "World Lion Tours", category: "tourism" },
+  { name: "LA KASTA Premium", category: "restaurant" },
   { name: "Osaka Nikkei", category: "restaurant" },
-  { name: "100 Luxury", category: "hospitality" },
-  { name: "AeroTransfer", category: "transport" },
-  { name: "BenzDriver", category: "transport" },
-  { name: "Medellín VIP", category: "tourism" },
-  { name: "BlackSound", category: "nightlife" },
+  { name: "Libertario Coffee", category: "restaurant" },
+  { name: "Alambique Medellín", category: "restaurant" },
 ];
 
 export default function ClientLogos() {
@@ -42,16 +44,22 @@ export default function ClientLogos() {
           <div className="flex client-logos-scroll">
             {/* First set */}
             {clients.map((client, i) => (
-              <div key={`a-${i}`} className="flex-shrink-0 px-8 py-4 group">
-                <div className="text-xl font-heading font-semibold text-muted transition-all duration-300 group-hover:text-gold">
+              <div
+                key={`a-${i}`}
+                className="flex-shrink-0 px-4 sm:px-6 md:px-8 py-2 sm:py-3 md:py-4 group"
+              >
+                <div className="text-base sm:text-lg md:text-xl font-heading font-semibold text-muted transition-all duration-300 group-hover:text-gold">
                   {client.name}
                 </div>
               </div>
             ))}
             {/* Duplicate for seamless loop */}
             {clients.map((client, i) => (
-              <div key={`b-${i}`} className="flex-shrink-0 px-8 py-4 group">
-                <div className="text-xl font-heading font-semibold text-muted transition-all duration-300 group-hover:text-gold">
+              <div
+                key={`b-${i}`}
+                className="flex-shrink-0 px-4 sm:px-6 md:px-8 py-2 sm:py-3 md:py-4 group"
+              >
+                <div className="text-base sm:text-lg md:text-xl font-heading font-semibold text-muted transition-all duration-300 group-hover:text-gold">
                   {client.name}
                 </div>
               </div>

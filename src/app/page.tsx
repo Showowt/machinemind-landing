@@ -67,7 +67,7 @@ export default function Home() {
       {cinemaReady && (
         <CinemaEngine
           brandName="MACHINEMIND"
-          accentColor="#00e5ff"
+          accentColor="#00B4FF"
           skipPreloader={true}
           sound={false}
         />

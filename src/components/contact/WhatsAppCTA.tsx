@@ -22,10 +22,10 @@ export default function WhatsAppCTA() {
       className="fixed bottom-6 right-6 z-50
                  flex items-center justify-center
                  w-16 h-16
-                 bg-[#25D366] text-white
+                 bg-[var(--mm-blue-core)] text-white
                  transition-all duration-200
-                 hover:scale-110 hover:bg-[#20BA5C]
-                 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#25D366]"
+                 hover:scale-110 hover:bg-[var(--mm-blue-deep)]
+                 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mm-blue-core)]"
       aria-label="WhatsApp"
     >
       <svg className="w-8 h-8" fill="currentColor" viewBox="0 0 24 24">

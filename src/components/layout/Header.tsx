@@ -19,7 +19,7 @@ export default function Header() {
   ];
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 bg-[var(--mm-background)]/90 backdrop-blur-sm border-b border-[var(--mm-border)]">
+    <header className="fixed top-0 left-0 right-0 z-50 bg-[var(--mm-background)]/90 border-b border-[var(--mm-border)]">
       <div className="container-luxury flex items-center justify-between h-16 md:h-20">
         {/* Logo */}
         <Link href="/" className="flex items-center">

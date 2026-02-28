@@ -23,9 +23,19 @@ export default function ThreeParticles() {
       }
     }, 100);
 
-    // Timeout after 5 seconds
+    // Timeout after 5 seconds - gracefully fail with CSS gradient fallback
     const timeout = setTimeout(() => {
       clearInterval(checkThree);
+      if (!initialized.current && containerRef.current) {
+        console.warn(
+          "[ThreeParticles] Three.js not loaded - using CSS gradient fallback",
+        );
+        // Apply CSS gradient fallback instead of Three.js particles
+        containerRef.current.style.background =
+          "radial-gradient(ellipse at 30% 20%, rgba(0, 180, 255, 0.15) 0%, transparent 50%), " +
+          "radial-gradient(ellipse at 70% 80%, rgba(0, 212, 255, 0.1) 0%, transparent 50%), " +
+          "radial-gradient(ellipse at 50% 50%, rgba(0, 100, 204, 0.08) 0%, transparent 70%)";
+      }
     }, 5000);
 
     const initParticles = () => {

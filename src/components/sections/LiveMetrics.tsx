@@ -51,11 +51,11 @@ export default function LiveMetrics() {
       <div className="container-luxury">
         <RevealOnScroll direction="up" className="text-center mb-12">
           <div className="flex items-center justify-center gap-3 mb-4">
-            <span className="w-2 h-2 bg-[var(--mm-healthy)] rounded-full animate-pulse" />
+            <span className="w-2 h-2 bg-[var(--mm-healthy)] animate-pulse" />
             <span className="text-gold text-sm font-medium uppercase tracking-wider">
               {title}
             </span>
-            <span className="w-2 h-2 bg-[var(--mm-healthy)] rounded-full animate-pulse" />
+            <span className="w-2 h-2 bg-[var(--mm-healthy)] animate-pulse" />
           </div>
           <p className="text-muted text-sm">{subtitle}</p>
         </RevealOnScroll>

@@ -54,7 +54,7 @@ export default function FlagshipShowcase({ projects }: FlagshipShowcaseProps) {
                   </h3>
                   {project.liveUrl && (
                     <span className="flex items-center gap-2 text-xs text-[var(--mm-healthy)]">
-                      <span className="w-2 h-2 rounded-full bg-[var(--mm-healthy)] animate-status-pulse" />
+                      <span className="w-2 h-2 bg-[var(--mm-healthy)] animate-status-pulse" />
                       LIVE
                     </span>
                   )}

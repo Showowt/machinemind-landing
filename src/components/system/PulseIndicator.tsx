@@ -36,13 +36,13 @@ export default function PulseIndicator({
         {/* Outer pulse ring */}
         {status === "healthy" && (
           <span
-            className={`absolute inline-flex ${sizeMap[size]} rounded-full opacity-75 animate-ping`}
+            className={`absolute inline-flex ${sizeMap[size]} opacity-75 animate-ping`}
             style={{ backgroundColor: color }}
           />
         )}
         {/* Core dot */}
         <span
-          className={`relative inline-flex ${sizeMap[size]} rounded-full`}
+          className={`relative inline-flex ${sizeMap[size]}`}
           style={{ backgroundColor: color }}
         />
       </span>

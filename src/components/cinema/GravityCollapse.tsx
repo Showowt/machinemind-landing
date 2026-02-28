@@ -1,6 +1,53 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useLanguage } from "@/store/portfolio";
+
+// Bilingual translations
+const translations = {
+  es: {
+    badge: "Análisis de Ingresos",
+    headline: "Sin Automatización con IA",
+    subtitle: "Tu negocio está perdiendo ingresos cada día",
+    lostPerWeek: "Perdido por Semana",
+    wastedMonthly: "Desperdiciado Mensualmente",
+    leadsIgnored: "Leads Ignorados",
+    perYear: "por año",
+    watchCollapse: "Ver el Colapso",
+    missedBookings: "Reservas perdidas fuera de horario",
+    answeringQuestions: "Respondiendo preguntas repetitivas",
+    responseTime: "Tiempo de respuesta mayor a 5 min",
+    lostRevenue: "Eso es $120,000 en ingresos perdidos.",
+    everySingleYear: "Cada. Año.",
+    unlessCatching: "A menos que tengas a alguien capturándolo 24/7.",
+    sofiaOnline: "Sofia está En Línea",
+    sofiaMessage:
+      "¡Hola! Te puedo ayudar a reservar esa villa. Déjame verificar disponibilidad...",
+    bookingClosed: "✓ Reserva de $450 cerrada a las 11:47 PM",
+    stopBleeding: "Detén la Pérdida →",
+  },
+  en: {
+    badge: "Revenue Analysis",
+    headline: "Without AI Automation",
+    subtitle: "Your business is hemorrhaging revenue every single day",
+    lostPerWeek: "Lost Per Week",
+    wastedMonthly: "Wasted Monthly",
+    leadsIgnored: "Leads Ignored",
+    perYear: "per year",
+    watchCollapse: "Watch It Collapse",
+    missedBookings: "Missed after-hours bookings",
+    answeringQuestions: "Answering repetitive questions",
+    responseTime: "Response time exceeds 5 min",
+    lostRevenue: "That's $120,000 in lost revenue.",
+    everySingleYear: "Every. Single. Year.",
+    unlessCatching: "Unless you have someone catching it 24/7.",
+    sofiaOnline: "Sofia is Online",
+    sofiaMessage:
+      "Hi! I can help you book that villa. Let me check availability...",
+    bookingClosed: "✓ $450 booking closed at 11:47 PM",
+    stopBleeding: "Stop The Bleeding →",
+  },
+};
 
 /**
  * Matter.js Gravity Collapse Section
@@ -8,6 +55,8 @@ import { useEffect, useRef, useState } from "react";
  * WORLD-CLASS $50M AESTHETIC
  */
 export default function GravityCollapse() {
+  const language = useLanguage();
+  const t = translations[language];
   const sectionRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -136,7 +185,10 @@ export default function GravityCollapse() {
     const Matter = (window as unknown as { Matter: typeof import("matter-js") })
       .Matter;
     if (!Matter) {
-      // Fallback if Matter.js not loaded - just show overlay
+      // Fallback if Matter.js not loaded - show overlay with CSS animation instead
+      console.warn(
+        "[GravityCollapse] Matter.js not loaded - using fallback animation",
+      );
       setTimeout(() => setShowOverlay(true), 500);
       return;
     }
@@ -345,13 +397,13 @@ export default function GravityCollapse() {
                 }}
               >
                 <span className="w-2 h-2 bg-[var(--mm-blue-core)] animate-pulse" />
-                Revenue Analysis
+                {t.badge}
               </span>
             </div>
 
             {/* Main headline */}
             <h2
-              className="collapse-item font-heading text-4xl md:text-6xl lg:text-7xl font-bold mb-6"
+              className="collapse-item font-heading text-2xl sm:text-4xl md:text-6xl lg:text-7xl font-bold mb-6"
               style={{
                 color: "var(--mm-text)",
                 animation: isVisible
@@ -360,7 +412,7 @@ export default function GravityCollapse() {
                 opacity: 0,
               }}
             >
-              Without AI Automation
+              {t.headline}
             </h2>
 
             <p
@@ -373,7 +425,7 @@ export default function GravityCollapse() {
                 opacity: 0,
               }}
             >
-              Your business is hemorrhaging revenue every single day
+              {t.subtitle}
             </p>
 
             {/* Stats grid */}
@@ -387,7 +439,7 @@ export default function GravityCollapse() {
               }}
             >
               <div
-                className="collapse-item p-8 backdrop-blur-sm"
+                className="collapse-item p-4 sm:p-6 md:p-8 backdrop-blur-sm"
                 style={{
                   border: "1px solid var(--mm-border)",
                   background: "rgba(0, 180, 255, 0.03)",
@@ -403,18 +455,18 @@ export default function GravityCollapse() {
                   style={{ color: "var(--mm-text-muted)" }}
                   className="text-sm uppercase tracking-wider"
                 >
-                  Lost Per Week
+                  {t.lostPerWeek}
                 </div>
                 <div
                   style={{ color: "var(--mm-text-subtle)" }}
                   className="text-xs mt-2"
                 >
-                  Missed after-hours bookings
+                  {t.missedBookings}
                 </div>
               </div>
 
               <div
-                className="collapse-item p-8 backdrop-blur-sm"
+                className="collapse-item p-4 sm:p-6 md:p-8 backdrop-blur-sm"
                 style={{
                   border: "1px solid var(--mm-border)",
                   background: "rgba(0, 180, 255, 0.03)",
@@ -430,18 +482,18 @@ export default function GravityCollapse() {
                   style={{ color: "var(--mm-text-muted)" }}
                   className="text-sm uppercase tracking-wider"
                 >
-                  Wasted Monthly
+                  {t.wastedMonthly}
                 </div>
                 <div
                   style={{ color: "var(--mm-text-subtle)" }}
                   className="text-xs mt-2"
                 >
-                  Answering repetitive questions
+                  {t.answeringQuestions}
                 </div>
               </div>
 
               <div
-                className="collapse-item p-8 backdrop-blur-sm"
+                className="collapse-item p-4 sm:p-6 md:p-8 backdrop-blur-sm"
                 style={{
                   border: "1px solid var(--mm-border)",
                   background: "rgba(0, 180, 255, 0.03)",
@@ -457,13 +509,13 @@ export default function GravityCollapse() {
                   style={{ color: "var(--mm-text-muted)" }}
                   className="text-sm uppercase tracking-wider"
                 >
-                  Leads Ignored
+                  {t.leadsIgnored}
                 </div>
                 <div
                   style={{ color: "var(--mm-text-subtle)" }}
                   className="text-xs mt-2"
                 >
-                  Response time exceeds 5 min
+                  {t.responseTime}
                 </div>
               </div>
             </div>
@@ -479,7 +531,7 @@ export default function GravityCollapse() {
               }}
             >
               <div
-                className="text-6xl md:text-8xl lg:text-9xl font-bold font-mono tracking-tight"
+                className="text-4xl sm:text-6xl md:text-8xl lg:text-9xl font-bold font-mono tracking-tight"
                 style={{
                   color: "var(--mm-blue-bright)",
                   textShadow: "0 0 60px rgba(0, 212, 255, 0.5)",
@@ -491,7 +543,7 @@ export default function GravityCollapse() {
                 className="text-2xl md:text-3xl mt-2"
                 style={{ color: "var(--mm-text-muted)" }}
               >
-                per year
+                {t.perYear}
               </div>
             </div>
 
@@ -509,7 +561,7 @@ export default function GravityCollapse() {
               }}
             >
               <span className="relative z-10 flex items-center gap-4">
-                Watch It Collapse
+                {t.watchCollapse}
                 <svg
                   className="w-5 h-5 animate-bounce"
                   fill="none"
@@ -546,19 +598,19 @@ export default function GravityCollapse() {
                 className="text-xl md:text-3xl mb-4 font-mono tracking-wide"
                 style={{ color: "var(--mm-text-muted)" }}
               >
-                That&apos;s {formatMoney(120000)} in lost revenue.
+                {t.lostRevenue}
               </div>
               <div
                 className="text-4xl md:text-6xl lg:text-8xl font-bold mb-4 font-heading"
                 style={{ color: "var(--mm-text)" }}
               >
-                Every. Single. Year.
+                {t.everySingleYear}
               </div>
               <div
                 className="text-xl mb-16"
                 style={{ color: "var(--mm-text-subtle)" }}
               >
-                Unless you have someone catching it 24/7.
+                {t.unlessCatching}
               </div>
 
               {/* Sofia rises */}
@@ -576,17 +628,16 @@ export default function GravityCollapse() {
                   style={{ color: "var(--mm-healthy)" }}
                 >
                   <span className="w-2 h-2 rounded-full bg-[var(--mm-healthy)] animate-pulse" />
-                  Sofia is Online
+                  {t.sofiaOnline}
                 </div>
                 <div className="text-2xl text-white mb-4">
-                  &quot;Hi! I can help you book that villa. Let me check
-                  availability...&quot;
+                  &quot;{t.sofiaMessage}&quot;
                 </div>
                 <div
                   className="text-sm font-mono"
                   style={{ color: "var(--mm-blue-core)" }}
                 >
-                  ✓ $450 booking closed at 11:47 PM
+                  {t.bookingClosed}
                 </div>
               </div>
 
@@ -601,7 +652,7 @@ export default function GravityCollapse() {
                 }}
                 onClick={() => setShowOverlay(false)}
               >
-                Stop The Bleeding →
+                {t.stopBleeding}
               </a>
             </div>
           </div>

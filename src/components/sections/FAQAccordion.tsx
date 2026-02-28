@@ -115,8 +115,9 @@ export default function FAQAccordion() {
                 >
                   <button
                     onClick={() => setOpenIndex(isOpen ? null : index)}
-                    className="w-full p-6 flex items-center justify-between
-                               text-left"
+                    className="w-full p-4 sm:p-5 md:p-6 flex items-center justify-between
+                               text-left
+                               focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mm-blue-core)]"
                   >
                     <span className="font-medium text-white pr-4">
                       {question}
@@ -139,7 +140,7 @@ export default function FAQAccordion() {
                         transition={{ duration: 0.3 }}
                         className="overflow-hidden"
                       >
-                        <div className="px-6 pb-6">
+                        <div className="px-4 sm:px-6 pb-4 sm:pb-6">
                           <div className="h-px bg-[var(--mm-border)] mb-4" />
                           <p className="text-muted leading-relaxed">{answer}</p>
                         </div>

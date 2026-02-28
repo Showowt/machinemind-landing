@@ -97,7 +97,7 @@ export default function WhyMachineMind() {
 
         {/* Stats row */}
         <RevealOnScroll direction="up" delay={0.2} className="mb-16">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto text-center">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 md:gap-8 max-w-4xl mx-auto text-center">
             <div>
               <div className="text-4xl md:text-5xl font-bold text-gold mb-2">
                 <CountUp end={31} suffix="+" />
@@ -134,11 +134,11 @@ export default function WhyMachineMind() {
         </RevealOnScroll>
 
         {/* Differentiators grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
           {differentiators.map((diff, index) => (
             <RevealOnScroll key={index} direction="up" delay={0.1 * index}>
               <div
-                className="p-8 border border-[var(--mm-border)]
+                className="p-4 sm:p-6 md:p-8 border border-[var(--mm-border)]
                            bg-[rgba(15,15,26,0.6)]
                            transition-all duration-300
                            hover:border-[var(--mm-border-hover)]
