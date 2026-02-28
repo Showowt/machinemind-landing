@@ -61,18 +61,20 @@ export default function AutopoieticHero() {
           </div>
         </div>
 
-        {/* Tagline */}
+        {/* Tagline - Cinema Engine text animation */}
         <p
           className="text-xl md:text-2xl lg:text-4xl text-[var(--mm-blue-core)] font-heading mb-4 md:mb-6 animate-fade-in-up px-4"
           style={{ animationDelay: "200ms" }}
+          data-text="rotate-in"
         >
           {t.tagline}
         </p>
 
-        {/* Subtitle */}
+        {/* Subtitle - Cinema Engine scroll-fade effect */}
         <p
           className="text-muted text-base md:text-lg lg:text-xl max-w-2xl mx-auto mb-8 md:mb-12 animate-fade-in-up px-4"
           style={{ animationDelay: "300ms" }}
+          data-text="scroll-fade"
         >
           {t.subtitle}
         </p>
@@ -87,7 +89,7 @@ export default function AutopoieticHero() {
           <Stat value={aiConversations} label={t.stats.conversations} />
         </div>
 
-        {/* CTA Button */}
+        {/* CTA Button - Cinema Engine magnetic effect */}
         <div className="animate-fade-in-up" style={{ animationDelay: "500ms" }}>
           <a
             href="#portfolio"
@@ -98,21 +100,24 @@ export default function AutopoieticHero() {
                        transition-all duration-200
                        hover:bg-[var(--mm-blue-bright)]
                        focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--mm-blue-core)]"
+            data-magnetic="0.3"
           >
-            {t.cta}
-            <svg
-              className="ml-2 w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M19 14l-7 7m0 0l-7-7m7 7V3"
-              />
-            </svg>
+            <span data-magnetic-inner className="flex items-center">
+              {t.cta}
+              <svg
+                className="ml-2 w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M19 14l-7 7m0 0l-7-7m7 7V3"
+                />
+              </svg>
+            </span>
           </a>
         </div>
 

@@ -81,12 +81,17 @@ export default function WhyMachineMind() {
   return (
     <section className="section-padding">
       <div className="container-luxury">
-        {/* Header */}
+        {/* Header - Cinema Engine enhanced */}
         <RevealOnScroll direction="up" className="text-center mb-16">
-          <h2 className="font-heading text-4xl md:text-5xl font-bold text-white mb-4">
+          <h2
+            className="font-heading text-4xl md:text-5xl font-bold text-white mb-4"
+            data-text="slide-up"
+          >
             {title}
           </h2>
-          <p className="text-muted text-lg">{subtitle}</p>
+          <p className="text-muted text-lg" data-velocity="skew">
+            {subtitle}
+          </p>
           <div className="gold-line w-24 mx-auto mt-6" />
         </RevealOnScroll>
 

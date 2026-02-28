@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import { AutopoieticHero } from "@/components/hero";
 import { PortfolioGrid } from "@/components/portfolio";
 import { SystemStatus } from "@/components/system";
-import { ContactSection, WhatsAppCTA } from "@/components/contact";
+import { ContactSection } from "@/components/contact";
 import { Footer, Header } from "@/components/layout";
 import {
   ClientLogos,
@@ -23,7 +23,8 @@ const LoadingSequence = dynamic(
   { ssr: false },
 );
 
-const CustomCursor = dynamic(() => import("@/components/cursor/CustomCursor"), {
+// Cinema Engine replaces custom cursor
+const CinemaEngine = dynamic(() => import("@/components/cinema/CinemaEngine"), {
   ssr: false,
 });
 
@@ -33,16 +34,16 @@ const SofiaChat = dynamic(() => import("@/components/sofia/SofiaChat"), {
 
 export default function Home() {
   const [isLoaded, setIsLoaded] = useState(false);
-  const [showCursor, setShowCursor] = useState(false);
+  const [cinemaReady, setCinemaReady] = useState(false);
 
   useEffect(() => {
     // Check if already loaded
     if (sessionStorage.getItem("mm-loaded")) {
       setIsLoaded(true);
     }
-    // Enable cursor after a short delay
-    const cursorTimer = setTimeout(() => setShowCursor(true), 500);
-    return () => clearTimeout(cursorTimer);
+    // Enable cinema engine after load
+    const cinemaTimer = setTimeout(() => setCinemaReady(true), 800);
+    return () => clearTimeout(cinemaTimer);
   }, []);
 
   if (!isLoaded) {
@@ -51,16 +52,23 @@ export default function Home() {
 
   return (
     <>
+      {/* Cinema Engine v2.0 - 25 Layer Cinematic Experience */}
+      {cinemaReady && (
+        <CinemaEngine
+          brandName="MACHINEMIND"
+          accentColor="#00e5ff"
+          skipPreloader={true}
+          sound={false}
+        />
+      )}
+
       {/* Header */}
       <Header />
 
-      {/* Scroll Progress Bar */}
+      {/* Scroll Progress Bar - Cinema Engine provides its own */}
       <ScrollProgress />
 
-      {/* Custom Cursor */}
-      {showCursor && <CustomCursor />}
-
-      <main className="min-h-screen">
+      <main id="main-content" className="min-h-screen" role="main">
         {/* Hero Section with Neural Network */}
         <AutopoieticHero />
 

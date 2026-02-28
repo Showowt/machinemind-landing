@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Playfair_Display, Inter, Outfit, Space_Mono } from "next/font/google";
 import "./globals.css";
 
+// Cinema Engine CSS
+import "@/styles/cinema-engine.css";
+
 const playfair = Playfair_Display({
   variable: "--font-playfair",
   subsets: ["latin"],
@@ -86,7 +89,12 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <meta name="theme-color" content="#0a0a0f" />
       </head>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased" suppressHydrationWarning>
+        <a href="#main-content" className="skip-link">
+          Skip to content
+        </a>
+        {children}
+      </body>
     </html>
   );
 }
