@@ -1,14 +1,27 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Horizontal Scroll Section
  * GSAP ScrollTrigger pinned horizontal scrolling
+ * WORLD-CLASS $50M AESTHETIC
  */
 export default function HorizontalScroll() {
   const containerRef = useRef<HTMLDivElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) setIsVisible(true);
+      },
+      { threshold: 0.1 },
+    );
+    if (containerRef.current) observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     const gsap = (window as unknown as { gsap?: unknown }).gsap;
@@ -53,40 +66,64 @@ export default function HorizontalScroll() {
 
   const capabilities = [
     {
+      number: "01",
       title: "Sofia AI Concierge",
       subtitle: "24/7 Bilingual Intelligence",
       description:
-        "Handles bookings, answers questions, closes sales while you sleep. Spanish and English fluency.",
+        "Handles bookings, answers questions, closes sales while you sleep. Spanish and English fluency with industry-specific training.",
       stat: "50K+",
-      statLabel: "Conversations",
-      color: "#00e5ff",
+      statLabel: "Conversations Handled",
+      features: [
+        "WhatsApp Integration",
+        "Booking Automation",
+        "Lead Qualification",
+        "Multi-Language",
+      ],
     },
     {
+      number: "02",
       title: "Autopoietic Systems",
       subtitle: "Self-Maintaining Architecture",
       description:
-        "Systems that monitor, update, and heal themselves. Zero maintenance overhead for you.",
+        "Systems that monitor, heal, and optimize themselves. Zero-maintenance infrastructure that evolves with your business.",
       stat: "99.9%",
-      statLabel: "Uptime",
-      color: "#8b5cf6",
+      statLabel: "System Uptime",
+      features: [
+        "Self-Healing",
+        "Auto-Scaling",
+        "Predictive Maintenance",
+        "Real-Time Monitoring",
+      ],
     },
     {
+      number: "03",
       title: "Full-Stack Delivery",
-      subtitle: "Design to Deployment",
+      subtitle: "End-to-End Excellence",
       description:
-        "From concept to production in weeks, not months. One team, no outsourcing, complete ownership.",
-      stat: "6",
-      statLabel: "Week Avg",
-      color: "#10b981",
+        "From concept to deployment in weeks, not months. Beautiful interfaces backed by bulletproof infrastructure.",
+      stat: "44+",
+      statLabel: "Projects Delivered",
+      features: [
+        "Next.js + React",
+        "Supabase Backend",
+        "Vercel Deploy",
+        "Custom Integrations",
+      ],
     },
     {
+      number: "04",
       title: "Revenue Recovery",
-      subtitle: "Capture What You're Missing",
+      subtitle: "Capture Every Dollar",
       description:
-        "Every missed call, every after-hours inquiry, every slow response - converted to revenue.",
-      stat: "$120K",
-      statLabel: "Annual Recovery",
-      color: "#f59e0b",
+        "Stop losing $120,000+ annually to missed bookings and slow responses. Our AI captures revenue 24/7/365.",
+      stat: "$2.4M+",
+      statLabel: "Revenue Recovered",
+      features: [
+        "After-Hours Sales",
+        "Instant Response",
+        "Lead Nurturing",
+        "Conversion Optimization",
+      ],
     },
   ];
 
@@ -94,8 +131,54 @@ export default function HorizontalScroll() {
     <section
       ref={containerRef}
       className="relative overflow-hidden"
-      style={{ height: "400vh" }}
+      style={{
+        height: `${capabilities.length * 100}vh`,
+        background: "var(--mm-background)",
+      }}
     >
+      {/* Section header */}
+      <div
+        className="absolute top-0 left-0 right-0 z-20 py-8"
+        style={{
+          background:
+            "linear-gradient(to bottom, var(--mm-background), transparent)",
+        }}
+      >
+        <div className="container-luxury">
+          <div
+            className="flex items-center gap-4 mb-4"
+            style={{
+              opacity: isVisible ? 1 : 0,
+              transform: isVisible ? "translateY(0)" : "translateY(20px)",
+              transition: "all 0.6s ease-out",
+            }}
+          >
+            <span
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-mono uppercase tracking-[0.2em]"
+              style={{
+                border: "1px solid var(--mm-border-hover)",
+                color: "var(--mm-blue-core)",
+              }}
+            >
+              <span className="w-1.5 h-1.5 bg-[var(--mm-blue-core)] animate-pulse" />
+              Capabilities
+            </span>
+          </div>
+          <h2
+            className="font-heading text-3xl md:text-5xl font-bold"
+            style={{
+              color: "var(--mm-text)",
+              opacity: isVisible ? 1 : 0,
+              transform: isVisible ? "translateY(0)" : "translateY(20px)",
+              transition: "all 0.6s ease-out 0.1s",
+            }}
+          >
+            What We Deliver
+          </h2>
+        </div>
+      </div>
+
+      {/* Horizontal track */}
       <div
         ref={trackRef}
         className="flex h-screen"
@@ -104,50 +187,83 @@ export default function HorizontalScroll() {
         {capabilities.map((cap, i) => (
           <div
             key={i}
-            className="h-panel w-screen h-screen flex-shrink-0 flex items-center justify-center px-8 md:px-20"
-            style={{
-              background: `radial-gradient(circle at 30% 50%, ${cap.color}10 0%, transparent 50%), #050510`,
-            }}
+            className="h-panel w-screen h-screen flex items-center justify-center px-8 md:px-16"
+            style={{ background: "var(--mm-background)" }}
           >
-            <div className="max-w-4xl">
-              <div
-                className="text-sm font-mono uppercase tracking-wider mb-4"
-                style={{ color: cap.color }}
-              >
-                0{i + 1} / 0{capabilities.length}
+            <div className="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+              {/* Left: Content */}
+              <div className="order-2 lg:order-1">
+                <div
+                  className="text-8xl md:text-9xl font-bold font-mono mb-6"
+                  style={{
+                    color: "var(--mm-blue-core)",
+                    opacity: 0.15,
+                    lineHeight: 1,
+                  }}
+                >
+                  {cap.number}
+                </div>
+                <div
+                  className="text-xs font-mono uppercase tracking-[0.3em] mb-4"
+                  style={{ color: "var(--mm-blue-core)" }}
+                >
+                  {cap.subtitle}
+                </div>
+                <h3
+                  className="font-heading text-4xl md:text-5xl lg:text-6xl font-bold mb-6"
+                  style={{ color: "var(--mm-text)" }}
+                >
+                  {cap.title}
+                </h3>
+                <p
+                  className="text-lg md:text-xl mb-8 leading-relaxed"
+                  style={{ color: "var(--mm-text-muted)" }}
+                >
+                  {cap.description}
+                </p>
+
+                {/* Features */}
+                <div className="flex flex-wrap gap-3 mb-8">
+                  {cap.features.map((feature, j) => (
+                    <span
+                      key={j}
+                      className="px-4 py-2 text-sm font-mono"
+                      style={{
+                        border: "1px solid var(--mm-border)",
+                        color: "var(--mm-text-muted)",
+                        background: "rgba(0, 180, 255, 0.03)",
+                      }}
+                    >
+                      {feature}
+                    </span>
+                  ))}
+                </div>
               </div>
 
-              <h3
-                className="font-heading text-5xl md:text-7xl lg:text-8xl font-bold text-white mb-4"
-                data-text="slide-up"
-              >
-                {cap.title}
-              </h3>
-
-              <p
-                className="text-xl md:text-2xl mb-6"
-                style={{ color: cap.color }}
-              >
-                {cap.subtitle}
-              </p>
-
-              <p
-                className="text-gray-400 text-lg md:text-xl max-w-2xl mb-12"
-                data-text="scroll-fade"
-              >
-                {cap.description}
-              </p>
-
-              <div className="flex items-end gap-4">
+              {/* Right: Stat */}
+              <div className="order-1 lg:order-2 text-center lg:text-right">
                 <div
-                  className="text-7xl md:text-9xl font-bold"
-                  style={{ color: cap.color }}
-                  data-velocity="letterspace"
+                  className="inline-block p-12 lg:p-16"
+                  style={{
+                    border: "1px solid var(--mm-border-hover)",
+                    background: "rgba(0, 180, 255, 0.03)",
+                  }}
                 >
-                  {cap.stat}
-                </div>
-                <div className="text-gray-500 text-sm uppercase tracking-wider pb-4">
-                  {cap.statLabel}
+                  <div
+                    className="text-6xl md:text-7xl lg:text-8xl font-bold font-mono mb-4"
+                    style={{
+                      color: "var(--mm-blue-bright)",
+                      textShadow: "0 0 40px rgba(0, 212, 255, 0.4)",
+                    }}
+                  >
+                    {cap.stat}
+                  </div>
+                  <div
+                    className="text-sm uppercase tracking-[0.2em] font-mono"
+                    style={{ color: "var(--mm-text-muted)" }}
+                  >
+                    {cap.statLabel}
+                  </div>
                 </div>
               </div>
             </div>
@@ -156,10 +272,37 @@ export default function HorizontalScroll() {
       </div>
 
       {/* Progress indicator */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 flex gap-2 z-50">
+      <div className="absolute bottom-8 left-1/2 -translate-x-1/2 z-20 flex gap-2">
         {capabilities.map((_, i) => (
-          <div key={i} className="w-12 h-1 rounded-full bg-white/20" />
+          <div
+            key={i}
+            className="w-12 h-1"
+            style={{
+              background: "var(--mm-border)",
+            }}
+          />
         ))}
+      </div>
+
+      {/* Scroll hint */}
+      <div
+        className="absolute bottom-8 right-8 z-20 flex items-center gap-2 text-sm font-mono"
+        style={{ color: "var(--mm-text-subtle)" }}
+      >
+        <span>Scroll</span>
+        <svg
+          className="w-4 h-4"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M17 8l4 4m0 0l-4 4m4-4H3"
+          />
+        </svg>
       </div>
     </section>
   );
