@@ -5,6 +5,7 @@ import { useLanguage } from "@/store/portfolio";
 import LanguageSwitcher from "@/components/hero/LanguageSwitcher";
 import { LogoHorizontal } from "@/components/brand";
 import MobileMenu from "./MobileMenu";
+import { BOOKING_URL } from "@/lib/constants";
 
 export default function Header() {
   const language = useLanguage();
@@ -46,10 +47,12 @@ export default function Header() {
 
           {/* Desktop CTA */}
           <a
-            href="#contact"
+            href={BOOKING_URL}
+            target="_blank"
+            rel="noopener noreferrer"
             className="hidden md:inline-flex items-center justify-center min-h-[44px] px-6 bg-[var(--mm-blue-core)] text-[var(--mm-background)] font-semibold text-sm transition-all duration-200 hover:bg-[var(--mm-blue-bright)]"
           >
-            {language === "es" ? "Hablar con Sofia" : "Talk to Sofia"}
+            {language === "es" ? "Agendar Llamada" : "Book a Call"}
           </a>
 
           {/* Mobile Menu */}

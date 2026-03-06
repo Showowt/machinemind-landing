@@ -2,6 +2,7 @@
 
 import { useLanguage } from "@/store/portfolio";
 import { motion } from "framer-motion";
+import { BOOKING_URL, WHATSAPP_URL, EMAIL } from "@/lib/constants";
 
 export default function ContactSection() {
   const language = useLanguage();
@@ -145,7 +146,7 @@ export default function ContactSection() {
               {/* CTA */}
               <div className="text-center">
                 <a
-                  href="https://cal.com/machine-mind/machinemind-strategy-session"
+                  href={BOOKING_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center justify-center w-full md:w-auto min-h-[64px] px-10 py-4 bg-[var(--mm-blue-core)] text-[var(--mm-background)] font-bold text-lg transition-all duration-200 hover:bg-[var(--mm-blue-bright)] hover:scale-105"
@@ -186,7 +187,7 @@ export default function ContactSection() {
             <p className="text-muted mb-4">{t.alternative}</p>
             <div className="flex flex-wrap justify-center gap-4">
               <a
-                href="https://wa.me/19544451638?text=Hola%2C%20me%20interesa%20saber%20m%C3%A1s%20sobre%20MachineMind"
+                href={WHATSAPP_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 px-6 py-3 border border-[var(--mm-border)] text-white hover:border-[#25D366] hover:text-[#25D366] transition-colors min-h-[48px]"
@@ -201,7 +202,7 @@ export default function ContactSection() {
                 {t.whatsapp}
               </a>
               <a
-                href="mailto:hello@machinemind.ai"
+                href={`mailto:${EMAIL}`}
                 className="inline-flex items-center gap-2 px-6 py-3 border border-[var(--mm-border)] text-white hover:border-[var(--mm-blue-core)] hover:text-[var(--mm-blue-core)] transition-colors min-h-[48px]"
               >
                 <svg

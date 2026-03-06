@@ -3,6 +3,7 @@
 import { useLanguage } from "@/store/portfolio";
 import { translations } from "@/lib/i18n";
 import { LogoEmblemSimple } from "@/components/brand";
+import { BOOKING_URL } from "@/lib/constants";
 
 export default function Footer() {
   const language = useLanguage();
@@ -29,6 +30,14 @@ export default function Footer() {
 
           {/* Links */}
           <div className="flex gap-6 text-sm">
+            <a
+              href={BOOKING_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted hover:text-[var(--mm-blue-core)] transition-colors"
+            >
+              {language === "es" ? "Agendar Llamada" : "Book a Call"}
+            </a>
             <a
               href="#contact"
               className="text-muted hover:text-white transition-colors"

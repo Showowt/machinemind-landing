@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLanguage } from "@/store/portfolio";
 import { LogoEmblemSimple } from "@/components/brand";
+import { BOOKING_URL } from "@/lib/constants";
 
 export default function MobileMenu() {
   const [isOpen, setIsOpen] = useState(false);
@@ -110,11 +111,13 @@ export default function MobileMenu() {
                 transition={{ delay: 0.45 }}
               >
                 <a
-                  href="#contact"
+                  href={BOOKING_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
                   onClick={handleNavClick}
                   className="inline-flex items-center justify-center min-h-[56px] px-8 bg-[var(--mm-blue-core)] text-[var(--mm-background)] font-semibold text-lg transition-all duration-200 hover:bg-[var(--mm-blue-bright)]"
                 >
-                  {language === "es" ? "Hablar con Sofia" : "Talk to Sofia"}
+                  {language === "es" ? "Agendar Llamada" : "Book a Call"}
                 </a>
               </motion.div>
             </motion.nav>
