@@ -28,6 +28,12 @@ const CinemaEngine = dynamic(() => import("@/components/cinema/CinemaEngine"), {
   ssr: false,
 });
 
+// Cinema Overlays - Film grain + Vignette
+const CinemaOverlays = dynamic(
+  () => import("@/components/cinema/Overlays"),
+  { ssr: false },
+);
+
 // Cinema Components
 const GravityCollapse = dynamic(
   () => import("@/components/cinema/GravityCollapse"),
@@ -63,6 +69,9 @@ export default function Home() {
 
   return (
     <>
+      {/* Cinema Overlays - Film Grain + Vignette */}
+      <CinemaOverlays grainOpacity={0.03} vignetteIntensity={0.6} vignetteSpread={200} />
+
       {/* Cinema Engine v2.0 - 25 Layer Cinematic Experience */}
       {cinemaReady && (
         <CinemaEngine

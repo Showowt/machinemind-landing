@@ -1,43 +1,24 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
-import Lenis from "@studio-freight/lenis";
+import { type ReactNode } from "react";
 
 interface SmoothScrollProps {
   children: ReactNode;
 }
 
+/**
+ * SmoothScroll Wrapper (DEPRECATED)
+ * 
+ * NOTE: Smooth scroll is now handled by CinemaEngine.tsx which provides:
+ * - Lenis smooth scroll with cinematic settings
+ * - GSAP ScrollTrigger integration
+ * - Global window.lenis access
+ * 
+ * This component is kept for backwards compatibility but simply renders children.
+ * DO NOT use this alongside CinemaEngine to avoid duplicate Lenis instances.
+ */
 export default function SmoothScroll({ children }: SmoothScrollProps) {
-  const lenisRef = useRef<Lenis | null>(null);
-
-  useEffect(() => {
-    const lenis = new Lenis({
-      duration: 1.2,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      orientation: "vertical",
-      gestureOrientation: "vertical",
-      smoothWheel: true,
-      touchMultiplier: 2,
-    });
-
-    lenisRef.current = lenis;
-
-    function raf(time: number) {
-      lenis.raf(time);
-      requestAnimationFrame(raf);
-    }
-
-    requestAnimationFrame(raf);
-
-    // Expose lenis to window for GSAP ScrollTrigger integration
-    if (typeof window !== "undefined") {
-      (window as unknown as { lenis: Lenis }).lenis = lenis;
-    }
-
-    return () => {
-      lenis.destroy();
-    };
-  }, []);
-
+  // CinemaEngine handles all smooth scroll functionality
+  // This wrapper is a no-op passthrough for backwards compatibility
   return <>{children}</>;
 }

@@ -88,8 +88,32 @@
    ============================================ */
 
 html {
-  scroll-behavior: smooth;
+  /* LENIS SMOOTH SCROLL: Disable native scroll-behavior
+     Lenis provides butter-smooth cinematic scrolling via JS
+     Native smooth-scroll interferes with Lenis interpolation */
+  scroll-behavior: auto;
   scroll-padding-top: var(--mm-header-height);
+}
+
+/* Lenis-specific body setup for smooth scroll */
+html.lenis, html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
 }
 
 body {

@@ -8,8 +8,14 @@ declare global {
   interface Window {
     Lenis: new (config: {
       lerp?: number;
+      duration?: number;
       smoothWheel?: boolean;
       wheelMultiplier?: number;
+      touchMultiplier?: number;
+      infinite?: boolean;
+      orientation?: "vertical" | "horizontal";
+      gestureOrientation?: "vertical" | "horizontal" | "both";
+      easing?: (t: number) => number;
     }) => LenisInstance;
     gsap: GSAPInstance;
     ScrollTrigger: ScrollTriggerStatic;
@@ -17,15 +23,22 @@ declare global {
       element: Element,
       options: { types?: string; tagName?: string }
     ) => SplitTypeInstance;
+    lenis: LenisInstance | null;
   }
 }
 
 interface LenisInstance {
   raf: (time: number) => void;
   scroll: number;
-  scrollTo: (value: number) => void;
-  on: (event: string, callback: () => void) => void;
+  scrollTo: (
+    target: number | string | HTMLElement,
+    options?: { offset?: number; duration?: number; immediate?: boolean }
+  ) => void;
+  on: (event: string, callback: (e: { scroll: number; velocity: number; direction: number }) => void) => void;
+  off: (event: string, callback: (e: { scroll: number; velocity: number; direction: number }) => void) => void;
   destroy: () => void;
+  start: () => void;
+  stop: () => void;
 }
 
 interface GSAPInstance {
@@ -90,7 +103,7 @@ interface ScrollTriggerStatic {
   create: (config: Record<string, unknown>) => ScrollTriggerInstance;
   update: () => void;
   scrollerProxy: (
-    scroller: Element | Document | typeof document.body,
+    scroller: string | Element | Document | typeof document.body,
     config: {
       scrollTop: (value?: number) => number | void;
       getBoundingClientRect: () => {
@@ -99,13 +112,19 @@ interface ScrollTriggerStatic {
         width: number;
         height: number;
       };
+      pinType?: string;
     }
   ) => void;
   addEventListener: (
     event: string,
     callback: (trigger: ScrollTriggerInstance) => void
   ) => void;
-  refresh: () => void;
+  removeEventListener: (
+    event: string,
+    callback: (trigger: ScrollTriggerInstance) => void
+  ) => void;
+  refresh: (safe?: boolean) => void;
+  defaults: (config: Record<string, unknown>) => void;
 }
 
 interface ScrollTriggerInstance {
@@ -129,8 +148,16 @@ interface CinemaEngineProps {
 }
 
 /**
- * MachineMind Cinema Engine v2.0
+ * MachineMind Cinema Engine v2.1
  * 25-Layer Cinematic Web Experience
+ *
+ * SMOOTH SCROLL CONFIG (Butter-smooth cinematic feel):
+ * - lerp: 0.07 (cinematic smooth interpolation)
+ * - duration: 1.2 (scroll momentum duration)
+ * - smoothWheel: true
+ * - Connected to GSAP ticker for perfect sync
+ * - ScrollTrigger.update on every scroll frame
+ * - window.lenis exposed globally
  *
  * Features activated via data-* attributes:
  * - data-text="slide-up|rotate-in|scroll-fade|scramble|wave|chars-up"
@@ -148,6 +175,7 @@ export default function CinemaEngine({
   const splitInstancesRef = useRef<SplitTypeInstance[]>([]);
   const magneticCleanupRef = useRef<Array<() => void>>([]);
   const rafCallbackRef = useRef<((time: number) => void) | null>(null);
+  const scrollListenerRef = useRef<((e: { scroll: number; velocity: number; direction: number }) => void) | null>(null);
 
   useEffect(() => {
     const initCinema = () => {
@@ -158,7 +186,7 @@ export default function CinemaEngine({
       }
 
       initialized.current = true;
-      console.log("[Cinema Engine] Initializing all effects...");
+      console.log("[Cinema Engine v2.1] Initializing cinematic smooth scroll...");
 
       const gsap = window.gsap;
       const ScrollTrigger = window.ScrollTrigger;
@@ -169,26 +197,41 @@ export default function CinemaEngine({
       gsap.registerPlugin(ScrollTrigger);
 
       // ============================================
-      // 1. LENIS SMOOTH SCROLL
+      // 1. LENIS SMOOTH SCROLL (BUTTER-SMOOTH CONFIG)
       // ============================================
       const lenis = new Lenis({
-        lerp: 0.07,
-        smoothWheel: true,
-        wheelMultiplier: 1,
+        lerp: 0.07, // Cinematic smooth interpolation (lower = smoother)
+        duration: 1.2, // Scroll momentum duration
+        smoothWheel: true, // Smooth mousewheel scrolling
+        wheelMultiplier: 1, // Wheel sensitivity
+        touchMultiplier: 2, // Touch sensitivity for mobile
+        infinite: false, // No infinite scroll
+        orientation: "vertical", // Vertical scrolling
+        gestureOrientation: "vertical", // Touch gesture direction
+        // Cinematic easing curve - exponential decay for natural deceleration
+        easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
       });
+
       lenisRef.current = lenis;
 
-      // Connect Lenis to GSAP ticker
-      const rafCallback = (time: number) => lenis.raf(time * 1000);
+      // EXPOSE GLOBALLY for external access
+      window.lenis = lenis;
+
+      // Connect Lenis to GSAP ticker for buttery-smooth animation sync
+      const rafCallback = (time: number) => {
+        lenis.raf(time * 1000);
+      };
       rafCallbackRef.current = rafCallback;
       gsap.ticker.add(rafCallback);
+
+      // Disable GSAP lag smoothing for consistent frame timing
       gsap.ticker.lagSmoothing(0);
 
-      // ScrollTrigger scroller proxy for Lenis
-      ScrollTrigger.scrollerProxy(document.body, {
+      // ScrollTrigger scroller proxy for Lenis integration
+      ScrollTrigger.scrollerProxy(document.documentElement, {
         scrollTop(value?: number) {
           if (arguments.length && value !== undefined) {
-            lenis.scrollTo(value);
+            lenis.scrollTo(value, { immediate: true });
             return value;
           }
           return lenis.scroll;
@@ -201,9 +244,29 @@ export default function CinemaEngine({
             height: window.innerHeight,
           };
         },
+        pinType: document.documentElement.style.transform ? "transform" : "fixed",
       });
 
-      lenis.on("scroll", ScrollTrigger.update);
+      // Connect scroll events to ScrollTrigger
+      const scrollListener = () => {
+        ScrollTrigger.update();
+      };
+      scrollListenerRef.current = scrollListener;
+      lenis.on("scroll", scrollListener);
+
+      // Set ScrollTrigger defaults
+      ScrollTrigger.defaults({
+        scroller: document.documentElement,
+      });
+
+      console.log("[Cinema Engine v2.1] Lenis smooth scroll initialized:", {
+        lerp: 0.07,
+        duration: 1.2,
+        easing: "exponential-decay",
+        gsapSync: true,
+        scrollTriggerProxy: true,
+        globalAccess: "window.lenis",
+      });
 
       // ============================================
       // 2. TEXT ANIMATIONS (SplitType + GSAP)
@@ -692,11 +755,13 @@ export default function CinemaEngine({
       });
 
       // ============================================
-      // REFRESH SCROLL TRIGGER
+      // REFRESH SCROLL TRIGGER (with delay for DOM settling)
       // ============================================
-      ScrollTrigger.refresh();
+      requestAnimationFrame(() => {
+        ScrollTrigger.refresh(true);
+      });
 
-      console.log("[Cinema Engine] All effects initialized successfully");
+      console.log("[Cinema Engine v2.1] All effects initialized successfully");
     };
 
     // Check if scripts are loaded
@@ -737,10 +802,21 @@ export default function CinemaEngine({
       magneticCleanupRef.current.forEach((cleanup) => cleanup());
       magneticCleanupRef.current = [];
 
+      // Remove scroll listener from Lenis
+      if (lenisRef.current && scrollListenerRef.current) {
+        lenisRef.current.off("scroll", scrollListenerRef.current);
+        scrollListenerRef.current = null;
+      }
+
       // Destroy Lenis
       if (lenisRef.current) {
         lenisRef.current.destroy();
         lenisRef.current = null;
+      }
+
+      // Clear global reference
+      if (typeof window !== "undefined") {
+        window.lenis = null;
       }
 
       // Remove GSAP ticker callback

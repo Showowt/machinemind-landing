@@ -111,17 +111,25 @@ export default function CapabilitiesGrid() {
   return (
     <section className="section-padding bg-[rgba(0,0,0,0.2)]">
       <div className="container-luxury">
-        {/* Header */}
+        {/* Header - Cinema Engine text animations */}
         <RevealOnScroll direction="up" className="text-center mb-8 md:mb-16">
-          <h2 className="font-heading text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4">
+          <h2
+            className="font-heading text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-4"
+            data-text="slide-up"
+          >
             {title}
           </h2>
-          <p className="text-muted text-base md:text-lg">{subtitle}</p>
+          <p className="text-muted text-base md:text-lg" data-velocity="skew">
+            {subtitle}
+          </p>
           <div className="gold-line w-24 mx-auto mt-6" />
         </RevealOnScroll>
 
         {/* Mobile: List view, Desktop: Hexagonal Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 max-w-5xl mx-auto">
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 md:gap-6 max-w-5xl mx-auto"
+          data-reveal
+        >
           {capabilities.map((cap, index) => {
             const capTitle = language === "es" ? cap.titleEs : cap.titleEn;
             const desc = language === "es" ? cap.descEs : cap.descEn;
@@ -129,74 +137,76 @@ export default function CapabilitiesGrid() {
             const isExpanded = expanded === cap.id;
 
             return (
-              <RevealOnScroll key={cap.id} direction="up" delay={index * 0.1}>
-                <motion.button
-                  onClick={() => setExpanded(isExpanded ? null : cap.id)}
-                  className="relative w-full min-h-[120px] sm:min-h-0 sm:aspect-square p-4 sm:p-6
-                             border border-[var(--mm-border)]
-                             bg-[rgba(15,15,26,0.8)]
-                             transition-all duration-300
-                             hover:border-[var(--mm-border-hover)]
-                             text-left sm:text-center
-                             flex sm:block items-center gap-4"
-                  style={{
-                    clipPath:
-                      typeof window !== "undefined" && window.innerWidth >= 640
-                        ? "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)"
-                        : "none",
-                  }}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                >
-                  {/* Glow effect */}
-                  <div
-                    className="absolute inset-0 opacity-20 transition-opacity duration-300"
+              <div key={cap.id} data-reveal-item>
+                <RevealOnScroll direction="up" delay={index * 0.1}>
+                  <motion.button
+                    onClick={() => setExpanded(isExpanded ? null : cap.id)}
+                    className="relative w-full min-h-[120px] sm:min-h-0 sm:aspect-square p-4 sm:p-6
+                               border border-[var(--mm-border)]
+                               bg-[rgba(15,15,26,0.8)]
+                               transition-all duration-300
+                               hover:border-[var(--mm-border-hover)]
+                               text-left sm:text-center
+                               flex sm:block items-center gap-4"
                     style={{
-                      background: `radial-gradient(circle at center, ${cap.color} 0%, transparent 70%)`,
+                      clipPath:
+                        typeof window !== "undefined" && window.innerWidth >= 640
+                          ? "polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%)"
+                          : "none",
                     }}
-                  />
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                  >
+                    {/* Glow effect */}
+                    <div
+                      className="absolute inset-0 opacity-20 transition-opacity duration-300"
+                      style={{
+                        background: `radial-gradient(circle at center, ${cap.color} 0%, transparent 70%)`,
+                      }}
+                    />
 
-                  {/* Mobile: Horizontal layout */}
-                  <div className="relative z-10 flex sm:flex-col items-center sm:justify-center sm:h-full gap-3 sm:gap-0">
-                    <span className="text-2xl sm:text-3xl md:text-4xl sm:mb-3 flex-shrink-0">
-                      {cap.icon}
-                    </span>
-                    <div className="sm:text-center">
-                      <h3 className="font-heading text-base sm:text-lg font-semibold text-white sm:mb-2">
-                        {capTitle}
-                      </h3>
-                      <p className="text-muted text-xs sm:text-xs">{desc}</p>
+                    {/* Mobile: Horizontal layout */}
+                    <div className="relative z-10 flex sm:flex-col items-center sm:justify-center sm:h-full gap-3 sm:gap-0">
+                      <span className="text-2xl sm:text-3xl md:text-4xl sm:mb-3 flex-shrink-0">
+                        {cap.icon}
+                      </span>
+                      <div className="sm:text-center">
+                        <h3 className="font-heading text-base sm:text-lg font-semibold text-white sm:mb-2">
+                          {capTitle}
+                        </h3>
+                        <p className="text-muted text-xs sm:text-xs">{desc}</p>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Expand indicator for mobile */}
-                  <div className="sm:hidden ml-auto flex-shrink-0">
-                    <motion.span
-                      className="text-[var(--mm-blue-core)] text-xl"
-                      animate={{ rotate: isExpanded ? 45 : 0 }}
-                    >
-                      +
-                    </motion.span>
-                  </div>
-                </motion.button>
+                    {/* Expand indicator for mobile */}
+                    <div className="sm:hidden ml-auto flex-shrink-0">
+                      <motion.span
+                        className="text-[var(--mm-blue-core)] text-xl"
+                        animate={{ rotate: isExpanded ? 45 : 0 }}
+                      >
+                        +
+                      </motion.span>
+                    </div>
+                  </motion.button>
 
-                {/* Expanded detail panel */}
-                <AnimatePresence>
-                  {isExpanded && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      transition={{ duration: 0.3 }}
-                      className="mt-2 sm:mt-4 p-4 sm:p-6 border border-[var(--mm-border)] bg-[rgba(15,15,26,0.9)]"
-                    >
-                      <p className="text-muted text-sm leading-relaxed">
-                        {detail}
-                      </p>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </RevealOnScroll>
+                  {/* Expanded detail panel */}
+                  <AnimatePresence>
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="mt-2 sm:mt-4 p-4 sm:p-6 border border-[var(--mm-border)] bg-[rgba(15,15,26,0.9)]"
+                      >
+                        <p className="text-muted text-sm leading-relaxed">
+                          {detail}
+                        </p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </RevealOnScroll>
+              </div>
             );
           })}
         </div>
