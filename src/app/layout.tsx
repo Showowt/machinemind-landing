@@ -1,28 +1,11 @@
 import type { Metadata } from "next";
-import { Playfair_Display, Inter, Outfit, Space_Mono } from "next/font/google";
+import { Space_Mono } from "next/font/google";
 import "./globals.css";
 
 // Cinema Engine CSS
 import "@/styles/cinema-engine.css";
 
-const playfair = Playfair_Display({
-  variable: "--font-playfair",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const outfit = Outfit({
-  variable: "--font-outfit",
-  subsets: ["latin"],
-  display: "swap",
-});
-
+// Only Space Mono from Google - Clash Display, Satoshi, Instrument Serif loaded via CSS @import
 const spaceMono = Space_Mono({
   variable: "--font-space-mono",
   subsets: ["latin"],
@@ -81,13 +64,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="es"
-      className={`${playfair.variable} ${inter.variable} ${outfit.variable} ${spaceMono.variable}`}
-    >
+    <html lang="es" className={spaceMono.variable}>
       <head>
         <link rel="icon" href="/favicon.ico" sizes="any" />
-        <meta name="theme-color" content="#0a0a0f" />
+        <meta name="theme-color" content="#06060a" />
       </head>
       <body className="antialiased" suppressHydrationWarning>
         <a href="#main-content" className="skip-link">

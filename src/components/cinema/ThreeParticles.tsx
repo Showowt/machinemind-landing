@@ -3,10 +3,20 @@
 import { useEffect, useRef } from "react";
 
 /**
- * Three.js Particle System - Hero Background
- * MachineMind Brand Colors - WORLD CLASS
- * Floating particles that respond to scroll and mouse
+ * Cinema Engine Hero Sphere
+ * Wireframe IcosahedronGeometry with noise morphing
+ * Mouse reactive + scroll reactive
  */
+
+function noise3D(x: number, y: number, z: number, time: number): number {
+  return (
+    Math.sin(x * 2 + time) *
+    Math.cos(y * 2 + time * 0.7) *
+    Math.sin(z * 2 + time * 0.5) *
+    0.15
+  );
+}
+
 export default function ThreeParticles() {
   const containerRef = useRef<HTMLDivElement>(null);
   const initialized = useRef(false);
@@ -15,30 +25,26 @@ export default function ThreeParticles() {
     if (initialized.current || !containerRef.current) return;
     if (typeof window === "undefined") return;
 
-    // Wait for Three.js to load
     const checkThree = setInterval(() => {
       if ((window as unknown as { THREE?: unknown }).THREE) {
         clearInterval(checkThree);
-        initParticles();
+        initSphere();
       }
     }, 100);
 
-    // Timeout after 5 seconds - gracefully fail with CSS gradient fallback
     const timeout = setTimeout(() => {
       clearInterval(checkThree);
       if (!initialized.current && containerRef.current) {
         console.warn(
-          "[ThreeParticles] Three.js not loaded - using CSS gradient fallback",
+          "[CinemaEngine] Three.js not loaded - using CSS gradient fallback"
         );
-        // Apply CSS gradient fallback instead of Three.js particles
         containerRef.current.style.background =
-          "radial-gradient(ellipse at 30% 20%, rgba(0, 180, 255, 0.15) 0%, transparent 50%), " +
-          "radial-gradient(ellipse at 70% 80%, rgba(0, 212, 255, 0.1) 0%, transparent 50%), " +
-          "radial-gradient(ellipse at 50% 50%, rgba(0, 100, 204, 0.08) 0%, transparent 70%)";
+          "radial-gradient(ellipse at 50% 50%, rgba(201, 169, 110, 0.08) 0%, transparent 50%), " +
+          "radial-gradient(ellipse at 50% 50%, rgba(0, 229, 255, 0.05) 0%, transparent 40%)";
       }
     }, 5000);
 
-    const initParticles = () => {
+    const initSphere = () => {
       if (initialized.current) return;
       initialized.current = true;
 
@@ -53,9 +59,9 @@ export default function ThreeParticles() {
         75,
         window.innerWidth / window.innerHeight,
         0.1,
-        1000,
+        1000
       );
-      camera.position.z = 50;
+      camera.position.z = 5;
 
       const renderer = new THREE.WebGLRenderer({
         alpha: true,
@@ -65,142 +71,156 @@ export default function ThreeParticles() {
       renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
       container.appendChild(renderer.domElement);
 
-      // Particle system - MachineMind blue spectrum
-      const particleCount = window.innerWidth < 768 ? 600 : 1500;
-      const positions = new Float32Array(particleCount * 3);
-      const velocities = new Float32Array(particleCount * 3);
-      const colors = new Float32Array(particleCount * 3);
-      const sizes = new Float32Array(particleCount);
-
-      for (let i = 0; i < particleCount; i++) {
-        const i3 = i * 3;
-        positions[i3] = (Math.random() - 0.5) * 100;
-        positions[i3 + 1] = (Math.random() - 0.5) * 100;
-        positions[i3 + 2] = (Math.random() - 0.5) * 50;
-
-        velocities[i3] = (Math.random() - 0.5) * 0.015;
-        velocities[i3 + 1] = (Math.random() - 0.5) * 0.015;
-        velocities[i3 + 2] = (Math.random() - 0.5) * 0.015;
-
-        // MachineMind blue spectrum: #00B4FF to #00D4FF
-        const t = Math.random();
-        colors[i3] = 0; // R
-        colors[i3 + 1] = 0.7 + t * 0.13; // G: 180-212
-        colors[i3 + 2] = 1; // B: 255
-
-        sizes[i] = Math.random() * 2 + 0.5;
-      }
-
-      const geometry = new THREE.BufferGeometry();
-      geometry.setAttribute(
-        "position",
-        new THREE.BufferAttribute(positions, 3),
-      );
-      geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-      geometry.setAttribute("size", new THREE.BufferAttribute(sizes, 1));
-
-      const material = new THREE.PointsMaterial({
-        size: 0.12,
-        vertexColors: true,
-        transparent: true,
-        opacity: 0.7,
-        blending: THREE.AdditiveBlending,
-        sizeAttenuation: true,
-      });
-
-      const particles = new THREE.Points(geometry, material);
-      scene.add(particles);
-
-      // Connection lines geometry
-      const lineGeometry = new THREE.BufferGeometry();
-      const lineMaterial = new THREE.LineBasicMaterial({
-        color: 0x00b4ff,
+      // Outer sphere - Gold wireframe
+      const outerGeometry = new THREE.IcosahedronGeometry(1.5, 24);
+      const outerMaterial = new THREE.MeshBasicMaterial({
+        color: 0xc9a96e,
+        wireframe: true,
         transparent: true,
         opacity: 0.08,
       });
-      const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
-      scene.add(lines);
+      const outerSphere = new THREE.Mesh(outerGeometry, outerMaterial);
+      scene.add(outerSphere);
+
+      // Store original positions for noise displacement
+      const outerOriginalPositions = new Float32Array(
+        outerGeometry.attributes.position.array.length
+      );
+      outerOriginalPositions.set(outerGeometry.attributes.position.array);
+
+      // Inner sphere - Cyan wireframe (counter-rotating)
+      const innerGeometry = new THREE.IcosahedronGeometry(0.8, 24);
+      const innerMaterial = new THREE.MeshBasicMaterial({
+        color: 0x00e5ff,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.15,
+      });
+      const innerSphere = new THREE.Mesh(innerGeometry, innerMaterial);
+      scene.add(innerSphere);
+
+      // Store original positions for inner sphere
+      const innerOriginalPositions = new Float32Array(
+        innerGeometry.attributes.position.array.length
+      );
+      innerOriginalPositions.set(innerGeometry.attributes.position.array);
+
+      // Group for mouse tilt
+      const sphereGroup = new THREE.Group();
+      sphereGroup.add(outerSphere);
+      sphereGroup.add(innerSphere);
+      scene.add(sphereGroup);
+
+      // Remove individual spheres from scene (they're in group now)
+      scene.remove(outerSphere);
+      scene.remove(innerSphere);
 
       // Mouse tracking
       let mouseX = 0;
       let mouseY = 0;
-      let scrollY = 0;
-      let targetX = 0;
-      let targetY = 0;
+      let targetMouseX = 0;
+      let targetMouseY = 0;
+
+      // Scroll tracking
+      let scrollProgress = 0;
+      let targetScrollProgress = 0;
 
       const handleMouseMove = (e: MouseEvent) => {
-        targetX = (e.clientX / window.innerWidth) * 2 - 1;
-        targetY = -(e.clientY / window.innerHeight) * 2 + 1;
+        targetMouseX = (e.clientX / window.innerWidth) * 2 - 1;
+        targetMouseY = -(e.clientY / window.innerHeight) * 2 + 1;
       };
 
       const handleScroll = () => {
-        scrollY = window.scrollY / window.innerHeight;
+        const heroHeight = window.innerHeight;
+        targetScrollProgress = Math.min(window.scrollY / heroHeight, 1);
       };
 
       window.addEventListener("mousemove", handleMouseMove);
       window.addEventListener("scroll", handleScroll, { passive: true });
 
-      // Animation loop
+      // Animation
       let animationId: number;
       let time = 0;
 
       const animate = () => {
         animationId = requestAnimationFrame(animate);
-        time += 0.001;
+        time += 0.008;
 
-        // Smooth mouse follow
-        mouseX += (targetX - mouseX) * 0.05;
-        mouseY += (targetY - mouseY) * 0.05;
+        // Smooth mouse interpolation
+        mouseX += (targetMouseX - mouseX) * 0.05;
+        mouseY += (targetMouseY - mouseY) * 0.05;
 
-        const posArr = geometry.attributes.position.array as Float32Array;
-        const linePositions: number[] = [];
+        // Smooth scroll interpolation
+        scrollProgress += (targetScrollProgress - scrollProgress) * 0.08;
 
-        for (let i = 0; i < particleCount; i++) {
+        // Update outer sphere vertices with noise
+        const outerPos = outerGeometry.attributes.position;
+        for (let i = 0; i < outerPos.count; i++) {
           const i3 = i * 3;
+          const ox = outerOriginalPositions[i3];
+          const oy = outerOriginalPositions[i3 + 1];
+          const oz = outerOriginalPositions[i3 + 2];
 
-          // Update positions with velocity
-          posArr[i3] += velocities[i3];
-          posArr[i3 + 1] += velocities[i3 + 1];
-          posArr[i3 + 2] += velocities[i3 + 2];
+          const displacement = noise3D(ox, oy, oz, time);
+          const length = Math.sqrt(ox * ox + oy * oy + oz * oz);
+          const normalizedX = ox / length;
+          const normalizedY = oy / length;
+          const normalizedZ = oz / length;
 
-          // Bounds check with soft bounce
-          if (Math.abs(posArr[i3]) > 50) velocities[i3] *= -0.9;
-          if (Math.abs(posArr[i3 + 1]) > 50) velocities[i3 + 1] *= -0.9;
-          if (Math.abs(posArr[i3 + 2]) > 25) velocities[i3 + 2] *= -0.9;
-
-          // Connection lines (check every 5th particle for performance)
-          if (i % 5 === 0) {
-            for (let j = i + 5; j < particleCount; j += 5) {
-              const j3 = j * 3;
-              const dx = posArr[i3] - posArr[j3];
-              const dy = posArr[i3 + 1] - posArr[j3 + 1];
-              const dz = posArr[i3 + 2] - posArr[j3 + 2];
-              const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
-              if (dist < 15 && linePositions.length < 3000) {
-                linePositions.push(posArr[i3], posArr[i3 + 1], posArr[i3 + 2]);
-                linePositions.push(posArr[j3], posArr[j3 + 1], posArr[j3 + 2]);
-              }
-            }
-          }
+          outerPos.setXYZ(
+            i,
+            ox + normalizedX * displacement,
+            oy + normalizedY * displacement,
+            oz + normalizedZ * displacement
+          );
         }
+        outerPos.needsUpdate = true;
 
-        geometry.attributes.position.needsUpdate = true;
+        // Update inner sphere vertices with noise (different phase)
+        const innerPos = innerGeometry.attributes.position;
+        for (let i = 0; i < innerPos.count; i++) {
+          const i3 = i * 3;
+          const ox = innerOriginalPositions[i3];
+          const oy = innerOriginalPositions[i3 + 1];
+          const oz = innerOriginalPositions[i3 + 2];
 
-        // Update line geometry
-        lineGeometry.setAttribute(
-          "position",
-          new THREE.Float32BufferAttribute(linePositions, 3),
-        );
+          const displacement = noise3D(ox, oy, oz, time + 1.5) * 0.8;
+          const length = Math.sqrt(ox * ox + oy * oy + oz * oz);
+          const normalizedX = ox / length;
+          const normalizedY = oy / length;
+          const normalizedZ = oz / length;
 
-        // Camera responds to mouse and scroll
-        camera.position.x += (mouseX * 8 - camera.position.x) * 0.03;
-        camera.position.y += (mouseY * 8 - camera.position.y) * 0.03;
-        camera.rotation.z = Math.sin(time * 2) * 0.02 + scrollY * 0.05;
+          innerPos.setXYZ(
+            i,
+            ox + normalizedX * displacement,
+            oy + normalizedY * displacement,
+            oz + normalizedZ * displacement
+          );
+        }
+        innerPos.needsUpdate = true;
 
-        // Gentle rotation
-        particles.rotation.y = time * 0.3;
-        particles.rotation.x = Math.sin(time) * 0.1;
+        // Smooth rotation
+        outerSphere.rotation.y += 0.002;
+        outerSphere.rotation.x += 0.001;
+
+        // Counter-rotation for inner sphere
+        innerSphere.rotation.y -= 0.003;
+        innerSphere.rotation.x -= 0.0015;
+
+        // Mouse reactive tilt (sphere tilts toward cursor)
+        const maxTilt = 0.3;
+        sphereGroup.rotation.y += (mouseX * maxTilt - sphereGroup.rotation.y) * 0.05;
+        sphereGroup.rotation.x += (-mouseY * maxTilt - sphereGroup.rotation.x) * 0.05;
+
+        // Scroll reactive: scale down and fade
+        const minScale = 0.6;
+        const scale = 1 - scrollProgress * (1 - minScale);
+        sphereGroup.scale.setScalar(scale);
+
+        // Fade opacity on scroll
+        const minOpacity = 0.02;
+        outerMaterial.opacity = 0.08 - scrollProgress * (0.08 - minOpacity);
+        innerMaterial.opacity = 0.15 - scrollProgress * (0.15 - minOpacity);
 
         renderer.render(scene, camera);
       };
@@ -223,10 +243,10 @@ export default function ThreeParticles() {
         if (container.contains(renderer.domElement)) {
           container.removeChild(renderer.domElement);
         }
-        geometry.dispose();
-        material.dispose();
-        lineGeometry.dispose();
-        lineMaterial.dispose();
+        outerGeometry.dispose();
+        outerMaterial.dispose();
+        innerGeometry.dispose();
+        innerMaterial.dispose();
         renderer.dispose();
       };
     };
@@ -240,7 +260,7 @@ export default function ThreeParticles() {
   return (
     <div
       ref={containerRef}
-      className="absolute inset-0 z-0"
+      className="absolute inset-0 z-0 flex items-center justify-center"
       style={{ pointerEvents: "none" }}
     />
   );

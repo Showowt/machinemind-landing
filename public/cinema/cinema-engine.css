@@ -5,11 +5,11 @@
 
 /* === CSS VARIABLES (override per-project) === */
 :root {
-  --cinema-bg: #050510;
+  --cinema-bg: #06060a;
   --cinema-fg: #f0f0f8;
   --cinema-dim: rgba(240,240,248,0.35);
-  --cinema-accent: #00e5ff;
-  --cinema-accent2: #8b5cf6;
+  --cinema-accent: #c9a96e;
+  --cinema-accent2: #00e5ff;
   --cinema-hot: #ff2d20;
   --cinema-green: #10b981;
   --cinema-glass: rgba(255,255,255,0.02);

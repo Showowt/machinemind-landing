@@ -54,7 +54,7 @@
   class Preloader {
     constructor(opts = {}) {
       this.brandName = opts.brandName || 'MACHINEMIND';
-      this.accentColor = opts.accentColor || '#00e5ff';
+      this.accentColor = opts.accentColor || '#c9a96e';
       this.onComplete = opts.onComplete || (() => {});
       this.build();
     }
@@ -185,7 +185,7 @@
             char = this.chars[Math.floor(Math.random() * this.chars.length)];
             this.queue[i].char = char;
           }
-          out += `<span style="opacity:0.4;color:var(--cinema-accent,#00e5ff)">${char}</span>`;
+          out += `<span style="opacity:0.4;color:var(--cinema-accent,#c9a96e)">${char}</span>`;
         } else { out += from; }
       }
       this.el.innerHTML = out;
@@ -239,7 +239,7 @@
           split.words.forEach((w, i) => {
             if (w.dataset.accent) {
               w.style.opacity = i <= idx ? '1' : '0.08';
-              w.style.color = i <= idx ? 'var(--cinema-accent, #00e5ff)' : '';
+              w.style.color = i <= idx ? 'var(--cinema-accent, #c9a96e)' : '';
             } else {
               w.style.opacity = i <= idx ? '1' : '0.08';
             }
@@ -526,8 +526,8 @@
     const ring = document.createElement('div');
     dot.className = 'cinema-cursor-dot';
     ring.className = 'cinema-cursor-ring';
-    dot.style.cssText = 'position:fixed;width:6px;height:6px;border-radius:50%;background:var(--cinema-accent,#00e5ff);pointer-events:none;z-index:99998;top:0;left:0;mix-blend-mode:difference;transition:transform 0.1s';
-    ring.style.cssText = 'position:fixed;width:36px;height:36px;border-radius:50%;border:1px solid var(--cinema-accent,#00e5ff);pointer-events:none;z-index:99997;top:0;left:0;mix-blend-mode:difference;transition:width 0.3s,height 0.3s,border-color 0.3s';
+    dot.style.cssText = 'position:fixed;width:6px;height:6px;border-radius:50%;background:var(--cinema-accent,#c9a96e);pointer-events:none;z-index:99998;top:0;left:0;mix-blend-mode:difference;transition:transform 0.1s';
+    ring.style.cssText = 'position:fixed;width:36px;height:36px;border-radius:50%;border:1px solid var(--cinema-accent,#c9a96e);pointer-events:none;z-index:99997;top:0;left:0;mix-blend-mode:difference;transition:width 0.3s,height 0.3s,border-color 0.3s';
     document.body.appendChild(dot);
     document.body.appendChild(ring);
 
@@ -651,7 +651,7 @@
       const bar = document.createElement('div');
       bar.dataset.progressBar = '';
       bar.style.cssText = `position:fixed;top:0;left:0;height:2px;z-index:99995;pointer-events:none;
-        background:linear-gradient(90deg,var(--cinema-accent,#00e5ff),var(--cinema-accent2,#8b5cf6));
+        background:linear-gradient(90deg,var(--cinema-accent,#c9a96e),var(--cinema-accent2,#00e5ff));
         width:calc(var(--scroll-progress, 0) * 100%);transition:none;`;
       document.body.appendChild(bar);
     }
@@ -716,7 +716,7 @@
     } else {
       new Preloader({
         brandName: config.brandName || 'MACHINEMIND',
-        accentColor: config.accentColor || '#00e5ff',
+        accentColor: config.accentColor || '#c9a96e',
       });
     }
 
@@ -759,7 +759,7 @@
       // Expose lenis globally for external control
       window.cinemaLenis = lenis;
 
-      console.log(`%c[CINEMA ENGINE v2.0] Tier: ${Perf.tier} | Layers: active`, 'color:#00e5ff;font-weight:bold');
+      console.log(`%c[CINEMA ENGINE v2.0] Tier: ${Perf.tier} | Layers: active`, 'color:#c9a96e;font-weight:bold');
     }, { once: true });
   }
 
@@ -790,7 +790,7 @@
     document.addEventListener('DOMContentLoaded', () => {
       boot({
         brandName: document.body.dataset.cinemaBrand || 'MACHINEMIND',
-        accentColor: document.body.dataset.cinemaAccent || '#00e5ff',
+        accentColor: document.body.dataset.cinemaAccent || '#c9a96e',
         sound: document.body.dataset.cinemaSound === 'true',
         skipPreloader: document.body.dataset.cinemaNopreloader !== undefined,
       });

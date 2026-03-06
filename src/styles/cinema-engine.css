@@ -5,16 +5,16 @@
 
 /* === CSS VARIABLES (override per-project) === */
 :root {
-  --cinema-bg: #050510;
-  --cinema-fg: #f0f0f8;
-  --cinema-dim: rgba(240,240,248,0.35);
-  --cinema-accent: #00e5ff;
-  --cinema-accent2: #8b5cf6;
+  --cinema-bg: #06060a;
+  --cinema-fg: #f0f0f3;
+  --cinema-dim: rgba(240,240,243,0.35);
+  --cinema-accent: #c9a96e;  /* GOLD - primary */
+  --cinema-accent2: #00e5ff; /* CYAN - secondary */
   --cinema-hot: #ff2d20;
   --cinema-green: #10b981;
   --cinema-glass: rgba(255,255,255,0.02);
   --cinema-glass-border: rgba(255,255,255,0.06);
-  --cinema-radius: 16px;
+  --cinema-radius: 0;  /* Square edges - Cinema Engine spec */
   --cinema-font-display: 'Clash Display', sans-serif;
   --cinema-font-body: 'Satoshi', sans-serif;
   --cinema-font-mono: 'JetBrains Mono', 'Source Code Pro', monospace;

@@ -1,40 +1,56 @@
+/* Font Imports - MUST come first */
+@import url('https://api.fontshare.com/v2/css?f[]=clash-display@200,300,400,500,600,700&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
+
 @import "tailwindcss";
 
 /* ============================================
-   MACHINEMIND DESIGN SYSTEM
-   Dark Luxury Aesthetic
+   CINEMA ENGINE DESIGN SYSTEM
+   Gold Primary + Cyan Secondary
    ============================================ */
 
 :root {
-  /* Core Colors - Singularity Brand System */
-  --mm-void: #0a0a0f;
+  /* Cinema Engine Core Colors */
+  --bg: #06060a;
+  --fg: #f0f0f3;
+  --accent: #c9a96e;       /* GOLD - primary */
+  --accent2: #00e5ff;      /* CYAN - secondary */
+  --dim: rgba(240,240,243,0.3);
+  --glass: rgba(255,255,255,0.02);
+  --glass-border: rgba(255,255,255,0.06);
+
+  /* Cinema Engine Fonts */
+  --font-heading: 'Clash Display', sans-serif;
+  --font-body: 'Satoshi', sans-serif;
+  --font-italic: 'Instrument Serif', serif;
+
+  /* Legacy Aliases (mapped to Cinema Engine) */
+  --mm-void: var(--bg);
   --mm-surface: #0f0f18;
-  --mm-background: #0a0a0f;
+  --mm-background: var(--bg);
 
-  /* Blue Spectrum */
-  --mm-blue-deep: #0066CC;
-  --mm-blue-core: #00B4FF;
-  --mm-blue-bright: #00D4FF;
-  --mm-blue-glow: rgba(0, 180, 255, 0.15);
-  --mm-blue-subtle: rgba(0, 180, 255, 0.06);
+  /* Gold Spectrum (Primary) */
+  --mm-gold: var(--accent);
+  --mm-gold-light: #d4b87a;
+  --mm-gold-dark: #a8894a;
+  --mm-gold-glow: rgba(201, 169, 110, 0.15);
+  --mm-gold-subtle: rgba(201, 169, 110, 0.06);
 
-  /* Legacy aliases */
-  --mm-cyan: var(--mm-blue-core);
-  --mm-cyan-light: var(--mm-blue-bright);
-  --mm-cyan-dark: var(--mm-blue-deep);
-  --mm-cyan-glow: var(--mm-blue-glow);
-  --mm-gold: var(--mm-blue-core);
-  --mm-gold-light: var(--mm-blue-bright);
-  --mm-gold-dark: var(--mm-blue-deep);
+  /* Cyan Spectrum (Secondary) */
+  --mm-cyan: var(--accent2);
+  --mm-cyan-light: #33ebff;
+  --mm-cyan-dark: #00b8cc;
+  --mm-cyan-glow: rgba(0, 229, 255, 0.15);
 
   /* Text */
-  --mm-text: #ffffff;
+  --mm-text: var(--fg);
   --mm-text-muted: #8892a4;
   --mm-text-subtle: #4a5568;
 
   /* Borders */
-  --mm-border: rgba(0, 180, 255, 0.08);
-  --mm-border-hover: rgba(0, 180, 255, 0.25);
+  --mm-border: rgba(201, 169, 110, 0.08);
+  --mm-border-hover: rgba(201, 169, 110, 0.25);
 
   /* Status */
   --mm-healthy: #22c55e;
@@ -52,20 +68,19 @@
 
 @theme inline {
   /* Colors */
-  --color-background: var(--mm-background);
-  --color-foreground: var(--mm-text);
-  --color-cyan: var(--mm-cyan);
+  --color-background: var(--bg);
+  --color-foreground: var(--fg);
+  --color-gold: var(--accent);
+  --color-gold-light: var(--mm-gold-light);
+  --color-gold-dark: var(--mm-gold-dark);
+  --color-cyan: var(--accent2);
   --color-cyan-light: var(--mm-cyan-light);
   --color-cyan-dark: var(--mm-cyan-dark);
-  /* Legacy */
-  --color-gold: var(--mm-cyan);
-  --color-gold-light: var(--mm-cyan-light);
-  --color-gold-dark: var(--mm-cyan-dark);
 
   /* Fonts */
-  --font-heading: var(--font-playfair);
-  --font-body: var(--font-inter);
-  --font-mono: var(--font-space-mono);
+  --font-family-heading: 'Clash Display', sans-serif;
+  --font-family-body: 'Satoshi', sans-serif;
+  --font-family-italic: 'Instrument Serif', serif;
 }
 
 /* ============================================
@@ -78,22 +93,22 @@ html {
 }
 
 body {
-  background: var(--mm-background);
-  color: var(--mm-text);
-  font-family: var(--font-inter), system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Selection */
+/* Selection - Gold */
 ::selection {
-  background: var(--mm-blue-core);
-  color: var(--mm-background);
+  background: var(--accent);
+  color: var(--bg);
 }
 
-/* Focus styles */
+/* Focus styles - Gold */
 :focus-visible {
-  outline: 2px solid var(--mm-blue-core);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -102,31 +117,42 @@ body {
    ============================================ */
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-playfair), Georgia, serif;
+  font-family: var(--font-heading);
   font-weight: 600;
   letter-spacing: -0.02em;
 }
 
 .font-heading {
-  font-family: var(--font-playfair), Georgia, serif;
+  font-family: var(--font-heading);
 }
 
 .font-body {
-  font-family: var(--font-inter), system-ui, sans-serif;
+  font-family: var(--font-body);
 }
 
-.font-mono {
-  font-family: var(--font-space-mono), monospace;
+.font-italic {
+  font-family: var(--font-italic);
+  font-style: italic;
 }
 
 /* Gold text */
 .text-gold {
-  color: var(--mm-gold);
+  color: var(--accent);
+}
+
+/* Cyan text (secondary) */
+.text-cyan {
+  color: var(--accent2);
 }
 
 /* Muted text */
 .text-muted {
   color: var(--mm-text-muted);
+}
+
+/* Dim text */
+.text-dim {
+  color: var(--dim);
 }
 
 /* ============================================
@@ -150,7 +176,13 @@ h1, h2, h3, h4, h5, h6 {
 /* Gold accent line */
 .gold-line {
   height: 2px;
-  background: var(--mm-gold);
+  background: var(--accent);
+}
+
+/* Glass effect */
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
 }
 
 /* Container */
@@ -240,7 +272,7 @@ h1, h2, h3, h4, h5, h6 {
 .stagger-children > *:nth-child(6) { animation-delay: 500ms; }
 
 /* ============================================
-   SCROLLBAR
+   SCROLLBAR - Gold accent
    ============================================ */
 
 ::-webkit-scrollbar {
@@ -249,27 +281,28 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--mm-background);
+  background: var(--bg);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 166, 237, 0.3);
+  background: rgba(201, 169, 110, 0.3);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 166, 237, 0.5);
+  background: rgba(201, 169, 110, 0.5);
 }
 
 /* ============================================
-   BUTTON STATES
+   BUTTON STATES - Gold primary
    ============================================ */
 
 .btn-gold {
-  background: var(--mm-gold);
-  color: var(--mm-background);
+  background: var(--accent);
+  color: var(--bg);
   border: none;
   min-height: 56px;
   padding: 0.75rem 1.5rem;
+  font-family: var(--font-body);
   font-weight: 600;
   transition: all 200ms ease;
 }
@@ -284,26 +317,43 @@ h1, h2, h3, h4, h5, h6 {
 
 .btn-outline {
   background: transparent;
-  color: var(--mm-gold);
+  color: var(--accent);
   border: 1px solid var(--mm-border);
   min-height: 56px;
   padding: 0.75rem 1.5rem;
+  font-family: var(--font-body);
   font-weight: 600;
   transition: all 200ms ease;
 }
 
 .btn-outline:hover {
-  border-color: var(--mm-cyan);
-  background: rgba(0, 166, 237, 0.1);
+  border-color: var(--accent);
+  background: rgba(201, 169, 110, 0.1);
+}
+
+/* Secondary button - Cyan */
+.btn-cyan {
+  background: var(--accent2);
+  color: var(--bg);
+  border: none;
+  min-height: 56px;
+  padding: 0.75rem 1.5rem;
+  font-family: var(--font-body);
+  font-weight: 600;
+  transition: all 200ms ease;
+}
+
+.btn-cyan:hover {
+  background: var(--mm-cyan-light);
 }
 
 /* ============================================
-   CARDS
+   CARDS - Glass effect
    ============================================ */
 
 .card-luxury {
-  background: rgba(15, 15, 26, 0.8);
-  border: 1px solid var(--mm-border);
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
   padding: 1.5rem;
   transition: border-color 200ms ease;
 }
@@ -399,3 +449,28 @@ h1, h2, h3, h4, h5, h6 {
 [data-velocity] { opacity: 1 !important; }
 [data-reveal] { opacity: 1 !important; }
 [data-reveal-item] { opacity: 1 !important; }
+
+/* ============================================
+   GOLD GRADIENT UTILITIES
+   ============================================ */
+
+.gradient-gold {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--mm-gold-light) 100%);
+}
+
+.gradient-gold-text {
+  background: linear-gradient(135deg, var(--accent) 0%, var(--mm-gold-light) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Gold glow effect */
+.glow-gold {
+  box-shadow: 0 0 20px var(--mm-gold-glow);
+}
+
+/* Cyan glow effect (secondary) */
+.glow-cyan {
+  box-shadow: 0 0 20px var(--mm-cyan-glow);
+}
