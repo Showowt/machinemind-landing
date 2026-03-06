@@ -29,10 +29,9 @@ const CinemaEngine = dynamic(() => import("@/components/cinema/CinemaEngine"), {
 });
 
 // Cinema Overlays - Film grain + Vignette
-const CinemaOverlays = dynamic(
-  () => import("@/components/cinema/Overlays"),
-  { ssr: false },
-);
+const CinemaOverlays = dynamic(() => import("@/components/cinema/Overlays"), {
+  ssr: false,
+});
 
 // Cinema Components
 const GravityCollapse = dynamic(
@@ -54,12 +53,14 @@ export default function Home() {
   const [cinemaReady, setCinemaReady] = useState(false);
 
   useEffect(() => {
-    // Check if already loaded
+    // Check if already loaded - instant display
     if (sessionStorage.getItem("mm-loaded")) {
       setIsLoaded(true);
+      setCinemaReady(true);
+      return;
     }
-    // Enable cinema engine after load
-    const cinemaTimer = setTimeout(() => setCinemaReady(true), 800);
+    // Enable cinema engine immediately after load completes
+    const cinemaTimer = setTimeout(() => setCinemaReady(true), 300);
     return () => clearTimeout(cinemaTimer);
   }, []);
 
@@ -70,7 +71,11 @@ export default function Home() {
   return (
     <>
       {/* Cinema Overlays - Film Grain + Vignette */}
-      <CinemaOverlays grainOpacity={0.03} vignetteIntensity={0.6} vignetteSpread={200} />
+      <CinemaOverlays
+        grainOpacity={0.03}
+        vignetteIntensity={0.6}
+        vignetteSpread={200}
+      />
 
       {/* Cinema Engine v2.0 - 25 Layer Cinematic Experience */}
       {cinemaReady && (

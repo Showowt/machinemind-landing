@@ -43,6 +43,9 @@
   --mm-cyan-dark: #00b8cc;
   --mm-cyan-glow: rgba(0, 229, 255, 0.15);
 
+  /* Legacy Blue Core (maps to cyan) */
+  --mm-blue-core: var(--accent2);
+
   /* Text */
   --mm-text: var(--fg);
   --mm-text-muted: #8892a4;

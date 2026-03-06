@@ -22,14 +22,14 @@ function prefersReducedMotion(): boolean {
 
 export default function LoadingSequence({
   onComplete,
-  skipDelay = 5000,
+  skipDelay = 2500, // Reduced to 2.5 seconds for launch
 }: LoadingSequenceProps) {
   const [phase, setPhase] = useState(0);
   const [canSkip, setCanSkip] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    // Check if already loaded this session
+    // Check if already loaded this session - instant skip
     if (sessionStorage.getItem("mm-loaded")) {
       onComplete();
       return;
@@ -45,22 +45,22 @@ export default function LoadingSequence({
     const mobile = isMobileDevice();
     setIsMobile(mobile);
 
-    // Faster timing on mobile (3s vs 5s)
+    // Even faster on mobile (1.5s vs 2.5s)
     const mobileMultiplier = mobile ? 0.6 : 1;
     const adjustedSkipDelay = skipDelay * mobileMultiplier;
 
-    // Phase progression (faster on mobile)
-    const phases = [300, 900, 1500, 2100, 2700].map((t) =>
+    // Fast phase progression - all complete in ~2 seconds
+    const phases = [100, 400, 700, 1000, 1300].map((t) =>
       Math.round(t * mobileMultiplier),
     );
     phases.forEach((delay, i) => {
       setTimeout(() => setPhase(i + 1), delay);
     });
 
-    // Enable skip after short delay
-    setTimeout(() => setCanSkip(true), 500);
+    // Enable skip immediately
+    setTimeout(() => setCanSkip(true), 200);
 
-    // Auto-complete
+    // Auto-complete faster
     setTimeout(() => {
       sessionStorage.setItem("mm-loaded", "true");
       onComplete();
@@ -216,7 +216,7 @@ export default function LoadingSequence({
               className="h-full bg-[var(--mm-blue-core)]"
               initial={{ width: "0%" }}
               animate={phase >= 3 ? { width: "100%" } : {}}
-              transition={{ duration: isMobile ? 1.5 : 2, ease: "linear" }}
+              transition={{ duration: isMobile ? 0.8 : 1.2, ease: "linear" }}
             />
           </motion.div>
 
