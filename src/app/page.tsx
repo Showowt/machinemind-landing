@@ -644,18 +644,32 @@ export default function Home() {
         </div>
         <div className="work-grid stagger-children">
           {[
-            { name: 'Casa Badillo', type: 'Luxury Boutique Hotel', metric: '+340% Direct Bookings' },
-            { name: 'Cartagena Concierge', type: 'VIP Services', metric: '15,000+ Clients Managed' },
-            { name: 'AEGIS Shield', type: 'Defense Access Control', metric: 'USMC Integration' },
-            { name: 'Viceroy Capital', type: 'Investment Platform', metric: '$2.4M Qualified Deals' },
+            { name: 'Movvia', type: 'Luxury Concierge Platform', metric: 'Full-Stack Hospitality', url: 'https://movvia-pi.vercel.app', color: '#00B4FF' },
+            { name: 'Dharma Beach Club', type: 'Luxury Beach Experience', metric: 'Stripe + Reservations', url: 'https://dharma-topaz.vercel.app', color: '#d4af37' },
+            { name: 'Simmer Down Pizza', type: 'Interactive Restaurant', metric: 'Canvas + Easter Eggs', url: 'https://simmer-down.vercel.app', color: '#f97316' },
+            { name: 'Four Seasons Bogotá', type: 'AI Concierge Demo', metric: 'Claude AI SDK', url: 'https://demo-fourseasons-bogota.vercel.app', color: '#00B4FF' },
+            { name: 'AEGIS Shield', type: 'Defense Access Control', metric: 'USMC · Classified', url: null, color: '#1c4a5e' },
+            { name: 'Sofia Real Estate', type: 'AI Property Sales', metric: '24/7 Lead Qualification', url: null, color: '#0891b2' },
           ].map((project, i) => (
-            <div key={i} className="work-item magnetic">
-              <div className="work-item-content">
-                <span className="work-type">{project.type}</span>
-                <h3 className="work-name">{project.name}</h3>
-                <span className="work-metric">{project.metric}</span>
+            project.url ? (
+              <a key={i} href={project.url} target="_blank" rel="noopener noreferrer" className="work-item magnetic" style={{ '--project-color': project.color } as React.CSSProperties}>
+                <div className="work-item-content">
+                  <span className="work-type">{project.type}</span>
+                  <h3 className="work-name">{project.name}</h3>
+                  <span className="work-metric">{project.metric}</span>
+                  <span className="work-link">View Live →</span>
+                </div>
+              </a>
+            ) : (
+              <div key={i} className="work-item magnetic" style={{ '--project-color': project.color } as React.CSSProperties}>
+                <div className="work-item-content">
+                  <span className="work-type">{project.type}</span>
+                  <h3 className="work-name">{project.name}</h3>
+                  <span className="work-metric">{project.metric}</span>
+                  <span className="work-link work-link-private">Enterprise</span>
+                </div>
               </div>
-            </div>
+            )
           ))}
         </div>
       </section>
@@ -1153,10 +1167,13 @@ export default function Home() {
         }
         .work-grid {
           display: grid;
-          grid-template-columns: repeat(2, 1fr);
+          grid-template-columns: repeat(3, 1fr);
           gap: 2px;
         }
-        @media (max-width: 768px) {
+        @media (max-width: 1024px) {
+          .work-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 640px) {
           .work-grid { grid-template-columns: 1fr; }
         }
         .work-item {
@@ -1165,31 +1182,65 @@ export default function Home() {
           border: 1px solid var(--glass-border);
           position: relative;
           overflow: hidden;
-          transition: border-color 0.4s;
+          transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+          text-decoration: none;
+          display: block;
         }
-        .work-item:hover { border-color: var(--gold); }
+        .work-item::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(135deg, var(--project-color, var(--gold)) 0%, transparent 60%);
+          opacity: 0;
+          transition: opacity 0.5s;
+        }
+        .work-item:hover::before { opacity: 0.15; }
+        .work-item:hover {
+          border-color: var(--project-color, var(--gold));
+          transform: translateY(-4px);
+        }
         .work-item-content {
           position: absolute;
           bottom: 0;
           left: 0;
           right: 0;
           padding: 32px;
-          background: linear-gradient(to top, rgba(6, 6, 10, 0.95), transparent);
+          background: linear-gradient(to top, rgba(6, 6, 10, 0.98) 30%, transparent);
+          display: flex;
+          flex-direction: column;
         }
         .work-type {
           font-size: 10px;
           letter-spacing: 0.3em;
           text-transform: uppercase;
-          color: var(--gold);
+          color: var(--project-color, var(--gold));
         }
         .work-name {
           font-family: var(--font-display);
-          font-size: 28px;
+          font-size: clamp(22px, 2.5vw, 28px);
           font-weight: 500;
           margin: 8px 0;
+          color: var(--fg);
         }
         .work-metric {
           font-size: 13px;
+          color: var(--dim);
+        }
+        .work-link {
+          font-size: 11px;
+          letter-spacing: 0.15em;
+          text-transform: uppercase;
+          color: var(--project-color, var(--gold));
+          margin-top: 12px;
+          opacity: 0;
+          transform: translateY(8px);
+          transition: all 0.3s;
+        }
+        .work-item:hover .work-link {
+          opacity: 1;
+          transform: translateY(0);
+        }
+        .work-link-private {
           color: var(--dim);
         }
 
