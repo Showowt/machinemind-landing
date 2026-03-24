@@ -1,310 +1,315 @@
-/* Font Imports - MUST come first */
+/* ═══════════════════════════════════════════════════════════════
+   MACHINEMIND CINEMA ENGINE — NUCLEAR REBUILD
+   Awwwards-tier Design System
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Font Imports — MUST come first */
 @import url('https://api.fontshare.com/v2/css?f[]=clash-display@200,300,400,500,600,700&display=swap');
-@import url('https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700&display=swap');
+@import url('https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700,900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
 
 @import "tailwindcss";
 
-/* ============================================
-   CINEMA ENGINE DESIGN SYSTEM
-   Gold Primary + Cyan Secondary
-   ============================================ */
+/* ═══════════════════════════════════════════════════════════════
+   CSS VARIABLES — Cinema Engine Core
+   ═══════════════════════════════════════════════════════════════ */
 
 :root {
-  /* Cinema Engine Core Colors */
+  /* Core Colors */
   --bg: #06060a;
   --fg: #f0f0f3;
-  --accent: #c9a96e;       /* GOLD - primary */
-  --accent2: #00e5ff;      /* CYAN - secondary */
-  --dim: rgba(240,240,243,0.3);
-  --glass: rgba(255,255,255,0.02);
-  --glass-border: rgba(255,255,255,0.06);
+  --dim: rgba(240, 240, 243, 0.3);
+  --accent: #c9a96e;
+  --accent2: #00e5ff;
+  --glass: rgba(255, 255, 255, 0.025);
+  --glass-border: rgba(255, 255, 255, 0.06);
 
-  /* Cinema Engine Fonts */
-  --font-heading: 'Clash Display', sans-serif;
-  --font-body: 'Satoshi', sans-serif;
-  --font-italic: 'Instrument Serif', serif;
-
-  /* Legacy Aliases (mapped to Cinema Engine) */
-  --mm-void: var(--bg);
-  --mm-surface: #0f0f18;
-  --mm-background: var(--bg);
-
-  /* Gold Spectrum (Primary) */
-  --mm-gold: var(--accent);
-  --mm-gold-light: #d4b87a;
-  --mm-gold-dark: #a8894a;
-  --mm-gold-glow: rgba(201, 169, 110, 0.15);
-  --mm-gold-subtle: rgba(201, 169, 110, 0.06);
-
-  /* Cyan Spectrum (Secondary) */
-  --mm-cyan: var(--accent2);
-  --mm-cyan-light: #33ebff;
-  --mm-cyan-dark: #00b8cc;
-  --mm-cyan-glow: rgba(0, 229, 255, 0.15);
-
-  /* Legacy Blue Core (maps to cyan) */
-  --mm-blue-core: var(--accent2);
-
-  /* Text */
-  --mm-text: var(--fg);
-  --mm-text-muted: #8892a4;
-  --mm-text-subtle: #4a5568;
-
-  /* Borders */
-  --mm-border: rgba(201, 169, 110, 0.08);
-  --mm-border-hover: rgba(201, 169, 110, 0.25);
-
-  /* Status */
-  --mm-healthy: #22c55e;
-  --mm-degraded: #eab308;
-  --mm-down: #ef4444;
-
-  /* Spacing */
-  --mm-header-height: 80px;
-  --mm-section-padding: 6rem;
+  /* Typography */
+  --font-clash: 'Clash Display', sans-serif;
+  --font-satoshi: 'Satoshi', sans-serif;
+  --font-instrument: 'Instrument Serif', serif;
 }
 
-/* ============================================
+/* ═══════════════════════════════════════════════════════════════
    TAILWIND V4 THEME
-   ============================================ */
+   ═══════════════════════════════════════════════════════════════ */
 
 @theme inline {
-  /* Colors */
-  --color-background: var(--bg);
-  --color-foreground: var(--fg);
-  --color-gold: var(--accent);
-  --color-gold-light: var(--mm-gold-light);
-  --color-gold-dark: var(--mm-gold-dark);
-  --color-cyan: var(--accent2);
-  --color-cyan-light: var(--mm-cyan-light);
-  --color-cyan-dark: var(--mm-cyan-dark);
-
-  /* Fonts */
-  --font-family-heading: 'Clash Display', sans-serif;
-  --font-family-body: 'Satoshi', sans-serif;
-  --font-family-italic: 'Instrument Serif', serif;
+  --color-bg: #06060a;
+  --color-fg: #f0f0f3;
+  --color-dim: rgba(240, 240, 243, 0.3);
+  --color-accent: #c9a96e;
+  --color-accent2: #00e5ff;
+  --color-glass: rgba(255, 255, 255, 0.025);
+  --color-glass-border: rgba(255, 255, 255, 0.06);
 }
 
-/* ============================================
+/* ═══════════════════════════════════════════════════════════════
    BASE STYLES
-   ============================================ */
+   ═══════════════════════════════════════════════════════════════ */
 
-html {
-  /* LENIS SMOOTH SCROLL: Disable native scroll-behavior
-     Lenis provides butter-smooth cinematic scrolling via JS
-     Native smooth-scroll interferes with Lenis interpolation */
-  scroll-behavior: auto;
-  scroll-padding-top: var(--mm-header-height);
-}
-
-/* Lenis-specific body setup for smooth scroll */
-html.lenis, html.lenis body {
-  height: auto;
-}
-
-.lenis.lenis-smooth {
-  scroll-behavior: auto !important;
-}
-
-.lenis.lenis-smooth [data-lenis-prevent] {
-  overscroll-behavior: contain;
-}
-
-.lenis.lenis-stopped {
-  overflow: hidden;
-}
-
-.lenis.lenis-scrolling iframe {
-  pointer-events: none;
-}
-
+html,
 body {
   background: var(--bg);
   color: var(--fg);
-  font-family: var(--font-body);
+  font-family: var(--font-satoshi);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  scroll-behavior: smooth;
 }
 
-/* Selection - Gold */
+/* Selection — Gold */
 ::selection {
   background: var(--accent);
   color: var(--bg);
 }
 
-/* Focus styles - Gold */
+/* Focus styles */
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 1px solid var(--accent);
   outline-offset: 2px;
 }
 
-/* ============================================
-   TYPOGRAPHY
-   ============================================ */
+/* ═══════════════════════════════════════════════════════════════
+   TYPOGRAPHY CLASSES
+   ═══════════════════════════════════════════════════════════════ */
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-heading);
-  font-weight: 600;
-  letter-spacing: -0.02em;
+.font-clash {
+  font-family: var(--font-clash);
 }
 
-.font-heading {
-  font-family: var(--font-heading);
+.font-satoshi {
+  font-family: var(--font-satoshi);
 }
 
-.font-body {
-  font-family: var(--font-body);
-}
-
-.font-italic {
-  font-family: var(--font-italic);
+.font-instrument {
+  font-family: var(--font-instrument);
   font-style: italic;
 }
 
-/* Gold text */
-.text-gold {
+/* ═══════════════════════════════════════════════════════════════
+   NAVIGATION
+   ═══════════════════════════════════════════════════════════════ */
+
+.nav-link {
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  opacity: 0.4;
+  transition: opacity 0.3s ease;
+}
+
+.nav-link:hover {
+  opacity: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   HERO CTA BUTTON — Gold Border with Fill Animation
+   ═══════════════════════════════════════════════════════════════ */
+
+.btn-hero {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--accent);
+  background: transparent;
+  padding: 14px 36px;
+  font-size: 11px;
+  font-family: var(--font-satoshi);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--fg);
+  overflow: hidden;
+  transition: color 0.4s ease;
+  cursor: pointer;
+}
+
+.btn-hero::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--accent);
+  transform: translateY(101%);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: -1;
+}
+
+.btn-hero:hover::before {
+  transform: translateY(0);
+}
+
+.btn-hero:hover {
+  color: var(--bg);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CAPABILITY CARDS
+   ═══════════════════════════════════════════════════════════════ */
+
+.capability-card {
+  position: relative;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  padding: 32px;
+  transition: border-color 0.3s ease;
+}
+
+.capability-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.capability-card:hover::before {
+  transform: scaleX(1);
+}
+
+.capability-card:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SCROLL INDICATOR — Pulsing Line
+   ═══════════════════════════════════════════════════════════════ */
+
+@keyframes scroll-pulse {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scaleY(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scaleY(1.1);
+  }
+}
+
+.scroll-indicator-line {
+  width: 1px;
+  height: 48px;
+  background: linear-gradient(to bottom, var(--accent), transparent);
+  animation: scroll-pulse 2s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STATS STRIP
+   ═══════════════════════════════════════════════════════════════ */
+
+.stat-item {
+  padding: 32px;
+  text-align: center;
+  border-right: 1px solid var(--glass-border);
+}
+
+.stat-item:last-child {
+  border-right: none;
+}
+
+@media (max-width: 767px) {
+  .stat-item {
+    border-right: none;
+    border-bottom: 1px solid var(--glass-border);
+  }
+  .stat-item:last-child {
+    border-bottom: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   EYEBROW TEXT
+   ═══════════════════════════════════════════════════════════════ */
+
+.eyebrow {
+  font-size: 9px;
+  letter-spacing: 0.5em;
+  text-transform: uppercase;
   color: var(--accent);
 }
 
-/* Cyan text (secondary) */
-.text-cyan {
-  color: var(--accent2);
+/* ═══════════════════════════════════════════════════════════════
+   MANIFESTO EMPHASIS
+   ═══════════════════════════════════════════════════════════════ */
+
+.manifesto em {
+  font-family: var(--font-instrument);
+  font-style: italic;
+  color: var(--accent);
 }
 
-/* Muted text */
-.text-muted {
-  color: var(--mm-text-muted);
-}
+/* ═══════════════════════════════════════════════════════════════
+   FILM GRAIN OVERLAY
+   ═══════════════════════════════════════════════════════════════ */
 
-/* Dim text */
-.text-dim {
-  color: var(--dim);
-}
-
-/* ============================================
-   UTILITIES
-   ============================================ */
-
-/* Square edges - override any rounded corners */
-.square {
-  border-radius: 0 !important;
-}
-
-/* Gold border */
-.border-gold {
-  border-color: var(--mm-border);
-}
-
-.border-gold-hover:hover {
-  border-color: var(--mm-border-hover);
-}
-
-/* Gold accent line */
-.gold-line {
-  height: 2px;
-  background: var(--accent);
-}
-
-/* Glass effect */
-.glass {
-  background: var(--glass);
-  border: 1px solid var(--glass-border);
-}
-
-/* Container */
-.container-luxury {
+.film-grain {
+  position: fixed;
+  top: 0;
+  left: 0;
   width: 100%;
-  max-width: 1280px;
-  margin-left: auto;
-  margin-right: auto;
-  padding-left: 1.5rem;
-  padding-right: 1.5rem;
+  height: 100%;
+  pointer-events: none;
+  opacity: 0.03;
+  z-index: 9999;
 }
 
-@media (min-width: 768px) {
-  .container-luxury {
-    padding-left: 2rem;
-    padding-right: 2rem;
-  }
+/* ═══════════════════════════════════════════════════════════════
+   VIGNETTE OVERLAY
+   ═══════════════════════════════════════════════════════════════ */
+
+.vignette {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  box-shadow: inset 0 0 200px rgba(0, 0, 0, 0.6);
+  z-index: 9998;
 }
 
-/* Section spacing */
-.section-padding {
-  padding-top: var(--mm-section-padding);
-  padding-bottom: var(--mm-section-padding);
+/* ═══════════════════════════════════════════════════════════════
+   PROGRESS BAR
+   ═══════════════════════════════════════════════════════════════ */
+
+.progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  z-index: 9995;
+  transform-origin: left;
 }
 
-/* ============================================
-   ANIMATIONS
-   ============================================ */
+/* ═══════════════════════════════════════════════════════════════
+   ANIMATIONS — GSAP Reveal Targets
+   ═══════════════════════════════════════════════════════════════ */
 
-/* Fade in up */
-@keyframes fadeInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-fade-in-up {
-  animation: fadeInUp 0.6s ease-out forwards;
-}
-
-/* Pulse glow */
-@keyframes pulseGlow {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
-}
-
-.animate-pulse-glow {
-  animation: pulseGlow 2s ease-in-out infinite;
-}
-
-/* Status pulse */
-@keyframes statusPulse {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-  50% {
-    transform: scale(1.2);
-    opacity: 0.7;
-  }
-}
-
-.animate-status-pulse {
-  animation: statusPulse 2s ease-in-out infinite;
-}
-
-/* Stagger children - for lists */
-.stagger-children > * {
+.reveal-up {
   opacity: 0;
-  animation: fadeInUp 0.5s ease-out forwards;
+  transform: translateY(40px);
 }
 
-.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
-.stagger-children > *:nth-child(2) { animation-delay: 100ms; }
-.stagger-children > *:nth-child(3) { animation-delay: 200ms; }
-.stagger-children > *:nth-child(4) { animation-delay: 300ms; }
-.stagger-children > *:nth-child(5) { animation-delay: 400ms; }
-.stagger-children > *:nth-child(6) { animation-delay: 500ms; }
+.reveal-up.revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
 
-/* ============================================
-   SCROLLBAR - Gold accent
-   ============================================ */
+/* ═══════════════════════════════════════════════════════════════
+   SCROLLBAR — Minimal Gold
+   ═══════════════════════════════════════════════════════════════ */
 
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
 }
 
 ::-webkit-scrollbar-track {
@@ -319,111 +324,9 @@ h1, h2, h3, h4, h5, h6 {
   background: rgba(201, 169, 110, 0.5);
 }
 
-/* ============================================
-   BUTTON STATES - Gold primary
-   ============================================ */
-
-.btn-gold {
-  background: var(--accent);
-  color: var(--bg);
-  border: none;
-  min-height: 56px;
-  padding: 0.75rem 1.5rem;
-  font-family: var(--font-body);
-  font-weight: 600;
-  transition: all 200ms ease;
-}
-
-.btn-gold:hover {
-  background: var(--mm-gold-light);
-}
-
-.btn-gold:active {
-  background: var(--mm-gold-dark);
-}
-
-.btn-outline {
-  background: transparent;
-  color: var(--accent);
-  border: 1px solid var(--mm-border);
-  min-height: 56px;
-  padding: 0.75rem 1.5rem;
-  font-family: var(--font-body);
-  font-weight: 600;
-  transition: all 200ms ease;
-}
-
-.btn-outline:hover {
-  border-color: var(--accent);
-  background: rgba(201, 169, 110, 0.1);
-}
-
-/* Secondary button - Cyan */
-.btn-cyan {
-  background: var(--accent2);
-  color: var(--bg);
-  border: none;
-  min-height: 56px;
-  padding: 0.75rem 1.5rem;
-  font-family: var(--font-body);
-  font-weight: 600;
-  transition: all 200ms ease;
-}
-
-.btn-cyan:hover {
-  background: var(--mm-cyan-light);
-}
-
-/* ============================================
-   CARDS - Glass effect
-   ============================================ */
-
-.card-luxury {
-  background: var(--glass);
-  border: 1px solid var(--glass-border);
-  padding: 1.5rem;
-  transition: border-color 200ms ease;
-}
-
-.card-luxury:hover {
-  border-color: var(--mm-border-hover);
-}
-
-/* ============================================
-   RESPONSIVE HELPERS
-   ============================================ */
-
-@media (max-width: 767px) {
-  :root {
-    --mm-header-height: 72px;
-    --mm-section-padding: 4rem;
-  }
-}
-
-/* ============================================
-   CLIENT LOGOS SCROLL
-   ============================================ */
-
-@keyframes scroll-x {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
-}
-
-.client-logos-scroll {
-  animation: scroll-x 30s linear infinite;
-}
-
-.client-logos-scroll:hover {
-  animation-play-state: paused;
-}
-
-/* ============================================
-   ACCESSIBILITY - REDUCED MOTION
-   ============================================ */
+/* ═══════════════════════════════════════════════════════════════
+   REDUCED MOTION
+   ═══════════════════════════════════════════════════════════════ */
 
 @media (prefers-reduced-motion: reduce) {
   *,
@@ -432,72 +335,5 @@ h1, h2, h3, h4, h5, h6 {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
   }
-
-  .client-logos-scroll {
-    animation: none;
-  }
-}
-
-/* ============================================
-   ULTRA-SMALL SCREENS (320px)
-   ============================================ */
-
-@media (max-width: 359px) {
-  :root {
-    --mm-header-height: 64px;
-    --mm-section-padding: 3rem;
-  }
-
-  .container-luxury {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-}
-
-/* ============================================
-   MOBILE HEADER HEIGHT ADJUSTMENT
-   ============================================ */
-
-@media (max-width: 767px) {
-  :root {
-    --mm-header-height: 64px;
-  }
-}
-
-/* ============================================
-   CINEMA ENGINE FALLBACKS
-   Ensure text is visible if Cinema fails to load
-   ============================================ */
-
-[data-text] { opacity: 1 !important; }
-[data-magnetic] { cursor: pointer; }
-[data-velocity] { opacity: 1 !important; }
-[data-reveal] { opacity: 1 !important; }
-[data-reveal-item] { opacity: 1 !important; }
-
-/* ============================================
-   GOLD GRADIENT UTILITIES
-   ============================================ */
-
-.gradient-gold {
-  background: linear-gradient(135deg, var(--accent) 0%, var(--mm-gold-light) 100%);
-}
-
-.gradient-gold-text {
-  background: linear-gradient(135deg, var(--accent) 0%, var(--mm-gold-light) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Gold glow effect */
-.glow-gold {
-  box-shadow: 0 0 20px var(--mm-gold-glow);
-}
-
-/* Cyan glow effect (secondary) */
-.glow-cyan {
-  box-shadow: 0 0 20px var(--mm-cyan-glow);
 }
