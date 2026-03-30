@@ -20,6 +20,7 @@
     "puppeteer": "^24.37.3",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "resend": "^6.10.0",
     "split-type": "^0.3.4",
     "three": "^0.183.2",
     "zustand": "^5.0.11"
