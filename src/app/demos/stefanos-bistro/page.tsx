@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback } from "react";
-import Image from "next/image";
 
 // ═══════════════════════════════════════════════════════════════
 // STEFANO'S BISTRO — CARTAGENA
@@ -22,21 +21,56 @@ const BRAND = {
   cream: "#f5f4ef",
 };
 
-// Menu data
-const menuHighlights = [
+// Full Menu Data
+const menuCategories = [
   {
-    name: "Pecan Crusted Fish",
-    nameSp: "Pescado con Costra de Nuez",
-    description: "Atlantic fish, toasted pecan crust, roasted vegetables, beurre blanc",
-    price: "$89.000",
-    image: "/demos/stefanos-bistro/food-fish.jpg",
+    name: "Starters",
+    nameSp: "Entradas",
+    items: [
+      { name: "French Onion Soup", nameSp: "Sopa de Cebolla Francesa", desc: "Caramelized onion broth, gruyère crouton, fresh thyme", price: "$18" },
+      { name: "Beef Carpaccio", nameSp: "Carpaccio de Res", desc: "Thinly sliced tenderloin, arugula, capers, parmesan shavings", price: "$22" },
+      { name: "Escargots de Bourgogne", nameSp: "Caracoles a la Borgoña", desc: "Burgundy snails, garlic herb butter, crusty bread", price: "$19" },
+      { name: "Burrata Caprese", nameSp: "Caprese de Burrata", desc: "Fresh burrata, heirloom tomatoes, basil pesto, balsamic reduction", price: "$21" },
+    ],
+  },
+  {
+    name: "Mains",
+    nameSp: "Platos Principales",
+    items: [
+      { name: "Pecan Crusted Fish", nameSp: "Pescado con Costra de Nuez", desc: "Atlantic salmon, toasted pecan crust, beurre blanc, seasonal vegetables", price: "$38", featured: true, image: "/demos/stefanos-bistro/food-fish.jpg" },
+      { name: "Beef Short Ribs", nameSp: "Costillas de Res", desc: "8-hour braised short ribs, red wine reduction, truffle mash", price: "$42" },
+      { name: "Duck Confit", nameSp: "Confit de Pato", desc: "Crispy leg confit, cherry gastrique, wild rice pilaf", price: "$36" },
+      { name: "Filet Mignon", nameSp: "Filete Mignon", desc: "8oz center cut, béarnaise sauce, pommes frites", price: "$48" },
+      { name: "Crab Risotto", nameSp: "Risotto de Cangrejo", desc: "Arborio rice, blue crab, saffron, aged parmesan", price: "$34" },
+      { name: "Chicken Supreme", nameSp: "Suprema de Pollo", desc: "Pan-roasted breast, mushroom jus, herb gnocchi", price: "$32" },
+    ],
   },
   {
     name: "Signature Burger",
     nameSp: "Hamburguesa Signature",
-    description: "Brioche bun, thick-cut bacon, house sauce, truffle fries",
-    price: "$68.000",
-    image: "/demos/stefanos-bistro/food-burger.jpg",
+    items: [
+      { name: "The Stefano Burger", nameSp: "La Hamburguesa Stefano", desc: "Brioche bun, thick-cut bacon, aged cheddar, house sauce, truffle fries", price: "$28", featured: true, image: "/demos/stefanos-bistro/food-burger.jpg" },
+    ],
+  },
+  {
+    name: "Pasta & Pizza",
+    nameSp: "Pastas y Pizzas",
+    items: [
+      { name: "Lobster Linguine", nameSp: "Linguine de Langosta", desc: "Fresh pasta, butter-poached lobster, cherry tomatoes, basil", price: "$38" },
+      { name: "Truffle Tagliatelle", nameSp: "Tagliatelle de Trufa", desc: "House-made pasta, black truffle cream, parmesan", price: "$32" },
+      { name: "Margherita Pizza", nameSp: "Pizza Margherita", desc: "San Marzano tomatoes, fresh mozzarella, basil, olive oil", price: "$22" },
+      { name: "Prosciutto e Rucola", nameSp: "Prosciutto y Rúcula", desc: "Parma ham, arugula, shaved parmesan, truffle oil", price: "$26" },
+    ],
+  },
+  {
+    name: "Desserts",
+    nameSp: "Postres",
+    items: [
+      { name: "Apple Crumble Cheesecake", nameSp: "Cheesecake de Manzana", desc: "New York style, caramelized apples, oat crumble, vanilla gelato", price: "$14" },
+      { name: "Crème Brûlée", nameSp: "Crème Brûlée", desc: "Classic vanilla custard, caramelized sugar crust", price: "$12" },
+      { name: "Tiramisu", nameSp: "Tiramisú", desc: "Espresso-soaked ladyfingers, mascarpone, cocoa", price: "$13" },
+      { name: "Chocolate Fondant", nameSp: "Fondant de Chocolate", desc: "Warm molten center, raspberry coulis, whipped cream", price: "$14" },
+    ],
   },
 ];
 
@@ -55,6 +89,7 @@ export default function StefanosBistroPage() {
   const [preloaderDone, setPreloaderDone] = useState(false);
   const [scrollY, setScrollY] = useState(0);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [activeCategory, setActiveCategory] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -137,12 +172,10 @@ export default function StefanosBistroPage() {
           }`}
         >
           <div className="w-32 h-32 md:w-40 md:h-40 relative">
-            <Image
+            <img
               src="/demos/stefanos-bistro/logo.png"
               alt="Stefano's Bistro"
-              fill
-              className="object-contain"
-              priority
+              className="w-full h-full object-contain"
             />
           </div>
           {/* Loading ring */}
@@ -178,28 +211,15 @@ export default function StefanosBistroPage() {
         {/* Global Styles */}
         <style jsx global>{`
           @keyframes dash {
-            to {
-              stroke-dashoffset: 0;
-            }
+            to { stroke-dashoffset: 0; }
           }
 
-          html {
-            scroll-behavior: smooth;
-          }
+          html { scroll-behavior: smooth; }
 
-          /* Ultra-smooth custom scrollbar */
-          ::-webkit-scrollbar {
-            width: 4px;
-          }
-          ::-webkit-scrollbar-track {
-            background: transparent;
-          }
-          ::-webkit-scrollbar-thumb {
-            background: ${BRAND.sage}40;
-            border-radius: 2px;
-          }
+          ::-webkit-scrollbar { width: 4px; }
+          ::-webkit-scrollbar-track { background: transparent; }
+          ::-webkit-scrollbar-thumb { background: ${BRAND.sage}40; border-radius: 2px; }
 
-          /* Reveal animations */
           .reveal-on-scroll {
             opacity: 0;
             transform: translateY(60px);
@@ -222,15 +242,6 @@ export default function StefanosBistroPage() {
             transform: scale(1);
           }
 
-          .reveal-clip {
-            clip-path: inset(100% 0 0 0);
-            transition: clip-path 1.2s cubic-bezier(0.77, 0, 0.175, 1);
-          }
-          .reveal-clip.revealed {
-            clip-path: inset(0 0 0 0);
-          }
-
-          /* Stagger children */
           .stagger-children > * {
             opacity: 0;
             transform: translateY(30px);
@@ -238,14 +249,13 @@ export default function StefanosBistroPage() {
                         transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
           }
           .stagger-children.revealed > *:nth-child(1) { transition-delay: 0ms; opacity: 1; transform: translateY(0); }
-          .stagger-children.revealed > *:nth-child(2) { transition-delay: 80ms; opacity: 1; transform: translateY(0); }
-          .stagger-children.revealed > *:nth-child(3) { transition-delay: 160ms; opacity: 1; transform: translateY(0); }
-          .stagger-children.revealed > *:nth-child(4) { transition-delay: 240ms; opacity: 1; transform: translateY(0); }
-          .stagger-children.revealed > *:nth-child(5) { transition-delay: 320ms; opacity: 1; transform: translateY(0); }
-          .stagger-children.revealed > *:nth-child(6) { transition-delay: 400ms; opacity: 1; transform: translateY(0); }
-          .stagger-children.revealed > *:nth-child(7) { transition-delay: 480ms; opacity: 1; transform: translateY(0); }
+          .stagger-children.revealed > *:nth-child(2) { transition-delay: 60ms; opacity: 1; transform: translateY(0); }
+          .stagger-children.revealed > *:nth-child(3) { transition-delay: 120ms; opacity: 1; transform: translateY(0); }
+          .stagger-children.revealed > *:nth-child(4) { transition-delay: 180ms; opacity: 1; transform: translateY(0); }
+          .stagger-children.revealed > *:nth-child(5) { transition-delay: 240ms; opacity: 1; transform: translateY(0); }
+          .stagger-children.revealed > *:nth-child(6) { transition-delay: 300ms; opacity: 1; transform: translateY(0); }
+          .stagger-children.revealed > *:nth-child(7) { transition-delay: 360ms; opacity: 1; transform: translateY(0); }
 
-          /* Magnetic button */
           .btn-magnetic {
             position: relative;
             display: inline-flex;
@@ -281,7 +291,6 @@ export default function StefanosBistroPage() {
             transform: scaleY(1);
           }
 
-          /* 3D Card tilt */
           .card-3d {
             transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
             transform-style: preserve-3d;
@@ -290,7 +299,6 @@ export default function StefanosBistroPage() {
             transform: perspective(1000px) rotateX(2deg) rotateY(-2deg) scale(1.02);
           }
 
-          /* Image hover zoom */
           .img-zoom {
             overflow: hidden;
           }
@@ -301,7 +309,6 @@ export default function StefanosBistroPage() {
             transform: scale(1.08);
           }
 
-          /* Text gradient */
           .text-gradient {
             background: linear-gradient(135deg, ${BRAND.sage} 0%, ${BRAND.sageLight} 50%, ${BRAND.sage} 100%);
             background-size: 200% auto;
@@ -315,7 +322,6 @@ export default function StefanosBistroPage() {
             50% { background-position: 200% center; }
           }
 
-          /* Line draw animation */
           .line-draw {
             position: relative;
           }
@@ -335,7 +341,6 @@ export default function StefanosBistroPage() {
             transform: scaleX(1);
           }
 
-          /* Eyebrow style */
           .eyebrow {
             font-size: 10px;
             letter-spacing: 0.4em;
@@ -343,25 +348,36 @@ export default function StefanosBistroPage() {
             color: ${BRAND.sage};
           }
 
-          /* Smooth parallax */
-          .parallax-slow {
-            will-change: transform;
+          .menu-tab {
+            padding: 12px 24px;
+            font-size: 11px;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,0.4);
+            border: 1px solid transparent;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            white-space: nowrap;
+          }
+          .menu-tab:hover {
+            color: rgba(255,255,255,0.7);
+          }
+          .menu-tab.active {
+            color: ${BRAND.cream};
+            border-color: ${BRAND.sage}60;
+            background: ${BRAND.sage}10;
+          }
+
+          .menu-item {
+            padding: 24px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            transition: all 0.3s ease;
+          }
+          .menu-item:hover {
+            background: rgba(255,255,255,0.02);
+            padding-left: 16px;
           }
         `}</style>
-
-        {/* ═══════════════════════════════════════════════════════════════
-            CUSTOM CURSOR
-            ═══════════════════════════════════════════════════════════════ */}
-        <div
-          className="fixed w-4 h-4 rounded-full pointer-events-none z-[99] mix-blend-difference hidden md:block"
-          style={{
-            background: BRAND.sage,
-            left: `calc(50% + ${mousePos.x * 10}px)`,
-            top: `calc(50% + ${mousePos.y * 10}px)`,
-            transform: "translate(-50%, -50%)",
-            transition: "left 0.15s ease-out, top 0.15s ease-out",
-          }}
-        />
 
         {/* ═══════════════════════════════════════════════════════════════
             HEADER — Floating Glass Navigation
@@ -374,18 +390,11 @@ export default function StefanosBistroPage() {
           }`}
         >
           <div className="max-w-7xl mx-auto flex items-center justify-between">
-            <a
-              href="#"
-              className="relative w-12 h-12 transition-transform duration-300 hover:scale-110"
-              style={{
-                transform: `translate(${mousePos.x * 3}px, ${mousePos.y * 3}px)`,
-              }}
-            >
-              <Image
+            <a href="#" className="relative w-12 h-12 transition-transform duration-300 hover:scale-110">
+              <img
                 src="/demos/stefanos-bistro/logo.png"
                 alt="Stefano's Bistro"
-                fill
-                className="object-contain"
+                className="w-full h-full object-contain"
               />
             </a>
 
@@ -420,7 +429,7 @@ export default function StefanosBistroPage() {
         <section className="relative h-[100svh] w-full overflow-hidden">
           {/* Video with parallax */}
           <div
-            className="absolute inset-0 parallax-slow"
+            className="absolute inset-0"
             style={{ transform: `translateY(${parallax(0.3)}px) scale(1.1)` }}
           >
             <video
@@ -436,26 +445,15 @@ export default function StefanosBistroPage() {
           </div>
 
           {/* Layered gradients for depth */}
-          <div className="absolute inset-0 bg-gradient-to-b from-[#06060a]/40 via-transparent to-[#06060a]" />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#06060a]/30 via-transparent to-[#06060a]/30" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#06060a]/50 via-transparent to-[#06060a]" />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#06060a]/40 via-transparent to-[#06060a]/40" />
           <div className="absolute inset-0 shadow-[inset_0_0_300px_rgba(0,0,0,0.7)]" />
 
           {/* Hero Content */}
           <div className="relative z-10 h-full flex flex-col items-center justify-center px-6">
-            <div
-              className="text-center"
-              style={{
-                transform: `translate(${mousePos.x * -10}px, ${mousePos.y * -10}px)`,
-                transition: "transform 0.3s ease-out",
-              }}
-            >
+            <div className="text-center">
               {/* Floating logo */}
-              <div
-                className="mb-10 reveal-on-scroll"
-                style={{
-                  transform: `translateY(${parallax(-0.1)}px)`,
-                }}
-              >
+              <div className="mb-10 reveal-on-scroll">
                 <div className="w-28 h-28 md:w-36 md:h-36 mx-auto relative">
                   <div
                     className="absolute inset-0 rounded-full animate-pulse"
@@ -464,21 +462,18 @@ export default function StefanosBistroPage() {
                       transform: "scale(1.5)",
                     }}
                   />
-                  <Image
+                  <img
                     src="/demos/stefanos-bistro/logo.png"
                     alt="Stefano's Bistro"
-                    fill
-                    className="object-contain relative z-10"
+                    className="w-full h-full object-contain relative z-10"
                   />
                 </div>
               </div>
 
               {/* Tagline */}
-              <p className="eyebrow mb-8 reveal-on-scroll">
-                Cartagena de Indias
-              </p>
+              <p className="eyebrow mb-8 reveal-on-scroll">Cartagena de Indias</p>
 
-              {/* Main headline with stagger */}
+              {/* Main headline */}
               <h1 className="font-clash text-5xl md:text-7xl lg:text-[110px] font-light tracking-tight leading-[0.9] mb-10 stagger-children reveal-on-scroll">
                 <span className="block text-white">Italian</span>
                 <span className="block text-gradient py-2">&amp;</span>
@@ -494,16 +489,10 @@ export default function StefanosBistroPage() {
 
               {/* CTAs */}
               <div className="flex flex-col sm:flex-row items-center justify-center gap-4 reveal-on-scroll">
-                <a
-                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MESSAGE}`}
-                  className="btn-magnetic"
-                >
+                <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MESSAGE}`} className="btn-magnetic">
                   Reservar Mesa
                 </a>
-                <a
-                  href="#menu"
-                  className="btn-magnetic !border-white/10"
-                >
+                <a href="#menu" className="btn-magnetic !border-white/10">
                   Explorar Menú
                 </a>
               </div>
@@ -511,183 +500,175 @@ export default function StefanosBistroPage() {
 
             {/* Scroll indicator */}
             <div className="absolute bottom-10 left-1/2 -translate-x-1/2 flex flex-col items-center gap-3">
-              <span className="text-[9px] tracking-[0.4em] uppercase text-white/20">
-                Scroll
-              </span>
-              <div className="w-px h-12 bg-gradient-to-b from-white/30 to-transparent relative overflow-hidden">
-                <div
-                  className="absolute inset-x-0 h-4 bg-white/60"
-                  style={{
-                    top: `${(scrollY % 48)}px`,
-                  }}
+              <span className="text-[9px] tracking-[0.4em] uppercase text-white/20">Scroll</span>
+              <div className="w-px h-12 bg-gradient-to-b from-white/30 to-transparent" />
+            </div>
+          </div>
+        </section>
+
+        {/* ═══════════════════════════════════════════════════════════════
+            FEATURED DISHES — Full-Width Image Gallery
+            ═══════════════════════════════════════════════════════════════ */}
+        <section className="py-32 relative">
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="text-center mb-20 reveal-on-scroll">
+              <p className="eyebrow mb-6">Destacados</p>
+              <h2 className="font-clash text-4xl md:text-6xl font-light text-white">
+                Signature Dishes
+              </h2>
+            </div>
+
+            {/* Featured Images Grid */}
+            <div className="grid md:grid-cols-2 gap-8 reveal-on-scroll">
+              {/* Fish Dish */}
+              <div className="group relative aspect-[4/3] img-zoom card-3d">
+                <img
+                  src="/demos/stefanos-bistro/food-fish.jpg"
+                  alt="Pecan Crusted Fish"
+                  className="w-full h-full object-cover"
                 />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#06060a]/80 via-[#06060a]/20 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-8">
+                  <p className="eyebrow mb-2">Signature</p>
+                  <h3 className="font-clash text-2xl md:text-3xl text-white mb-2">Pecan Crusted Fish</h3>
+                  <p className="text-white/50 text-sm mb-3">Atlantic salmon, toasted pecan crust, beurre blanc</p>
+                  <span className="inline-block px-4 py-2 text-sm font-clash" style={{ background: BRAND.sage, color: "#06060a" }}>
+                    $38
+                  </span>
+                </div>
+              </div>
+
+              {/* Burger */}
+              <div className="group relative aspect-[4/3] img-zoom card-3d">
+                <img
+                  src="/demos/stefanos-bistro/food-burger.jpg"
+                  alt="Signature Burger"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#06060a]/80 via-[#06060a]/20 to-transparent" />
+                <div className="absolute bottom-0 left-0 right-0 p-8">
+                  <p className="eyebrow mb-2">Signature</p>
+                  <h3 className="font-clash text-2xl md:text-3xl text-white mb-2">The Stefano Burger</h3>
+                  <p className="text-white/50 text-sm mb-3">Brioche bun, thick-cut bacon, house sauce, truffle fries</p>
+                  <span className="inline-block px-4 py-2 text-sm font-clash" style={{ background: BRAND.sage, color: "#06060a" }}>
+                    $28
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
         {/* ═══════════════════════════════════════════════════════════════
-            PHILOSOPHY — Apple-style Sticky Text
+            PHILOSOPHY — Quote Section
             ═══════════════════════════════════════════════════════════════ */}
         <section className="py-40 md:py-56 px-6 relative overflow-hidden">
-          {/* Background glow */}
           <div
             className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[1000px] rounded-full opacity-[0.03]"
-            style={{
-              background: `radial-gradient(circle, ${BRAND.sage} 0%, transparent 60%)`,
-              transform: `translate(-50%, -50%) translate(${mousePos.x * 30}px, ${mousePos.y * 30}px)`,
-              transition: "transform 0.5s ease-out",
-            }}
+            style={{ background: `radial-gradient(circle, ${BRAND.sage} 0%, transparent 60%)` }}
           />
 
           <div className="max-w-5xl mx-auto text-center relative z-10">
             <p className="eyebrow mb-10 reveal-on-scroll">Nuestra Filosofía</p>
-
-            <blockquote
-              className="font-clash text-3xl md:text-5xl lg:text-6xl font-light leading-[1.2] mb-12 reveal-on-scroll"
-              style={{
-                transform: `translateY(${parallax(-0.05)}px)`,
-              }}
-            >
-              <span className="text-white/90">
-                &ldquo;La cocina no es solo alimentar el cuerpo,
-              </span>
+            <blockquote className="font-clash text-3xl md:text-5xl lg:text-6xl font-light leading-[1.2] mb-12 reveal-on-scroll">
+              <span className="text-white/90">&ldquo;La cocina no es solo alimentar el cuerpo,</span>
               <br />
-              <span className="text-gradient">
-                es nutrir el alma.&rdquo;
-              </span>
+              <span className="text-gradient">es nutrir el alma.&rdquo;</span>
             </blockquote>
-
-            <p className="text-white/30 text-sm uppercase tracking-[0.3em] reveal-on-scroll">
-              — Chef Stephen Ng
-            </p>
+            <p className="text-white/30 text-sm uppercase tracking-[0.3em] reveal-on-scroll">— Chef Stephen Ng</p>
           </div>
         </section>
 
         {/* ═══════════════════════════════════════════════════════════════
-            MENU — Immersive Gallery with Parallax
+            FULL MENU — Tabbed Categories
             ═══════════════════════════════════════════════════════════════ */}
         <section id="menu" className="py-32 relative">
-          <div className="max-w-7xl mx-auto px-6">
-            {/* Section header */}
-            <div className="text-center mb-24 reveal-on-scroll">
+          <div className="max-w-5xl mx-auto px-6">
+            <div className="text-center mb-16 reveal-on-scroll">
               <p className="eyebrow mb-6">Nuestra Carta</p>
-              <h2 className="font-clash text-4xl md:text-6xl lg:text-7xl font-light text-white">
-                Platos Signature
-              </h2>
+              <h2 className="font-clash text-4xl md:text-6xl font-light text-white">The Menu</h2>
             </div>
 
-            {/* Menu items */}
-            <div className="space-y-40 md:space-y-56">
-              {menuHighlights.map((item, index) => (
-                <div
-                  key={index}
-                  className={`grid md:grid-cols-2 gap-12 md:gap-20 items-center ${
-                    index % 2 === 1 ? "md:[direction:rtl]" : ""
-                  }`}
+            {/* Category Tabs */}
+            <div className="flex flex-wrap justify-center gap-2 mb-16 reveal-on-scroll">
+              {menuCategories.map((cat, i) => (
+                <button
+                  key={i}
+                  onClick={() => setActiveCategory(i)}
+                  className={`menu-tab ${activeCategory === i ? "active" : ""}`}
                 >
-                  {/* Image */}
-                  <div
-                    className="reveal-on-scroll reveal-clip md:[direction:ltr]"
-                    style={{
-                      transform: `translateY(${parallax(index % 2 === 0 ? -0.02 : 0.02)}px)`,
-                    }}
-                  >
-                    <div className="relative aspect-[4/3] img-zoom card-3d">
-                      <Image
-                        src={item.image}
-                        alt={item.name}
-                        fill
-                        className="object-cover"
-                      />
-                      {/* Price badge */}
-                      <div className="absolute bottom-6 right-6 z-10">
-                        <span
-                          className="px-5 py-2.5 text-sm font-clash tracking-wider backdrop-blur-sm"
-                          style={{ background: `${BRAND.sage}e0`, color: "#06060a" }}
-                        >
-                          {item.price}
-                        </span>
-                      </div>
-                      {/* Gradient overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#06060a]/60 via-transparent to-transparent" />
-                    </div>
-                  </div>
-
-                  {/* Content */}
-                  <div className="md:[direction:ltr] reveal-on-scroll">
-                    <span className="eyebrow block mb-6">
-                      {String(index + 1).padStart(2, "0")}
-                    </span>
-                    <h3 className="font-clash text-3xl md:text-4xl lg:text-5xl font-light mb-3 text-white">
-                      {item.name}
-                    </h3>
-                    <p className="font-instrument text-xl text-white/30 italic mb-8">
-                      {item.nameSp}
-                    </p>
-                    <p className="text-white/50 text-lg md:text-xl leading-relaxed max-w-md">
-                      {item.description}
-                    </p>
-                  </div>
-                </div>
+                  {cat.name}
+                </button>
               ))}
             </div>
 
+            {/* Menu Items */}
+            <div className="reveal-on-scroll">
+              <div className="mb-8">
+                <h3 className="font-clash text-2xl text-white mb-2">{menuCategories[activeCategory].name}</h3>
+                <p className="text-white/30 font-instrument italic">{menuCategories[activeCategory].nameSp}</p>
+              </div>
+
+              <div className="stagger-children revealed">
+                {menuCategories[activeCategory].items.map((item, i) => (
+                  <div key={i} className="menu-item flex justify-between items-start gap-8">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-1">
+                        <h4 className="font-clash text-lg text-white">{item.name}</h4>
+                        {item.featured && (
+                          <span className="text-[9px] tracking-wider uppercase px-2 py-0.5" style={{ background: `${BRAND.sage}30`, color: BRAND.sage }}>
+                            Featured
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-white/30 text-sm font-instrument italic mb-2">{item.nameSp}</p>
+                      <p className="text-white/50 text-sm">{item.desc}</p>
+                    </div>
+                    <span className="font-clash text-xl text-gradient shrink-0">{item.price}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* CTA */}
-            <div className="text-center mt-32 reveal-on-scroll">
-              <a
-                href={`https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MESSAGE}`}
-                className="btn-magnetic"
-              >
-                Ver Menú Completo
+            <div className="text-center mt-16 reveal-on-scroll">
+              <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MESSAGE}`} className="btn-magnetic">
+                Reservar Mesa
               </a>
             </div>
           </div>
         </section>
 
         {/* ═══════════════════════════════════════════════════════════════
-            STORY — Chef Section with Depth
+            STORY — Chef Section
             ═══════════════════════════════════════════════════════════════ */}
-        <section
-          id="historia"
-          className="py-40 md:py-56 relative overflow-hidden"
-        >
-          {/* Background grid */}
+        <section id="historia" className="py-40 md:py-56 relative overflow-hidden">
           <div
             className="absolute inset-0 opacity-[0.02]"
             style={{
-              backgroundImage: `
-                linear-gradient(${BRAND.sage}20 1px, transparent 1px),
-                linear-gradient(90deg, ${BRAND.sage}20 1px, transparent 1px)
-              `,
+              backgroundImage: `linear-gradient(${BRAND.sage}20 1px, transparent 1px), linear-gradient(90deg, ${BRAND.sage}20 1px, transparent 1px)`,
               backgroundSize: "60px 60px",
-              transform: `translateY(${parallax(0.05)}px)`,
             }}
           />
 
           <div className="max-w-6xl mx-auto px-6 relative z-10">
             <div className="grid md:grid-cols-2 gap-20 md:gap-32 items-center">
               {/* Image */}
-              <div
-                className="reveal-on-scroll reveal-scale"
-                style={{ transform: `translateY(${parallax(-0.03)}px)` }}
-              >
+              <div className="reveal-on-scroll reveal-scale">
                 <div className="relative">
                   <div className="aspect-[3/4] bg-gradient-to-br from-[rgba(163,168,140,0.08)] to-transparent flex items-center justify-center border border-white/5 card-3d">
                     <div className="text-center">
                       <div className="w-36 h-36 mx-auto mb-8 relative">
-                        <Image
+                        <img
                           src="/demos/stefanos-bistro/logo.png"
                           alt="Chef"
-                          fill
-                          className="object-contain opacity-70"
+                          className="w-full h-full object-contain opacity-70"
                         />
                       </div>
                       <p className="eyebrow mb-2">Executive Chef</p>
                       <p className="font-clash text-2xl text-white/80">Stephen Ng</p>
                     </div>
                   </div>
-                  {/* Decorative lines */}
                   <div className="absolute -bottom-6 -right-6 w-full h-full border border-white/5 -z-10" />
                 </div>
               </div>
@@ -721,12 +702,8 @@ export default function StefanosBistroPage() {
                     { number: "4.9", label: "Rating" },
                   ].map((stat, i) => (
                     <div key={i} className="text-center">
-                      <p className="font-clash text-4xl md:text-5xl text-gradient">
-                        {stat.number}
-                      </p>
-                      <p className="text-white/30 text-xs uppercase tracking-wider mt-2">
-                        {stat.label}
-                      </p>
+                      <p className="font-clash text-4xl md:text-5xl text-gradient">{stat.number}</p>
+                      <p className="text-white/30 text-xs uppercase tracking-wider mt-2">{stat.label}</p>
                     </div>
                   ))}
                 </div>
@@ -736,15 +713,13 @@ export default function StefanosBistroPage() {
         </section>
 
         {/* ═══════════════════════════════════════════════════════════════
-            EXPERIENCE — 3D Cards
+            EXPERIENCE — Cards
             ═══════════════════════════════════════════════════════════════ */}
         <section className="py-32 px-6">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-20 reveal-on-scroll">
               <p className="eyebrow mb-6">La Experiencia</p>
-              <h2 className="font-clash text-4xl md:text-5xl font-light text-white">
-                Momentos Memorables
-              </h2>
+              <h2 className="font-clash text-4xl md:text-5xl font-light text-white">Momentos Memorables</h2>
             </div>
 
             <div className="grid md:grid-cols-3 gap-6 stagger-children reveal-on-scroll">
@@ -753,14 +728,8 @@ export default function StefanosBistroPage() {
                 { icon: "✦", title: "Celebraciones", desc: "El escenario perfecto para cumpleaños y aniversarios." },
                 { icon: "○", title: "Encuentros", desc: "Ambiente versátil para reuniones con amigos." },
               ].map((item, i) => (
-                <div
-                  key={i}
-                  className="card-3d p-10 bg-white/[0.02] border border-white/5 hover:border-white/10 transition-all duration-500 group"
-                >
-                  <span
-                    className="text-4xl block mb-6 transition-transform duration-500 group-hover:scale-110"
-                    style={{ color: BRAND.sage }}
-                  >
+                <div key={i} className="card-3d p-10 bg-white/[0.02] border border-white/5 hover:border-white/10 transition-all duration-500 group">
+                  <span className="text-4xl block mb-6 transition-transform duration-500 group-hover:scale-110" style={{ color: BRAND.sage }}>
                     {item.icon}
                   </span>
                   <h3 className="font-clash text-2xl mb-4 text-white">{item.title}</h3>
@@ -774,29 +743,16 @@ export default function StefanosBistroPage() {
         {/* ═══════════════════════════════════════════════════════════════
             RESERVATIONS
             ═══════════════════════════════════════════════════════════════ */}
-        <section
-          id="reservar"
-          className="py-32 relative"
-          style={{
-            background: `linear-gradient(180deg, transparent, ${BRAND.sage}08, transparent)`,
-          }}
-        >
+        <section id="reservar" className="py-32 relative" style={{ background: `linear-gradient(180deg, transparent, ${BRAND.sage}08, transparent)` }}>
           <div className="max-w-6xl mx-auto px-6">
             <div className="grid md:grid-cols-2 gap-20 md:gap-32">
               {/* Hours */}
               <div className="reveal-on-scroll">
                 <p className="eyebrow mb-6">Horario</p>
-                <h2 className="font-clash text-3xl md:text-4xl font-light mb-12 text-white">
-                  Horas de Atención
-                </h2>
+                <h2 className="font-clash text-3xl md:text-4xl font-light mb-12 text-white">Horas de Atención</h2>
                 <div className="space-y-0 stagger-children reveal-on-scroll">
                   {hours.map((item, i) => (
-                    <div
-                      key={i}
-                      className={`flex justify-between py-4 border-b border-white/5 ${
-                        item.closed ? "opacity-30" : ""
-                      }`}
-                    >
+                    <div key={i} className={`flex justify-between py-4 border-b border-white/5 ${item.closed ? "opacity-30" : ""}`}>
                       <span className="text-white/50">{item.day}</span>
                       <span className="text-white">{item.time}</span>
                     </div>
@@ -807,9 +763,7 @@ export default function StefanosBistroPage() {
               {/* Contact */}
               <div className="reveal-on-scroll">
                 <p className="eyebrow mb-6">Ubicación</p>
-                <h2 className="font-clash text-3xl md:text-4xl font-light mb-12 text-white">
-                  Visítanos
-                </h2>
+                <h2 className="font-clash text-3xl md:text-4xl font-light mb-12 text-white">Visítanos</h2>
                 <div className="space-y-8 stagger-children reveal-on-scroll">
                   <div>
                     <p className="text-white/30 text-xs uppercase tracking-[0.2em] mb-2">Dirección</p>
@@ -826,10 +780,7 @@ export default function StefanosBistroPage() {
                 </div>
 
                 <div className="mt-12">
-                  <a
-                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MESSAGE}`}
-                    className="btn-magnetic w-full justify-center"
-                  >
+                  <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=${WHATSAPP_MESSAGE}`} className="btn-magnetic w-full justify-center">
                     <svg className="w-5 h-5 mr-3" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                     </svg>
@@ -849,12 +800,7 @@ export default function StefanosBistroPage() {
             <div className="flex flex-col md:flex-row items-center justify-between gap-12">
               <div className="text-center md:text-left flex items-center gap-6">
                 <div className="w-16 h-16 relative">
-                  <Image
-                    src="/demos/stefanos-bistro/logo.png"
-                    alt="Stefano's Bistro"
-                    fill
-                    className="object-contain opacity-70"
-                  />
+                  <img src="/demos/stefanos-bistro/logo.png" alt="Stefano's Bistro" className="w-full h-full object-contain opacity-70" />
                 </div>
                 <div>
                   <p className="font-clash text-xl text-white/80">Stefano&apos;s Bistro</p>
@@ -864,11 +810,7 @@ export default function StefanosBistroPage() {
 
               <div className="flex items-center gap-10">
                 {["Instagram", "Facebook", "WhatsApp"].map((s) => (
-                  <a
-                    key={s}
-                    href="#"
-                    className="text-white/30 hover:text-white text-xs uppercase tracking-[0.15em] transition-colors line-draw py-1"
-                  >
+                  <a key={s} href="#" className="text-white/30 hover:text-white text-xs uppercase tracking-[0.15em] transition-colors line-draw py-1">
                     {s}
                   </a>
                 ))}
@@ -879,11 +821,7 @@ export default function StefanosBistroPage() {
               <p>© {new Date().getFullYear()} Stefano&apos;s Bistro</p>
               <p>
                 Creado por{" "}
-                <a
-                  href="https://machinemindconsulting.com"
-                  className="hover:text-white transition-colors"
-                  style={{ color: BRAND.sage }}
-                >
+                <a href="https://machinemindconsulting.com" className="hover:text-white transition-colors" style={{ color: BRAND.sage }}>
                   MachineMind
                 </a>
               </p>
