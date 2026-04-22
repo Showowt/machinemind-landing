@@ -1,13 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import type * as ThreeTypes from 'three';
-
-// ═══════════════════════════════════════════════════════════════════════════
-// MACHINEMIND — #1 AI AUTOMATION CONSULTANCY
-// Canvas Frame Sequence (Apple technique) + Three.js Particles
-// Lenis Smooth Scroll + GSAP + GPU Compositing
-// ═══════════════════════════════════════════════════════════════════════════
 
 const TOTAL_FRAMES = 150;
 const FRAME_PATH = (i: number) => `/frames/frame-${String(i).padStart(4, '0')}.jpg`;
@@ -64,18 +57,13 @@ export default function Home() {
   const [visibleProjects, setVisibleProjects] = useState(12);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const threeCanvasRef = useRef<HTMLCanvasElement>(null);
-  const cursorRef = useRef<HTMLDivElement>(null);
-  const cursorDotRef = useRef<HTMLDivElement>(null);
   const framesRef = useRef<HTMLImageElement[]>([]);
   const framesLoaded = useRef(false);
 
   const filteredProjects = activeFilter === 'All'
     ? PROJECTS : PROJECTS.filter(p => p.industry === activeFilter);
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // 1. LOAD ALL FRAMES — preloader progress is REAL
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ── LOAD FRAMES ──
   useEffect(() => {
     let count = 0;
     const imgs: HTMLImageElement[] = [];
@@ -91,7 +79,6 @@ export default function Home() {
     });
 
     (async () => {
-      // Load in batches for speed
       for (let i = 1; i <= TOTAL_FRAMES; i += 20) {
         const batch = [];
         for (let j = i; j < Math.min(i + 20, TOTAL_FRAMES + 1); j++) batch.push(load(j));
@@ -101,7 +88,6 @@ export default function Home() {
       framesRef.current = imgs;
       framesLoaded.current = true;
 
-      // Draw first frame immediately
       const c = canvasRef.current;
       if (c) {
         c.width = window.innerWidth;
@@ -110,16 +96,12 @@ export default function Home() {
         if (ctx && imgs[0]?.naturalWidth) drawCover(ctx, imgs[0], c.width, c.height);
       }
 
-      // Fade out preloader
       setPreloaderFading(true);
       setTimeout(() => setPreloaderVisible(false), 800);
     })();
   }, []);
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // 2. SCROLL ENGINE — Lenis + GSAP + Canvas RAF + Three.js Particles
-  //    Starts after preloader fades, canvas never re-mounts
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ── SCROLL ENGINE — single unified loop, no Three.js, no blur ──
   useEffect(() => {
     if (preloaderVisible) return;
 
@@ -128,26 +110,27 @@ export default function Home() {
     let lenisInstance: any = null;
 
     const init = async () => {
-      const gsap = (await import('gsap')).default;
+      const gsapModule = await import('gsap');
+      const gsap = gsapModule.default;
       const { ScrollTrigger } = await import('gsap/ScrollTrigger');
-      const Lenis = (await import('@studio-freight/lenis')).default;
-      const THREE = await import('three');
+      const LenisDefault = (await import('@studio-freight/lenis')).default;
       gsap.registerPlugin(ScrollTrigger);
 
       if (destroyed) return;
 
-      // ── LENIS ──
-      lenisInstance = new Lenis({
-        duration: 1.4,
+      // ── LENIS — butter smooth ──
+      const lenis = new LenisDefault({
+        duration: 1.2,
         easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
         smoothWheel: true,
-        touchMultiplier: 1.5,
+        touchMultiplier: 2,
       });
-      lenisInstance.on('scroll', ScrollTrigger.update);
-      gsap.ticker.add((time: number) => { lenisInstance?.raf(time * 1000); });
+      lenisInstance = lenis;
+      lenis.on('scroll', ScrollTrigger.update);
+      gsap.ticker.add((time: number) => { lenis.raf(time * 1000); });
       gsap.ticker.lagSmoothing(0);
 
-      // ── CANVAS FRAME RENDERER ──
+      // ── CANVAS ──
       const canvas = canvasRef.current;
       const frames = framesRef.current;
       if (!canvas || !frames.length) return;
@@ -163,6 +146,7 @@ export default function Home() {
 
       let currentFrame = 0;
       let targetFrame = 0;
+      let lastDrawn = -1;
 
       ScrollTrigger.create({
         trigger: document.documentElement,
@@ -174,111 +158,38 @@ export default function Home() {
         },
       });
 
-      // ── THREE.JS PARTICLES (floating gold + cyan particles over everything) ──
-      const tc = threeCanvasRef.current;
-      let threeRenderer: ThreeTypes.WebGLRenderer | null = null;
-      let threeScene: ThreeTypes.Scene | null = null;
-      let threeCamera: ThreeTypes.PerspectiveCamera | null = null;
-      let particles: ThreeTypes.Points | null = null;
-      let sphere: ThreeTypes.Mesh | null = null;
+      // ── SINGLE RENDER LOOP — everything on one ticker ──
+      const nav = document.querySelector('.nav') as HTMLElement;
+      const bar = document.querySelector('.scroll-progress') as HTMLElement;
+      let navBg = 0;
+      let pw = 0;
 
-      if (tc) {
-        threeRenderer = new THREE.WebGLRenderer({ canvas: tc, alpha: true, antialias: true });
-        threeRenderer.setSize(window.innerWidth, window.innerHeight);
-        threeRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-
-        threeScene = new THREE.Scene();
-        threeCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        threeCamera.position.z = 5;
-
-        // Particles
-        const count = 1500;
-        const positions = new Float32Array(count * 3);
-        const colors = new Float32Array(count * 3);
-        for (let i = 0; i < count; i++) {
-          positions[i * 3] = (Math.random() - 0.5) * 20;
-          positions[i * 3 + 1] = (Math.random() - 0.5) * 20;
-          positions[i * 3 + 2] = (Math.random() - 0.5) * 20;
-          const t = Math.random();
-          colors[i * 3] = 0.788 * (1 - t);
-          colors[i * 3 + 1] = 0.663 * (1 - t) + 0.898 * t;
-          colors[i * 3 + 2] = 0.431 * (1 - t) + t;
-        }
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-        const mat = new THREE.PointsMaterial({
-          size: 0.015, vertexColors: true, transparent: true,
-          opacity: 0.6, blending: THREE.AdditiveBlending,
-        });
-        particles = new THREE.Points(geo, mat);
-        threeScene.add(particles);
-
-        // Wireframe sphere
-        const sphereGeo = new THREE.IcosahedronGeometry(1.8, 1);
-        const wireMat = new THREE.MeshBasicMaterial({
-          color: 0xc9a96e, wireframe: true, transparent: true, opacity: 0.08,
-        });
-        sphere = new THREE.Mesh(sphereGeo, wireMat);
-        threeScene.add(sphere);
-
-        const onThreeResize = () => {
-          if (!threeCamera || !threeRenderer) return;
-          threeCamera.aspect = window.innerWidth / window.innerHeight;
-          threeCamera.updateProjectionMatrix();
-          threeRenderer.setSize(window.innerWidth, window.innerHeight);
-        };
-        window.addEventListener('resize', onThreeResize, { passive: true });
-      }
-
-      let mouseX = 0, mouseY = 0;
-      const onMouse = (e: MouseEvent) => {
-        mouseX = (e.clientX / window.innerWidth) * 2 - 1;
-        mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
-      };
-      window.addEventListener('mousemove', onMouse, { passive: true });
-
-      // ── UNIFIED RENDER LOOP (rides GSAP ticker) ──
       gsap.ticker.add(() => {
-        // Canvas frame interpolation
+        // Frame interpolation — only draw when frame changes
         currentFrame += (targetFrame - currentFrame) * 0.12;
         const idx = Math.min(Math.max(Math.round(currentFrame), 0), frames.length - 1);
-        const img = frames[idx];
-        if (img?.naturalWidth && ctx) {
-          drawCover(ctx, img, canvas.width, canvas.height);
+        if (idx !== lastDrawn) {
+          const img = frames[idx];
+          if (img?.naturalWidth) {
+            drawCover(ctx, img, canvas.width, canvas.height);
+          }
+          lastDrawn = idx;
         }
 
-        // Three.js particles
-        if (particles && sphere && threeRenderer && threeScene && threeCamera) {
-          particles.rotation.y += 0.0003;
-          particles.rotation.x += 0.0001;
-          sphere.rotation.y += 0.0015 + mouseX * 0.005;
-          sphere.rotation.x += 0.001 + mouseY * 0.005;
-          threeRenderer.render(threeScene, threeCamera);
+        // Nav glassmorphism
+        if (nav) {
+          const t = window.scrollY > 60 ? 0.92 : 0;
+          navBg += (t - navBg) * 0.08;
+          nav.style.background = `rgba(6,6,10,${navBg.toFixed(3)})`;
         }
-      });
 
-      // ── NAV GLASSMORPHISM (on ticker) ──
-      let navBg = 0;
-      const nav = document.querySelector('.nav') as HTMLElement;
-      gsap.ticker.add(() => {
-        if (!nav) return;
-        const t = window.scrollY > 60 ? 0.92 : 0;
-        navBg += (t - navBg) * 0.08;
-        nav.style.background = `rgba(6,6,10,${navBg.toFixed(3)})`;
-        nav.style.backdropFilter = navBg > 0.01 ? `blur(${(navBg * 20).toFixed(1)}px)` : 'none';
-      });
-
-      // ── SCROLL PROGRESS BAR (on ticker) ──
-      let pw = 0;
-      const bar = document.querySelector('.scroll-progress') as HTMLElement;
-      if (bar) {
-        gsap.ticker.add(() => {
+        // Scroll progress
+        if (bar) {
           const t = window.scrollY / Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
           pw += (t - pw) * 0.1;
           bar.style.transform = `scaleX(${pw.toFixed(5)})`;
-        });
-      }
+        }
+      });
 
       // ── HERO ENTRANCE ──
       const tl = gsap.timeline({ delay: 0.2 });
@@ -288,7 +199,7 @@ export default function Home() {
         .from('.hero-cta-wrap', { y: 30, opacity: 0, duration: 0.8, ease: 'power3.out' }, '-=0.5')
         .from('.hero-scroll-indicator', { opacity: 0, duration: 1.2 }, '-=0.3');
 
-      // ── HERO PARALLAX (text moves up as you scroll, ship stays) ──
+      // ── HERO PARALLAX ──
       gsap.to('.hero-content', {
         y: -150, opacity: 0,
         scrollTrigger: { trigger: '.hero', start: 'top top', end: '60% top', scrub: 1.5 },
@@ -301,14 +212,14 @@ export default function Home() {
       // ── REVEAL ANIMATIONS ──
       gsap.utils.toArray<HTMLElement>('.reveal-up').forEach((el) => {
         gsap.from(el, {
-          y: 80, opacity: 0, duration: 1.2, ease: 'power3.out',
+          y: 60, opacity: 0, duration: 1, ease: 'power3.out',
           scrollTrigger: { trigger: el, start: 'top 90%', toggleActions: 'play none none none' },
         });
       });
 
       gsap.utils.toArray<HTMLElement>('.stagger-children').forEach((container) => {
         gsap.from(container.children, {
-          y: 60, opacity: 0, duration: 1, stagger: 0.1, ease: 'power3.out',
+          y: 40, opacity: 0, duration: 0.8, stagger: 0.08, ease: 'power3.out',
           scrollTrigger: { trigger: container, start: 'top 85%', toggleActions: 'play none none none' },
         });
       });
@@ -335,32 +246,36 @@ export default function Home() {
       // ── SCALE-IN ──
       gsap.utils.toArray<HTMLElement>('.scale-in').forEach((el) => {
         gsap.from(el, {
-          scale: 0.92, opacity: 0, duration: 1, ease: 'power2.out',
+          scale: 0.95, opacity: 0, duration: 0.8, ease: 'power2.out',
           scrollTrigger: { trigger: el, start: 'top 90%', toggleActions: 'play none none none' },
         });
       });
     };
 
     init();
-    return () => { destroyed = true; lenisInstance?.destroy(); };
+    return () => {
+      destroyed = true;
+      lenisInstance?.destroy();
+    };
   }, [preloaderVisible]);
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // 3. CUSTOM CURSOR
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ── CUSTOM CURSOR (desktop only, own RAF) ──
   useEffect(() => {
     if (preloaderVisible) return;
-    const cursor = cursorRef.current;
-    const dot = cursorDotRef.current;
+    if (window.matchMedia('(max-width: 768px)').matches) return;
+    if (window.matchMedia('(pointer: coarse)').matches) return;
+
+    const cursor = document.querySelector('.cursor') as HTMLElement;
+    const dot = document.querySelector('.cursor-dot') as HTMLElement;
     if (!cursor || !dot) return;
 
     let mx = 0, my = 0, cx = 0, cy = 0, dx2 = 0, dy2 = 0, raf: number;
 
     const move = (e: MouseEvent) => { mx = e.clientX; my = e.clientY; };
     const tick = () => {
-      cx += (mx - cx) * 0.08; cy += (my - cy) * 0.08;
+      cx += (mx - cx) * 0.1; cy += (my - cy) * 0.1;
       cursor.style.transform = `translate3d(${cx - 18}px,${cy - 18}px,0)`;
-      dx2 += (mx - dx2) * 0.25; dy2 += (my - dy2) * 0.25;
+      dx2 += (mx - dx2) * 0.3; dy2 += (my - dy2) * 0.3;
       dot.style.transform = `translate3d(${dx2 - 2.5}px,${dy2 - 2.5}px,0)`;
       raf = requestAnimationFrame(tick);
     };
@@ -380,24 +295,13 @@ export default function Home() {
     };
   }, [preloaderVisible]);
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // RENDER — Canvas is ALWAYS mounted. Preloader overlays on top.
-  // ═══════════════════════════════════════════════════════════════════════════
   return (
     <>
-      {/* ═══ PERSISTENT BACKGROUND LAYERS (never unmount) ═══ */}
+      {/* ═══ BACKGROUND — single canvas, always mounted ═══ */}
       <canvas ref={canvasRef} className="bg-canvas" />
       <div className="bg-overlay" />
-      <canvas ref={threeCanvasRef} className="three-canvas" />
 
-      {/* Film Grain + Vignette */}
-      <svg className="film-grain" aria-hidden="true">
-        <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="4" stitchTiles="stitch" /></filter>
-        <rect width="100%" height="100%" filter="url(#grain)" />
-      </svg>
-      <div className="vignette" />
-
-      {/* ═══ PRELOADER (overlays on top, fades out) ═══ */}
+      {/* ═══ PRELOADER ═══ */}
       {preloaderVisible && (
         <div className={`preloader ${preloaderFading ? 'preloader-fade' : ''}`}>
           <div className="preloader-content">
@@ -416,8 +320,8 @@ export default function Home() {
       )}
 
       {/* ═══ CURSOR ═══ */}
-      <div ref={cursorRef} className="cursor" />
-      <div ref={cursorDotRef} className="cursor-dot" />
+      <div className="cursor" />
+      <div className="cursor-dot" />
 
       {/* ═══ SCROLL PROGRESS ═══ */}
       <div className="scroll-progress" />
@@ -592,7 +496,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ═══ MANIFESTO (transparent — ship fully visible) ═══ */}
+      {/* ═══ MANIFESTO ═══ */}
       <section className="manifesto">
         <div className="manifesto-content reveal-up">
           <p>We don&apos;t build websites.<br />We build systems that <em>breathe</em>,<br />that <em>learn</em>, that <em>compound</em>.<br />Every deployment is a moat.<br />Every pixel is choreographed.<br /><strong>We create what doesn&apos;t exist yet.</strong></p>
@@ -653,9 +557,6 @@ function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, cw: num
   ctx.drawImage(img, (cw - w) / 2, (ch - h) / 2, w, h);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ALL STYLES
-// ═══════════════════════════════════════════════════════════════════════════
 const STYLES = `
 @import url('https://api.fontshare.com/v2/css?f[]=clash-display@200,300,400,500,600,700&display=swap');
 @import url('https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700,900&display=swap');
@@ -665,7 +566,7 @@ const STYLES = `
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
   --bg:#06060a;--fg:#f0f0f3;--gold:#c9a96e;--cyan:#00e5ff;
-  --dim:rgba(240,240,243,0.35);--glass:rgba(255,255,255,0.04);
+  --dim:rgba(240,240,243,0.35);--glass:rgba(6,6,10,0.85);
   --gb:rgba(255,255,255,0.08);
   --fd:'Clash Display',sans-serif;--fb:'Satoshi',sans-serif;
   --fs:'Instrument Serif',serif;--fm:'JetBrains Mono',monospace;
@@ -674,16 +575,11 @@ html{background:var(--bg);color:var(--fg)}
 body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased;cursor:none}
 ::selection{background:var(--gold);color:var(--bg)}
 
-/* ═══ BACKGROUND LAYERS ═══ */
-.bg-canvas{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:0;will-change:contents}
+/* ═══ BACKGROUND ═══ */
+.bg-canvas{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:0}
 .bg-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1;
-  background:radial-gradient(ellipse at 50% 40%,rgba(6,6,10,0.25) 0%,rgba(6,6,10,0.55) 100%);
+  background:radial-gradient(ellipse at 50% 40%,rgba(6,6,10,0.2) 0%,rgba(6,6,10,0.5) 100%);
   pointer-events:none}
-.three-canvas{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:2;pointer-events:none}
-
-/* ═══ OVERLAYS ═══ */
-.film-grain{position:fixed;inset:0;pointer-events:none;opacity:0.025;z-index:9998}
-.vignette{position:fixed;inset:0;pointer-events:none;box-shadow:inset 0 0 250px rgba(0,0,0,0.5);z-index:9997}
 
 /* ═══ PRELOADER ═══ */
 .preloader{position:fixed;inset:0;z-index:99999;background:#06060a;display:flex;align-items:center;justify-content:center;transition:opacity .6s ease,visibility .6s}
@@ -702,12 +598,13 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased;
 .cursor-dot{position:fixed;top:0;left:0;width:5px;height:5px;background:var(--gold);border-radius:50%;pointer-events:none;z-index:99999;will-change:transform}
 .cursor.cursor-hover{width:56px;height:56px;border-color:var(--cyan)}
 @media(max-width:768px){.cursor,.cursor-dot{display:none}body{cursor:auto}}
+@media(pointer:coarse){.cursor,.cursor-dot{display:none}body{cursor:auto}}
 
 /* ═══ SCROLL PROGRESS ═══ */
 .scroll-progress{position:fixed;top:0;left:0;height:2px;width:100%;background:linear-gradient(90deg,var(--gold),var(--cyan));z-index:9999;transform:scaleX(0);transform-origin:left;will-change:transform}
 
 /* ═══ NAV ═══ */
-.nav{position:fixed;top:0;left:0;right:0;z-index:1000;padding:20px clamp(24px,5vw,80px);display:flex;justify-content:space-between;align-items:center}
+.nav{position:fixed;top:0;left:0;right:0;z-index:1000;padding:20px clamp(24px,5vw,80px);display:flex;justify-content:space-between;align-items:center;transition:background .3s}
 .nav-logo{font-family:var(--fb);font-size:11px;font-weight:700;letter-spacing:.3em;color:var(--fg);text-decoration:none}
 .nav-logo-gold{color:var(--gold)}
 .nav-links{display:flex;gap:36px}
@@ -751,7 +648,7 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased;
 .section-header h2{font-family:var(--fd);font-size:clamp(32px,5vw,60px);font-weight:500;letter-spacing:-.03em;line-height:1.1}
 .section-header h2 em{font-family:var(--fs);font-style:italic;color:var(--gold)}
 .section-desc{font-size:16px;color:var(--dim);line-height:1.7;max-width:560px;margin-top:16px}
-.section-dark{background:rgba(6,6,10,0.88);backdrop-filter:blur(2px)}
+.section-dark{background:var(--glass)}
 .section-inner{padding:clamp(100px,15vh,180px) clamp(24px,5vw,80px)}
 .section-divider{height:1px;margin:0 clamp(24px,5vw,80px);background:linear-gradient(90deg,transparent,var(--gold),transparent);transform-origin:center;opacity:.3;position:relative;z-index:5}
 
@@ -766,10 +663,10 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased;
 
 /* ═══ SYSTEMS ═══ */
 .systems-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:2px}
-.system-card{background:var(--glass);border:1px solid var(--gb);padding:48px 40px;position:relative;transition:border-color .4s,background .4s;backdrop-filter:blur(8px)}
+.system-card{background:rgba(6,6,10,0.7);border:1px solid var(--gb);padding:48px 40px;position:relative;transition:border-color .4s,background .4s}
 .system-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--gold);transform:scaleX(0);transform-origin:left;transition:transform .6s cubic-bezier(.4,0,.2,1)}
 .system-card:hover::before{transform:scaleX(1)}
-.system-card:hover{border-color:rgba(201,169,110,0.3);background:rgba(255,255,255,0.06)}
+.system-card:hover{border-color:rgba(201,169,110,0.3);background:rgba(255,255,255,0.04)}
 .sys-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
 .sys-num{font-family:var(--fm);font-size:11px;color:var(--gold);letter-spacing:.2em}
 .sys-icon{font-family:var(--fm);font-size:11px;color:var(--dim)}
@@ -787,7 +684,7 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased;
 .portfolio-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
 @media(max-width:1024px){.portfolio-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:640px){.portfolio-grid{grid-template-columns:1fr}}
-.portfolio-card{aspect-ratio:16/10;background:var(--glass);border:1px solid var(--gb);position:relative;overflow:hidden;transition:all .5s cubic-bezier(.4,0,.2,1);text-decoration:none;display:block;backdrop-filter:blur(4px)}
+.portfolio-card{aspect-ratio:16/10;background:rgba(6,6,10,0.7);border:1px solid var(--gb);position:relative;overflow:hidden;transition:all .5s cubic-bezier(.4,0,.2,1);text-decoration:none;display:block}
 .portfolio-card::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at top left,var(--ac,var(--gold)) 0%,transparent 70%);opacity:0;transition:opacity .5s}
 .portfolio-card:hover::before{opacity:.15}
 .portfolio-card:hover{border-color:var(--ac,var(--gold));transform:translateY(-4px)}
@@ -810,7 +707,7 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased;
 .process-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px}
 @media(max-width:1024px){.process-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:640px){.process-grid{grid-template-columns:1fr}}
-.process-card{background:var(--glass);border:1px solid var(--gb);padding:48px 36px;position:relative;transition:border-color .4s,background .4s;backdrop-filter:blur(8px)}
+.process-card{background:rgba(6,6,10,0.7);border:1px solid var(--gb);padding:48px 36px;position:relative;transition:border-color .4s,background .4s}
 .process-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--gold);transform:scaleX(0);transform-origin:left;transition:transform .6s cubic-bezier(.4,0,.2,1)}
 .process-card:hover::before{transform:scaleX(1)}
 .process-card:hover{border-color:rgba(201,169,110,0.2);background:rgba(255,255,255,0.04)}
