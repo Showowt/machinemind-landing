@@ -101,34 +101,19 @@ export default function Home() {
     })();
   }, []);
 
-  // ── SCROLL ENGINE — single unified loop, no Three.js, no blur ──
+  // ── SCROLL ENGINE — native scroll + GSAP only, no Lenis ──
   useEffect(() => {
     if (preloaderVisible) return;
 
     let destroyed = false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let lenisInstance: any = null;
 
     const init = async () => {
       const gsapModule = await import('gsap');
       const gsap = gsapModule.default;
       const { ScrollTrigger } = await import('gsap/ScrollTrigger');
-      const LenisDefault = (await import('@studio-freight/lenis')).default;
       gsap.registerPlugin(ScrollTrigger);
 
       if (destroyed) return;
-
-      // ── LENIS — butter smooth ──
-      const lenis = new LenisDefault({
-        duration: 1.2,
-        easing: (t: number) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-        smoothWheel: true,
-        touchMultiplier: 2,
-      });
-      lenisInstance = lenis;
-      lenis.on('scroll', ScrollTrigger.update);
-      gsap.ticker.add((time: number) => { lenis.raf(time * 1000); });
-      gsap.ticker.lagSmoothing(0);
 
       // ── CANVAS ──
       const canvas = canvasRef.current;
@@ -140,56 +125,51 @@ export default function Home() {
       const resize = () => {
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
+        // Redraw current frame on resize
+        if (lastDrawn >= 0 && frames[lastDrawn]?.naturalWidth) {
+          drawCover(ctx, frames[lastDrawn], canvas.width, canvas.height);
+        }
       };
       resize();
       window.addEventListener('resize', resize, { passive: true });
 
-      let currentFrame = 0;
-      let targetFrame = 0;
       let lastDrawn = -1;
 
+      // ScrollTrigger directly controls frame index — no extra lerp needed
+      // scrub: 0.3 gives GSAP-handled smoothing (single layer, not triple)
       ScrollTrigger.create({
         trigger: document.documentElement,
         start: 'top top',
         end: 'bottom bottom',
-        scrub: 0,
+        scrub: 0.3,
         onUpdate: (self) => {
-          targetFrame = self.progress * (TOTAL_FRAMES - 1);
+          const idx = Math.min(Math.max(Math.round(self.progress * (TOTAL_FRAMES - 1)), 0), frames.length - 1);
+          if (idx !== lastDrawn) {
+            const img = frames[idx];
+            if (img?.naturalWidth) {
+              drawCover(ctx, img, canvas.width, canvas.height);
+            }
+            lastDrawn = idx;
+          }
         },
       });
 
-      // ── SINGLE RENDER LOOP — everything on one ticker ──
+      // ── NAV + PROGRESS BAR (lightweight, on scroll event) ──
       const nav = document.querySelector('.nav') as HTMLElement;
       const bar = document.querySelector('.scroll-progress') as HTMLElement;
-      let navBg = 0;
-      let pw = 0;
 
-      gsap.ticker.add(() => {
-        // Frame interpolation — only draw when frame changes
-        currentFrame += (targetFrame - currentFrame) * 0.12;
-        const idx = Math.min(Math.max(Math.round(currentFrame), 0), frames.length - 1);
-        if (idx !== lastDrawn) {
-          const img = frames[idx];
-          if (img?.naturalWidth) {
-            drawCover(ctx, img, canvas.width, canvas.height);
-          }
-          lastDrawn = idx;
-        }
+      const onScroll = () => {
+        const scrollY = window.scrollY;
+        const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
 
-        // Nav glassmorphism
         if (nav) {
-          const t = window.scrollY > 60 ? 0.92 : 0;
-          navBg += (t - navBg) * 0.08;
-          nav.style.background = `rgba(6,6,10,${navBg.toFixed(3)})`;
+          nav.style.background = scrollY > 60 ? 'rgba(6,6,10,0.92)' : 'transparent';
         }
-
-        // Scroll progress
         if (bar) {
-          const t = window.scrollY / Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-          pw += (t - pw) * 0.1;
-          bar.style.transform = `scaleX(${pw.toFixed(5)})`;
+          bar.style.transform = `scaleX(${(scrollY / Math.max(1, maxScroll)).toFixed(5)})`;
         }
-      });
+      };
+      window.addEventListener('scroll', onScroll, { passive: true });
 
       // ── HERO ENTRANCE ──
       const tl = gsap.timeline({ delay: 0.2 });
@@ -253,10 +233,7 @@ export default function Home() {
     };
 
     init();
-    return () => {
-      destroyed = true;
-      lenisInstance?.destroy();
-    };
+    return () => { destroyed = true; };
   }, [preloaderVisible]);
 
   // ── CUSTOM CURSOR (desktop only, own RAF) ──
