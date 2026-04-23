@@ -63,6 +63,7 @@ export default function Home() {
   const [visibleProjects, setVisibleProjects] = useState(12);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const reelRef = useRef<HTMLVideoElement>(null);
 
   const filteredProjects = activeFilter === 'All'
     ? PROJECTS : PROJECTS.filter(p => p.industry === activeFilter);
@@ -78,6 +79,24 @@ export default function Home() {
     const fallback = setTimeout(() => setReady(true), 2000);
     return () => { v.removeEventListener('canplay', onReady); clearTimeout(fallback); };
   }, []);
+
+  // ── REEL: autoplay when scrolled into view, pause when out ──
+  useEffect(() => {
+    const reel = reelRef.current;
+    if (!reel) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          reel.play().catch(() => {});
+        } else {
+          reel.pause();
+        }
+      },
+      { threshold: 0.3 }
+    );
+    observer.observe(reel);
+    return () => observer.disconnect();
+  }, [ready]);
 
   // ── GSAP ANIMATIONS (only after ready) ──
   useEffect(() => {
@@ -288,6 +307,22 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ═══ COMMERCIAL REEL ═══ */}
+      <section className="reel-section">
+        <div className="reel-inner reveal-up">
+          <video
+            ref={reelRef}
+            className="reel-video"
+            muted
+            loop
+            playsInline
+            preload="metadata"
+          >
+            <source src="/mm-commercial.mp4" type="video/mp4" />
+          </video>
+        </div>
+      </section>
+
       <div className="section-divider" />
 
       {/* ═══ PORTFOLIO ═══ */}
@@ -366,23 +401,10 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ═══ COMMERCIAL VIDEO ═══ */}
-      <section className="commercial-section">
-        <div className="commercial-inner reveal-up">
-          <p className="eyebrow">THE VISION</p>
-          <h2 className="commercial-title">We don&apos;t build websites.<br />We build systems that <em>breathe</em>.</h2>
-          <div className="commercial-video-wrap">
-            <video
-              className="commercial-video"
-              controls
-              playsInline
-              preload="metadata"
-              poster=""
-            >
-              <source src="/mm-commercial.mp4" type="video/mp4" />
-            </video>
-          </div>
-          <p className="commercial-tagline"><strong>We create what doesn&apos;t exist yet.</strong></p>
+      {/* ═══ MANIFESTO ═══ */}
+      <section className="manifesto">
+        <div className="manifesto-content reveal-up">
+          <p>We don&apos;t build websites.<br />We build systems that <em>breathe</em>,<br />that <em>learn</em>, that <em>compound</em>.<br />Every deployment is a moat.<br />Every pixel is choreographed.<br /><strong>We create what doesn&apos;t exist yet.</strong></p>
         </div>
       </section>
 
@@ -582,15 +604,17 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .proc-title{font-family:var(--fd);font-size:24px;font-weight:500;margin-bottom:16px}
 .proc-desc{font-size:14px;color:var(--dim);line-height:1.7}
 
-/* ═══ COMMERCIAL VIDEO ═══ */
-.commercial-section{padding:clamp(100px,15vh,180px) clamp(24px,5vw,80px);background:var(--glass)}
-.commercial-inner{max-width:900px;margin:0 auto;text-align:center}
-.commercial-title{font-family:var(--fd);font-size:clamp(28px,4vw,52px);font-weight:400;line-height:1.3;letter-spacing:-.02em;margin-bottom:48px}
-.commercial-title em{font-family:var(--fs);font-style:italic;color:var(--gold)}
-.commercial-video-wrap{position:relative;width:100%;max-width:480px;margin:0 auto 40px;aspect-ratio:9/16;overflow:hidden;border:1px solid var(--gb)}
-.commercial-video{width:100%;height:100%;object-fit:cover;background:#000}
-.commercial-tagline{font-family:var(--fd);font-size:clamp(18px,2.5vw,28px);margin-top:8px}
-.commercial-tagline strong{color:var(--gold)}
+/* ═══ REEL ═══ */
+.reel-section{position:relative;z-index:5;overflow:hidden}
+.reel-inner{display:flex;justify-content:center;padding:clamp(60px,10vh,120px) clamp(24px,5vw,80px);background:rgba(6,6,10,0.6)}
+.reel-video{width:100%;max-width:420px;aspect-ratio:9/16;object-fit:cover;border:1px solid rgba(201,169,110,0.2)}
+
+/* ═══ MANIFESTO ═══ */
+.manifesto{padding:clamp(120px,18vh,240px) clamp(24px,5vw,80px);display:flex;justify-content:center}
+.manifesto-content{max-width:800px;text-align:center}
+.manifesto-content p{font-family:var(--fd);font-size:clamp(26px,4vw,48px);font-weight:400;line-height:1.4;letter-spacing:-.02em;text-shadow:0 4px 40px rgba(0,0,0,0.7)}
+.manifesto-content em{font-family:var(--fs);font-style:italic;color:var(--gold)}
+.manifesto-content strong{display:block;margin-top:28px;color:var(--gold)}
 
 /* ═══ ABOUT ═══ */
 .about-grid{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:start}
