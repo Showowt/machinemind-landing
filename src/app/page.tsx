@@ -8,44 +8,51 @@ interface Project {
 }
 
 const PROJECTS: Project[] = [
-  { name: 'AEGIS Shield', type: 'Defense & Access Control', industry: 'Defense', desc: 'USMC DBIDS overlay — biometric gate control, AI threat scoring, command mesh', color: '#1c4a5e', tag: 'CLASSIFIED' },
-  { name: 'VoxLink', type: 'Voice Intelligence Platform', industry: 'Enterprise', desc: 'Real-time voice AI with Daily.co, conversation analytics, Stripe billing', color: '#7c3aed' },
-  { name: 'MovVia', type: 'Logistics Command Center', industry: 'Operations', desc: 'Drag-and-drop fleet ops, route optimization, driver dispatch AI', color: '#00B4FF', url: 'https://movvia-pi.vercel.app' },
-  { name: 'ReWired OS', type: 'Business Operating System', industry: 'Enterprise', desc: 'CRM + outreach pipeline + email drip + analytics dashboard', color: '#10b981' },
+  // ── TIER 1: Flagship Luxury Hospitality (top of portfolio) ──
+  { name: 'Poseidon Beyond Luxury', type: 'Ultra-Luxury Experience', industry: 'Luxury Hotel', desc: 'Beyond-luxury yacht and villa platform — bespoke concierge, VIP booking, experience curation', color: '#0c4a6e', url: 'https://poseidon-beyond-luxury.vercel.app' },
   { name: 'Four Seasons Bogota', type: 'AI Concierge', industry: 'Luxury Hotel', desc: 'Full-stack AI concierge with Claude SDK, booking automation, guest intel', color: '#d4af37', url: 'https://demo-fourseasons-bogota.vercel.app' },
-  { name: 'Osaka Nikkei', type: 'Restaurant Experience', industry: 'Fine Dining', desc: 'Nikkei cuisine showcase with reservation AI, menu intelligence', color: '#ef4444', url: 'https://demo-osaka-nikkei.vercel.app' },
+  { name: 'Casa Boheme', type: 'Boutique Hotel Experience', industry: 'Luxury Hotel', desc: 'Bohemian luxury hospitality — immersive booking, concierge AI, guest experience design', color: '#a16207', url: 'https://casa-boheme.vercel.app' },
   { name: 'Dharma Beach Club', type: 'Luxury Beach Experience', industry: 'Hospitality', desc: 'VIP booking, Stripe payments, table reservations, event calendar', color: '#d4af37', url: 'https://dharma-topaz.vercel.app' },
+  { name: 'Osaka Nikkei', type: 'Restaurant Experience', industry: 'Fine Dining', desc: 'Nikkei cuisine showcase with reservation AI, menu intelligence', color: '#ef4444', url: 'https://demo-osaka-nikkei.vercel.app' },
+  { name: 'Simmer Down SV', type: 'Restaurant & Bar', industry: 'Restaurant', desc: 'Full-stack restaurant platform with online ordering, reservations, and brand experience', color: '#ea580c', url: 'https://simmerdownsv.com' },
+  // ── TIER 2: Defense & Enterprise (locked) ──
+  { name: 'AEGIS Shield', type: 'Defense & Access Control', industry: 'Defense', desc: 'USMC DBIDS overlay — biometric gate control, AI threat scoring, command mesh', color: '#1c4a5e', tag: 'CLASSIFIED' },
+  { name: 'VoxLink', type: 'Voice Intelligence Platform', industry: 'Enterprise', desc: 'Real-time voice AI with Daily.co, conversation analytics, Stripe billing', color: '#7c3aed', tag: 'ENTERPRISE' },
+  { name: 'ReWired OS', type: 'Business Operating System', industry: 'Enterprise', desc: 'CRM + outreach pipeline + email drip + analytics dashboard', color: '#10b981', tag: 'ENTERPRISE' },
+  { name: 'MovVia', type: 'Logistics Command Center', industry: 'Enterprise', desc: 'Drag-and-drop fleet ops, route optimization, driver dispatch AI', color: '#00B4FF', tag: 'ENTERPRISE' },
+  { name: 'El Salvador National', type: 'National Platform', industry: 'Government', desc: 'Government-scale digital platform, citizen services, data pipeline', color: '#0369a1', tag: 'ENTERPRISE' },
+  { name: 'Ania Consular', type: 'Consular Services', industry: 'Government', desc: 'Document processing, appointment scheduling, status tracking AI', color: '#1d4ed8', tag: 'ENTERPRISE' },
+  // ── TIER 3: Hospitality & Dining ──
+  { name: 'Frenessi', type: 'Brand & Pitch Platform', industry: 'Professional', desc: 'High-impact pitch deck platform with Cinema Engine animations, investor-ready storytelling', color: '#dc2626', url: 'https://frenessi-pitch.vercel.app' },
   { name: 'Cafe Noir', type: 'Premium Cafe', industry: 'Restaurant', desc: 'Dark luxury cafe branding, online ordering, loyalty system', color: '#92400e', url: 'https://demo-cafenoir.vercel.app' },
   { name: 'La Kasta', type: 'Nightlife & Dining', industry: 'Nightlife', desc: 'VIP table booking, event management, bottle service automation', color: '#a855f7', url: 'https://demo-lakasta.vercel.app' },
   { name: 'Chef Jose', type: 'Personal Chef Brand', industry: 'Culinary', desc: 'Private dining experience site, booking pipeline, menu showcase', color: '#f97316', url: 'https://demo-chefjose.vercel.app' },
   { name: 'Alambique', type: 'Bar & Cocktail Lounge', industry: 'Restaurant', desc: 'Cocktail menu AI, event booking, atmosphere-first design', color: '#b45309', url: 'https://demo-alambique.vercel.app' },
   { name: 'Tutaina', type: 'Latin Gastro Bar', industry: 'Restaurant', desc: 'Music-driven dining experience, reservation system, event pipeline', color: '#dc2626', url: 'https://demo-tutaina.vercel.app' },
+  { name: 'Simmer Down Pizza', type: 'Interactive Restaurant', industry: 'Restaurant', desc: 'Canvas-based interactive menu, Easter eggs, gamified ordering', color: '#f97316', url: 'https://simmer-down.vercel.app' },
+  // ── TIER 4: Hotels & Concierge ──
   { name: 'Villareal', type: 'Boutique Hospitality', industry: 'Hotel', desc: 'Luxury villa booking, concierge integration, guest experience AI', color: '#059669', url: 'https://demo-villareal.vercel.app' },
   { name: 'Confort', type: 'Hospitality Platform', industry: 'Hotel', desc: 'Comfort-first hotel experience, smart check-in, service automation', color: '#0284c7', url: 'https://demo-confort.vercel.app' },
-  { name: 'MDC Boutique', type: 'Boutique Hotel', industry: 'Luxury Hotel', desc: 'Boutique hotel management, guest profiling, automated concierge', color: '#c9a96e' },
-  { name: 'BenzDriver', type: 'Luxury Transport', industry: 'Transport', desc: 'Premium chauffeur booking, fleet management, VIP client routing', color: '#1e3a5f', url: 'https://demo-benzdriver.vercel.app' },
-  { name: 'Aerotransfer', type: 'Airport Transfers', industry: 'Transport', desc: 'Airport pickup automation, flight tracking, WhatsApp confirmation', color: '#0891b2', url: 'https://demo-aerotransfer.vercel.app' },
+  { name: 'MDC Boutique', type: 'Boutique Hotel', industry: 'Luxury Hotel', desc: 'Boutique hotel management, guest profiling, automated concierge', color: '#c9a96e', tag: 'ENTERPRISE' },
   { name: 'Medellin VIP', type: 'Concierge Services', industry: 'Concierge', desc: 'VIP experience curation, booking orchestration, 24/7 AI concierge', color: '#7c3aed', url: 'https://demo-medellinvip.vercel.app' },
   { name: 'World Lion', type: 'Travel & Concierge', industry: 'Travel', desc: 'Global travel coordination, itinerary AI, luxury experience booking', color: '#b45309', url: 'https://demo-worldlion.vercel.app' },
-  { name: '100 Luxury', type: 'Luxury Concierge', industry: 'Concierge', desc: 'Ultra-premium concierge platform, wealth-tier service automation', color: '#c9a96e' },
-  { name: 'Cartagena Concierge', type: 'City Concierge', industry: 'Concierge', desc: 'Full city concierge system — restaurants, tours, transport, nightlife', color: '#10b981' },
+  { name: '100 Luxury', type: 'Luxury Concierge', industry: 'Concierge', desc: 'Ultra-premium concierge platform, wealth-tier service automation', color: '#c9a96e', tag: 'ENTERPRISE' },
+  { name: 'Cartagena Concierge', type: 'City Concierge', industry: 'Concierge', desc: 'Full city concierge system — restaurants, tours, transport, nightlife', color: '#10b981', tag: 'ENTERPRISE' },
+  // ── TIER 5: Transport ──
+  { name: 'BenzDriver', type: 'Luxury Transport', industry: 'Transport', desc: 'Premium chauffeur booking, fleet management, VIP client routing', color: '#1e3a5f', url: 'https://demo-benzdriver.vercel.app' },
+  { name: 'Aerotransfer', type: 'Airport Transfers', industry: 'Transport', desc: 'Airport pickup automation, flight tracking, WhatsApp confirmation', color: '#0891b2', url: 'https://demo-aerotransfer.vercel.app' },
+  // ── TIER 6: Events & Entertainment ──
   { name: 'The Vibe with Herflo', type: 'Event Venue', industry: 'Events', desc: 'Venue booking, event management, artist coordination, ticket system', color: '#e11d48', url: 'https://the-vibe-with-herflo.vercel.app' },
   { name: 'BlackSound', type: 'Music & Events', industry: 'Entertainment', desc: 'Artist booking platform, event production, sound design showcase', color: '#18181b', url: 'https://demo-blacksound.vercel.app' },
   { name: 'Next Producciones', type: 'Event Production', industry: 'Production', desc: 'Full production company site, portfolio, booking pipeline', color: '#6366f1', url: 'https://demo-nextproducciones.vercel.app' },
-  { name: 'Toque Eventos', type: 'Event Management', industry: 'Events', desc: 'End-to-end event platform — planning, vendor coordination, day-of ops', color: '#f59e0b' },
+  { name: 'Toque Eventos', type: 'Event Management', industry: 'Events', desc: 'End-to-end event platform — planning, vendor coordination, day-of ops', color: '#f59e0b', tag: 'ENTERPRISE' },
+  // ── TIER 7: Professional & Brands ──
   { name: 'Angelica Valencia', type: 'Personal Brand', industry: 'Professional', desc: 'Professional portfolio, booking system, content showcase', color: '#ec4899', url: 'https://demo-angelica-valencia.vercel.app' },
   { name: 'Jota Pardo', type: 'Personal Brand', industry: 'Professional', desc: 'Creative portfolio with Cinema Engine, booking integration', color: '#8b5cf6', url: 'https://demo-jota-pardo.vercel.app' },
   { name: 'MariaEu', type: 'Personal Brand', industry: 'Professional', desc: 'Lifestyle brand platform, content management, audience engagement', color: '#f472b6', url: 'https://demo-mariaeu.vercel.app' },
-  { name: 'Coach D', type: 'Coaching Platform', industry: 'Professional', desc: 'Session booking, progress tracking, content delivery, payment system', color: '#14b8a6' },
+  { name: 'Coach D', type: 'Coaching Platform', industry: 'Professional', desc: 'Session booking, progress tracking, content delivery, payment system', color: '#14b8a6', tag: 'ENTERPRISE' },
   { name: 'Seven7Times', type: 'Brand & Retail', industry: 'Retail', desc: 'E-commerce foundation, brand storytelling, product showcase', color: '#1e293b', url: 'https://demo-seven7times.vercel.app' },
   { name: 'Rizos', type: 'Salon & Beauty', industry: 'Beauty', desc: 'Appointment booking AI, stylist matching, service menu, loyalty rewards', color: '#d946ef', url: 'https://demo-rizos.vercel.app' },
-  { name: 'Ania Consular', type: 'Consular Services', industry: 'Government', desc: 'Document processing, appointment scheduling, status tracking AI', color: '#1d4ed8' },
-  { name: 'El Salvador National', type: 'National Platform', industry: 'Government', desc: 'Government-scale digital platform, citizen services, data pipeline', color: '#0369a1' },
-  { name: 'Simmer Down Pizza', type: 'Interactive Restaurant', industry: 'Restaurant', desc: 'Canvas-based interactive menu, Easter eggs, gamified ordering', color: '#f97316', url: 'https://simmer-down.vercel.app' },
-  { name: 'Simmer Down SV', type: 'Restaurant & Bar', industry: 'Restaurant', desc: 'Full-stack restaurant platform with online ordering, reservations, and brand experience', color: '#ea580c', url: 'https://simmerdownsv.com' },
-  { name: 'Casa Boheme', type: 'Boutique Hotel Experience', industry: 'Luxury Hotel', desc: 'Bohemian luxury hospitality — immersive booking, concierge AI, guest experience design', color: '#a16207', url: 'https://casa-boheme.vercel.app' },
-  { name: 'Frenessi', type: 'Brand & Pitch Platform', industry: 'Professional', desc: 'High-impact pitch deck platform with Cinema Engine animations, investor-ready storytelling', color: '#dc2626', url: 'https://frenessi-pitch.vercel.app' },
-  { name: 'Poseidon Beyond Luxury', type: 'Ultra-Luxury Experience', industry: 'Luxury Hotel', desc: 'Beyond-luxury yacht and villa platform — bespoke concierge, VIP booking, experience curation', color: '#0c4a6e', url: 'https://poseidon-beyond-luxury.vercel.app' },
 ];
 
 const INDUSTRIES = ['All', ...Array.from(new Set(PROJECTS.map(p => p.industry)))];
@@ -359,10 +366,23 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ═══ MANIFESTO ═══ */}
-      <section className="manifesto">
-        <div className="manifesto-content reveal-up">
-          <p>We don&apos;t build websites.<br />We build systems that <em>breathe</em>,<br />that <em>learn</em>, that <em>compound</em>.<br />Every deployment is a moat.<br />Every pixel is choreographed.<br /><strong>We create what doesn&apos;t exist yet.</strong></p>
+      {/* ═══ COMMERCIAL VIDEO ═══ */}
+      <section className="commercial-section">
+        <div className="commercial-inner reveal-up">
+          <p className="eyebrow">THE VISION</p>
+          <h2 className="commercial-title">We don&apos;t build websites.<br />We build systems that <em>breathe</em>.</h2>
+          <div className="commercial-video-wrap">
+            <video
+              className="commercial-video"
+              controls
+              playsInline
+              preload="metadata"
+              poster=""
+            >
+              <source src="/mm-commercial.mp4" type="video/mp4" />
+            </video>
+          </div>
+          <p className="commercial-tagline"><strong>We create what doesn&apos;t exist yet.</strong></p>
         </div>
       </section>
 
@@ -562,12 +582,15 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .proc-title{font-family:var(--fd);font-size:24px;font-weight:500;margin-bottom:16px}
 .proc-desc{font-size:14px;color:var(--dim);line-height:1.7}
 
-/* ═══ MANIFESTO ═══ */
-.manifesto{padding:clamp(120px,18vh,240px) clamp(24px,5vw,80px);display:flex;justify-content:center}
-.manifesto-content{max-width:800px;text-align:center}
-.manifesto-content p{font-family:var(--fd);font-size:clamp(26px,4vw,48px);font-weight:400;line-height:1.4;letter-spacing:-.02em;text-shadow:0 4px 40px rgba(0,0,0,0.7)}
-.manifesto-content em{font-family:var(--fs);font-style:italic;color:var(--gold)}
-.manifesto-content strong{display:block;margin-top:28px;color:var(--gold)}
+/* ═══ COMMERCIAL VIDEO ═══ */
+.commercial-section{padding:clamp(100px,15vh,180px) clamp(24px,5vw,80px);background:var(--glass)}
+.commercial-inner{max-width:900px;margin:0 auto;text-align:center}
+.commercial-title{font-family:var(--fd);font-size:clamp(28px,4vw,52px);font-weight:400;line-height:1.3;letter-spacing:-.02em;margin-bottom:48px}
+.commercial-title em{font-family:var(--fs);font-style:italic;color:var(--gold)}
+.commercial-video-wrap{position:relative;width:100%;max-width:480px;margin:0 auto 40px;aspect-ratio:9/16;overflow:hidden;border:1px solid var(--gb)}
+.commercial-video{width:100%;height:100%;object-fit:cover;background:#000}
+.commercial-tagline{font-family:var(--fd);font-size:clamp(18px,2.5vw,28px);margin-top:8px}
+.commercial-tagline strong{color:var(--gold)}
 
 /* ═══ ABOUT ═══ */
 .about-grid{display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:start}
