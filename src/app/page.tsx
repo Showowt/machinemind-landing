@@ -334,7 +334,7 @@ export default function Home() {
             <p className="section-desc">Every build is custom-engineered. Every deployment is production-grade.</p>
           </div>
           <div className="filter-bar reveal-up">
-            {INDUSTRIES.slice(0, 12).map(ind => (
+            {INDUSTRIES.map(ind => (
               <button key={ind} className={`filter-btn ${activeFilter === ind ? 'active' : ''}`}
                 onClick={() => { setActiveFilter(ind); setVisibleProjects(12); }}>{ind}</button>
             ))}
@@ -456,11 +456,6 @@ export default function Home() {
 }
 
 const STYLES = `
-@import url('https://api.fontshare.com/v2/css?f[]=clash-display@200,300,400,500,600,700&display=swap');
-@import url('https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700,900&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
-
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
   --bg:#06060a;--fg:#f0f0f3;--gold:#c9a96e;--cyan:#00e5ff;

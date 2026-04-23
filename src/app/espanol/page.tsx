@@ -1,333 +1,265 @@
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { createClient } from "@supabase/supabase-js";
 
-// ── COLORS ──────────────────────────────────────────────────────────────────
-const G = "#C9A84C";
-const B = "#7B8CDE";
-const GR = "#5EAB7A";
-const RD = "#DE7B7B";
-const PUR = "#A87CC9";
+// ── SUPABASE CLIENT ─────────────────────────────────────────────────────────
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
-// ── SCENARIOS ───────────────────────────────────────────────────────────────
+// ── TOKENS ──────────────────────────────────────────────────────────────────
+const T = {
+  bg:      "#0F0E0C",
+  s1:      "#181613",
+  s2:      "#221F1B",
+  s3:      "#2C2924",
+  border:  "#302D29",
+  gold:    "#C9A84C",
+  goldL:   "#E8C96A",
+  goldD:   "#7A6230",
+  cream:   "#EDE8E0",
+  cream2:  "#A09485",
+  cream3:  "#5A5248",
+  green:   "#5EAB7A",
+  red:     "#C97070",
+  blue:    "#7B9CDE",
+  orange:  "#DE9B5A",
+};
+
+// ── SCENARIOS + PERSONAS ────────────────────────────────────────────────────
 const SCENARIOS = [
-  { id: "daily", icon: "☀️", label: "Vida Diaria", sub: "Taxis, tiendas, restaurantes, planes", color: G },
-  { id: "social", icon: "🍻", label: "Social", sub: "Amigos, historias, conversacion real", color: B },
-  { id: "biz", icon: "💼", label: "Negocios", sub: "Acuerdos, negociaciones, equipo", color: GR },
-  { id: "site", icon: "🏗️", label: "Casa Badillo", sub: "Contratistas, materiales, tiempos", color: G },
-  { id: "dating", icon: "🔥", label: "Mujeres", sub: "Citas, flirteo, conversacion con mujeres", color: RD },
-  { id: "deep", icon: "🧠", label: "Profundo", sub: "Opiniones, sentimientos, ideas complejas", color: PUR },
-  { id: "city", icon: "🏛️", label: "Cartagena", sub: "Ciudad, cultura, barrios, gente local", color: B },
+  { id: "street", icon: "🌇", label: "La Calle", color: T.gold,
+    personaName: "Carlos", personaAge: 31, personaDesc: "Cartagenero de toda la vida",
+    avatarLetter: "C", avatarColor: "#4A7C5E",
+    prompt: `You are Carlos, 31, from Cartagena. You work in tech, love fútbol and vallenato, direct and warm. You just met Phil on the street / at a bus stop / waiting somewhere. You're curious about this American who clearly isn't a tourist.` },
+  { id: "social", icon: "🍻", label: "Rumba", color: T.orange,
+    personaName: "Alejandra", personaAge: 29, personaDesc: "De Barranquilla, vive en Cartagena",
+    avatarLetter: "A", avatarColor: "#7A4A8E",
+    prompt: `You are Alejandra, 29, from Barranquilla but living in Cartagena. You're at a party or bar. Funny, sarcastic, very social. You find Phil attractive and interesting — you're not obvious about it but you are engaged. You can tease him lightly.` },
+  { id: "cafe", icon: "☕", label: "El Café", color: T.blue,
+    personaName: "Sebastián", personaAge: 33, personaDesc: "Barista y escritor",
+    avatarLetter: "S", avatarColor: "#4A6A8E",
+    prompt: `You are Sebastián, 33, barista and amateur writer in Cartagena. You have opinions about everything — life, coffee, this city. You find people with interesting stories fascinating. Phil clearly has them.` },
+  { id: "dating", icon: "🔥", label: "Mujeres", color: T.red,
+    personaName: "Valentina", personaAge: 26, personaDesc: "Diseñadora, Cartagena",
+    avatarLetter: "V", avatarColor: "#8E4A4A",
+    prompt: `You are Valentina, 26, graphic designer from Cartagena. You're at a café / bar / cultural event. Phil approached you. You're confident, smart, a bit selective. You like men with substance. RULES: Start with short responses — he has to earn longer ones. If he says something generic → brief, slightly flat. If he says something specific or interesting → open up more. If he gives a good specific compliment → react genuinely (not overdone). Mild teasing is fine. You are NOT a language teacher. Never break character. This is real conversation.` },
+  { id: "debate", icon: "🧠", label: "Debate", color: "#A87CC9",
+    personaName: "Mariana", personaAge: 30, personaDesc: "Abogada bogotana",
+    avatarLetter: "M", avatarColor: "#6A4A8E",
+    prompt: `You are Mariana, 30, lawyer from Bogotá living in Cartagena. Intellectual, passionate, doesn't accept vague answers. You love debating — politics, life, culture, relationships. You respect someone who defends their position.` },
+  { id: "local", icon: "🏛️", label: "Cartagena", color: T.green,
+    personaName: "Eduardo", personaAge: 55, personaDesc: "Historiador local",
+    avatarLetter: "E", avatarColor: "#4A7A4A",
+    prompt: `You are Don Eduardo, 55, local historian and guide. You've lived in Cartagena your whole life. You know every stone, every story, every secret of this city. You get genuinely excited when a foreigner wants to truly understand the place, not just see it.` },
 ];
 
 // ── QUICK PHRASES ───────────────────────────────────────────────────────────
 const QUICK: Record<string, string[]> = {
-  daily: ["¿Cuanto cuesta?", "¿Me lleva a...?", "La cuenta, por favor", "¿Como llego a...?", "No entiendo bien"],
-  social: ["Cuentame mas", "¿En serio?", "¡Que chevere!", "¿Y tu que piensas?", "Me parece interesante"],
-  biz: ["¿Cuando terminamos?", "Eso no me cuadra", "¿Cual es el precio final?", "Necesito que...", "Vamos a quedar en..."],
-  site: ["¿Como va el trabajo?", "¿Que falta?", "Hay un problema con...", "¿Cuantos dias mas?", "Necesito mas trabajadores"],
-  dating: ["Me caes muy bien", "Tienes algo especial", "Me gustaria conocerte mejor", "¿Que te apasiona?", "Eres muy interesante"],
-  deep: ["Creo que...", "La verdad es que...", "Me parece que...", "No estoy seguro, pero...", "Pienso que..."],
-  city: ["¿Que barrio me recomiendas?", "¿Donde se come bien?", "¿Como es vivir aqui?", "Cuentame de Cartagena", "¿Que hay de bueno por aqui?"],
+  street:  ["Oye, ¿cómo estás?","¿Eres de por aquí?","¿Qué hay que hacer aquí?","¿Cuánto tiempo llevas aquí?","¿Qué me recomiendas?"],
+  social:  ["¿Qué estás tomando?","¿Conoces a mucha gente aquí?","¿Vienes seguido aquí?","¿Eres de Cartagena?","Este lugar está bueno"],
+  cafe:    ["Qué rico el café aquí","¿Qué me recomiendas?","¿Llevas mucho en Cartagena?","¿Qué opinas de...?","Tengo curiosidad sobre algo"],
+  dating:  ["Hola, ¿cómo estás?","Tienes algo especial, no sé qué es","¿Vienes seguido aquí?","¿Qué haces cuando no trabajas?","Me gustaría conocerte mejor"],
+  debate:  ["¿Qué opinas sobre...?","No estoy de acuerdo porque...","Creo que...","¿Cómo lo ves tú?","Interesante, pero..."],
+  local:   ["¿Cuál es tu lugar favorito?","¿Cómo era Cartagena antes?","¿Qué no debo perderme?","¿Cuál es el secreto de esta ciudad?","¿Qué cambió más?"],
 };
 
 // ── PATTERNS ────────────────────────────────────────────────────────────────
 interface PatternType {
-  id: string;
-  n: number;
-  name: string;
-  sub: string;
-  color: string;
-  formula: string;
-  rule: string;
-  examples: { es: string; en: string }[];
-  drill: string;
+  id: string; n: number; name: string; sub: string; color: string;
+  formula: string; rule: string; ex: { es: string; en: string }[]; drill: string;
 }
 
 const PATTERNS: PatternType[] = [
-  {
-    id: "adj", n: 1, name: "Adjective After Noun", sub: "The #1 English-speaker mistake", color: G,
-    formula: "[Noun] + [Adjective]",
-    rule: "In Spanish adjectives come AFTER the noun. Every time. 'House big.' It feels wrong — that's the signal you're learning.",
-    examples: [
-      { es: "una casa grande", en: "a big house — NOT 'una grande casa'" },
-      { es: "un dia bonito", en: "a beautiful day" },
-      { es: "trabajo importante", en: "important work" },
-      { es: "agua fria", en: "cold water" },
-      { es: "un proyecto ambicioso", en: "an ambitious project" },
-    ],
-    drill: "Translate: 'I want a cold beer' / 'That's a beautiful city' / 'He's a good person' / 'It's an expensive hotel'"
-  },
-  {
-    id: "want", n: 2, name: "Want To / Going To", sub: "Two patterns that unlock every intention", color: B,
-    formula: "Quiero + [inf] | Voy a + [inf]",
-    rule: "Quiero = desire. Voy a = near future plan. After both, the next verb stays in infinitive. You never conjugate it.",
-    examples: [
-      { es: "Quiero ir al mercado", en: "I want to go to the market" },
-      { es: "Voy a hablar con el contratista", en: "I'm going to talk to the contractor" },
-      { es: "¿Quieres tomar algo?", en: "Do you want to drink something?" },
-      { es: "Voy a necesitar mas tiempo", en: "I'm going to need more time" },
-      { es: "Quiero entender mejor esto", en: "I want to understand this better" },
-    ],
-    drill: "Express 5 things you want to do this week and 5 things you're going to do tomorrow."
-  },
-  {
-    id: "opinion", n: 3, name: "Opinion Launchers", sub: "Open any complex thought with these", color: GR,
-    formula: "Creo que + [sentence] | Me parece que + [sentence]",
-    rule: "Sentence multipliers. After 'Creo que', simpler grammar still sounds sophisticated. They also buy thinking time.",
-    examples: [
-      { es: "Creo que el precio es muy alto", en: "I think the price is too high" },
-      { es: "Me parece que necesitamos mas tiempo", en: "It seems to me we need more time" },
-      { es: "Pienso que podemos hacerlo mejor", en: "I think we can do it better" },
-      { es: "La verdad es que no se", en: "The truth is I don't know" },
-      { es: "Siento que algo esta mal aqui", en: "I feel like something is wrong here" },
-    ],
-    drill: "Give your opinion on: today's weather, a recent decision, something you're unsure about."
-  },
-  {
-    id: "flow", n: 4, name: "Conversation Keepers", sub: "4 phrases that keep any conversation alive", color: "#E07B54",
-    formula: "¿Y tu? | ¿Como asi? | Cuentame mas | ¿En serio?",
-    rule: "When you don't know what to say — use one. They signal genuine interest AND buy thinking time. '¿Como asi?' is the most powerful.",
-    examples: [
-      { es: "Interesante. ¿Y tu que piensas?", en: "Interesting. What do you think?" },
-      { es: "¿Como asi? Explicame mejor.", en: "How so? Explain it better." },
-      { es: "Cuentame mas sobre eso.", en: "Tell me more about that." },
-      { es: "¿En serio? ¿Y que paso despues?", en: "Really? And what happened after?" },
-      { es: "Eso es bacano. ¿Desde cuando?", en: "That's cool. Since when?" },
-    ],
-    drill: "Practice responding to everything with one of these BEFORE adding your own thought."
-  },
-  {
-    id: "serstar", n: 5, name: "Ser vs. Estar", sub: "Permanent identity vs. temporary state", color: PUR,
-    formula: "SER = permanent/identity | ESTAR = temporary/location/state",
-    rule: "Quick test: 'Would this be true in 10 years?' Yes = SER. No = ESTAR. Nationality, profession, character = SER. Location, feelings, conditions = ESTAR.",
-    examples: [
-      { es: "Soy americano. Estoy en Colombia.", en: "I AM American (always) / I'm IN Colombia (right now)" },
-      { es: "Es un buen restaurante. Esta muy lleno.", en: "It's a good restaurant / It's very full right now" },
-      { es: "Soy empresario. Estoy ocupado hoy.", en: "I'm an entrepreneur (identity) / I'm busy today (state)" },
-      { es: "La habitacion es grande. Esta sucia.", en: "The room is big (always) / It's dirty (right now)" },
-      { es: "Ella es inteligente. Esta cansada.", en: "She's intelligent / She's tired right now" },
-    ],
-    drill: "Describe: yourself (identity), your current mood, your work, where you are now."
-  },
-  {
-    id: "time", n: 6, name: "Time & Story Flow", sub: "Connects events into real narrative", color: G,
-    formula: "Cuando + [verb] | Despues de + [inf] | Mientras + [verb] | Antes de + [inf]",
-    rule: "Without connectors: 'Llegue. Comi. Hable.' With them: 'Cuando llegue, despues de comer, mientras hablaba...' — completely different level.",
-    examples: [
-      { es: "Cuando llegue, no habia nadie.", en: "When I arrived, there was no one." },
-      { es: "Despues de comer, vamos al bar.", en: "After eating, we go to the bar." },
-      { es: "Mientras trabajo, escucho musica.", en: "While I work, I listen to music." },
-      { es: "Antes de salir, necesito llamarte.", en: "Before leaving, I need to call you." },
-      { es: "Tan pronto como llegues, me avisas.", en: "As soon as you arrive, let me know." },
-    ],
-    drill: "Tell me about your yesterday using at least 3 of these connectors."
-  },
-  {
-    id: "modal", n: 7, name: "Can / Should / Must", sub: "Three power verbs covering 40% of practical Spanish", color: GR,
-    formula: "Puedo + inf | Deberias + inf | Tengo que + inf | Hay que + inf",
-    rule: "Poder (can), Deberias (should), Tener que (have to — personal), Hay que (must — impersonal). These + any infinitive = almost any obligation or ability.",
-    examples: [
-      { es: "¿Puedes explicarme eso mejor?", en: "Can you explain that better?" },
-      { es: "Deberias ver Getsemani por la noche.", en: "You should see Getsemani at night." },
-      { es: "Tengo que salir en diez minutos.", en: "I have to leave in ten minutes." },
-      { es: "Hay que hablar con el contratista hoy.", en: "Someone needs to talk to the contractor today." },
-      { es: "No puedo creer lo rapido que va esto.", en: "I can't believe how fast this is going." },
-    ],
-    drill: "Give 3 recommendations using 'deberias'. List 3 things you can't do and 3 you have to do this week."
-  },
-  {
-    id: "cond", n: 8, name: "Conditionals & Wishes", sub: "Hypotheticals, dreams, polite requests", color: B,
-    formula: "Me gustaria + inf | Si pudiera + inf | Si tuviera + noun, [verb]-ria",
-    rule: "Me gustaria and Quisiera are the polite versions of 'quiero'. They instantly elevate your register. Si + pudiera/tuviera + -ria opens hypothetical conversations.",
-    examples: [
-      { es: "Me gustaria conocerte mejor.", en: "I would like to get to know you better." },
-      { es: "Quisiera mas tiempo para este proyecto.", en: "I'd want more time for this project." },
-      { es: "Si pudiera, viviria aqui para siempre.", en: "If I could, I'd live here forever." },
-      { es: "Si tuviera mas capital, expandiria mas rapido.", en: "If I had more capital, I'd expand faster." },
-      { es: "¿Que harias si pudieras empezar de nuevo?", en: "What would you do if you could start over?" },
-    ],
-    drill: "Tell me 3 things you'd do with unlimited time. 3 polite requests using 'me gustaria'."
-  },
-  {
-    id: "dating1", n: 9, name: "Flirteo Natural", sub: "Conversation starters and natural charm in Spanish", color: RD,
-    formula: "Compliment + Question | Observation + Curiosity",
-    rule: "Colombian women respond to genuine curiosity over generic compliments. Ask about her life, passions, dreams. Specific > generic. Humor > intensity.",
-    examples: [
-      { es: "Me caes muy bien, tienes algo especial.", en: "I really like you, there's something special about you." },
-      { es: "¿Que te apasiona? Quiero saber mas de ti.", en: "What are you passionate about? I want to know more about you." },
-      { es: "Tienes una energia muy bonita.", en: "You have really beautiful energy." },
-      { es: "Me encanta tu forma de pensar.", en: "I love the way you think." },
-      { es: "¿Como asi que nunca has ido? Vamos juntos.", en: "Wait, you've never been? Let's go together." },
-    ],
-    drill: "Practice: Give 3 specific compliments (not about looks). Ask 3 questions showing genuine curiosity."
-  },
-  {
-    id: "dating2", n: 10, name: "Escalation & Plans", sub: "Moving from conversation to real plans", color: RD,
-    formula: "Expression of Interest + Concrete Plan",
-    rule: "Natural progression: conversation then genuine interest then specific compliment then deeper question then ask for number or date. Don't rush. Be direct but warm.",
-    examples: [
-      { es: "Oye, la estoy pasando muy bien contigo.", en: "Hey, I'm having a really good time with you." },
-      { es: "Me gustaria invitarte a un cafe. ¿Cuando estas libre?", en: "I'd like to invite you for coffee. When are you free?" },
-      { es: "Dame tu numero y te escribo para cuadrar algo.", en: "Give me your number and I'll text you to set something up." },
-      { es: "¿Te gustaria ir a cenar conmigo este fin de semana?", en: "Would you like to go to dinner with me this weekend?" },
-      { es: "Quiero seguir hablando contigo. ¿Nos vemos manana?", en: "I want to keep talking with you. See you tomorrow?" },
-    ],
-    drill: "Practice: Transition a friendly conversation into asking for a date. Use 'me gustaria' and suggest a specific plan."
-  },
+  { id: "adj", n: 1, name: "Adjetivo después del sustantivo", sub: "Error #1 del angloparlante", color: T.gold,
+    formula: "[Sustantivo] + [Adjetivo]",
+    rule: "En inglés dices 'beautiful woman'. En español: 'mujer bonita'. El adjetivo SIEMPRE va después del sustantivo. Siempre. Entrénate: di el objeto primero, luego lo describes.",
+    ex: [{ es: "una mujer bonita", en: "a beautiful woman" }, { es: "un lugar increíble", en: "an incredible place" }, { es: "agua fría", en: "cold water" }, { es: "algo interesante", en: "something interesting" }, { es: "una noche larga", en: "a long night" }],
+    drill: "Traduce rápido: 'a cold beer / a beautiful night / an interesting person / a long day / a good moment'" },
+  { id: "intent", n: 2, name: "Quiero / Voy a", sub: "Expresa toda intención con dos estructuras", color: T.blue,
+    formula: "Quiero + [infinitivo] | Voy a + [infinitivo]",
+    rule: "Quiero = deseo ahora. Voy a = plan cercano. Después de ambos el siguiente verbo NO se conjuga nunca. 'Quiero ir', 'voy a quedarme', 'quiero conocerte'. Estas dos estructuras son el 80% de tus intenciones.",
+    ex: [{ es: "Quiero conocerte mejor", en: "I want to get to know you better" }, { es: "Voy a quedarme un rato más", en: "I'm going to stay a bit longer" }, { es: "¿Quieres tomar algo?", en: "Do you want to get something?" }, { es: "No quiero irme todavía", en: "I don't want to leave yet" }, { es: "Voy a ser honesto contigo", en: "I'm going to be honest with you" }],
+    drill: "Di 5 cosas que quieres hacer esta noche y 5 que vas a hacer mañana." },
+  { id: "opinion", n: 3, name: "Lanzadores de opinión", sub: "Abre cualquier pensamiento complejo", color: T.green,
+    formula: "Creo que... | Me parece que... | La verdad es que...",
+    rule: "'Creo que' + cualquier cosa = sonas inteligente y seguro. 'La verdad es que...' cuando quieres ser directo. Estos tres te sacan de cualquier situación conversacional difícil y compran tiempo para pensar.",
+    ex: [{ es: "Creo que Cartagena es especial", en: "I think Cartagena is special" }, { es: "Me parece que necesito más tiempo aquí", en: "I think I need more time here" }, { es: "La verdad es que me gusta mucho", en: "The truth is I really like it" }, { es: "Siento que ya la conozco", en: "I feel like I already know her" }, { es: "Pienso que podemos hablar más", en: "I think we can talk more" }],
+    drill: "Da tu opinión sobre: la noche en Cartagena, algo que descubriste esta semana, una decisión reciente tuya." },
+  { id: "flow", n: 4, name: "Mantener viva la conversación", sub: "4 frases que nunca fallan", color: T.orange,
+    formula: "¿Y tú? | ¿Cómo así? | Cuéntame más | ¿En serio?",
+    rule: "Cuando no sabes qué decir — usa una. '¿Cómo así?' es la más poderosa: la persona siente tu interés y sigue hablando. En conversación con mujeres especialmente: preguntar bien > decir algo brillante.",
+    ex: [{ es: "¿En serio? ¿Y qué pasó?", en: "Really? What happened?" }, { es: "¿Cómo así? Cuéntame más.", en: "How so? Tell me more." }, { es: "Interesante. ¿Y tú qué piensas?", en: "Interesting. What do you think?" }, { es: "Cuéntame más de eso.", en: "Tell me more about that." }, { es: "No te entendí bien. ¿Repites?", en: "I didn't get that. Can you repeat?" }],
+    drill: "En la próxima conversación, usa una de estas ANTES de responder con tu propio pensamiento. Hazlo 5 veces." },
+  { id: "serstar", n: 5, name: "Ser vs Estar", sub: "Identidad permanente vs estado temporal", color: "#A87CC9",
+    formula: "SER = quién/qué es | ESTAR = cómo está ahora",
+    rule: "Test: ¿Seguiría siendo verdad en 10 años? Sí → SER. No → ESTAR. Origen, profesión, carácter → SER. Ubicación, estado de ánimo, condición temporal → ESTAR.",
+    ex: [{ es: "Soy americano. Estoy en Colombia.", en: "I'm American (always) / I'm in Colombia (now)" }, { es: "Es una persona interesante. Está ocupada.", en: "She's interesting / She's busy right now" }, { es: "Soy directo. Estoy nervioso.", en: "I'm a direct person / I'm nervous right now" }, { es: "Cartagena es hermosa. Está muy caliente.", en: "Cartagena is beautiful / It's very hot right now" }, { es: "Soy empresario. Estoy aquí por unos meses.", en: "I'm an entrepreneur / I'm here for a few months" }],
+    drill: "Descríbete (quién eres), tu estado de ánimo ahora, dónde estás, el clima. Usar ambos." },
+  { id: "time", n: 6, name: "Conectores de tiempo", sub: "La diferencia entre básico y fluido", color: T.gold,
+    formula: "Cuando... | Después de... | Mientras... | Antes de...",
+    rule: "Sin conectores: 'Llegué. Vi. Me gustó.' Con conectores: 'Cuando llegué, mientras caminaba, después de un tiempo...' — nivel completamente diferente. Esto solo ya te hace sonar fluido.",
+    ex: [{ es: "Cuando llegué, no conocía a nadie.", en: "When I arrived, I didn't know anyone." }, { es: "Después de un tiempo, todo cambió.", en: "After a while, everything changed." }, { es: "Mientras caminas, ves la ciudad real.", en: "While you walk, you see the real city." }, { es: "Antes de vivir aquí, no entendía nada.", en: "Before living here, I didn't understand anything." }, { es: "Desde que llegué, me quedé.", en: "Since I arrived, I stayed." }],
+    drill: "Cuéntame cómo llegaste a Cartagena. Usa mínimo 3 conectores de tiempo." },
+  { id: "modal", n: 7, name: "Puedo / Debo / Tengo que", sub: "El trío de la obligación y la habilidad", color: T.green,
+    formula: "Puedo + inf | Deberías + inf | Tengo que + inf",
+    rule: "Poder (can), Deberías (you should), Tener que (I have to). Los tres + cualquier infinitivo = el 40% del español práctico. Apréndalos con el cuerpo, no con la mente.",
+    ex: [{ es: "¿Puedes repetir eso?", en: "Can you repeat that?" }, { es: "Deberías ver Getsemaní de noche.", en: "You should see Getsemaní at night." }, { es: "Tengo que irme en un rato.", en: "I have to leave in a bit." }, { es: "No puedo creer lo rápido que pasa.", en: "I can't believe how fast it goes." }, { es: "Hay que vivirlo para entenderlo.", en: "You have to live it to understand it." }],
+    drill: "3 recomendaciones con 'deberías'. 3 cosas que tienes que hacer esta semana." },
+  { id: "cond", n: 8, name: "Condicionales y deseos", sub: "El nivel que separa intermedio de fluido", color: T.blue,
+    formula: "Me gustaría + inf | Si pudiera... | Si tuviera..., haría...",
+    rule: "'Me gustaría' suena mucho más natural y sofisticado que 'quiero'. 'Si pudiera / si tuviera' abre conversaciones sobre sueños, planes, alternativas. Las mejores conversaciones son sobre lo que podría ser.",
+    ex: [{ es: "Me gustaría quedarme aquí más tiempo.", en: "I'd like to stay here longer." }, { es: "Si pudiera, cambiaría una sola cosa.", en: "If I could, I'd change just one thing." }, { es: "¿Qué harías si pudieras hacer cualquier cosa?", en: "What would you do if you could do anything?" }, { es: "Quisiera entender esto mejor.", en: "I'd like to understand this better." }, { es: "Si tuviera más tiempo, exploraría más.", en: "If I had more time, I'd explore more." }],
+    drill: "¿Qué harías si pudieras hacer cualquier cosa mañana? Di 5 cosas con 'me gustaría' o 'si pudiera'." },
+  { id: "compliment", n: 9, name: "Cumplidos que funcionan", sub: "Específico > genérico. Siempre.", color: T.red,
+    formula: "Tienes [algo específico] muy [adj] | Me gusta cómo [verbo] | Hay algo en ti que...",
+    rule: "'Eres bonita' → olvidable. 'Tienes una forma de hablar que engancha' → memorable. Los cumplidos específicos muestran que la miraste de verdad. La especificidad ES el cumplido.",
+    ex: [{ es: "Tienes una sonrisa que cambia el ambiente.", en: "You have a smile that changes the room." }, { es: "Me gusta cómo piensas.", en: "I like the way you think." }, { es: "Hay algo en tu energía que me llama la atención.", en: "There's something about your energy that gets my attention." }, { es: "Eres de las pocas personas que escuchan de verdad.", en: "You're one of the few people who actually listens." }, { es: "No sé qué es, pero hay algo especial en ti.", en: "I don't know what it is, but there's something special about you." }],
+    drill: "Crea 5 cumplidos específicos sobre: cómo habla, cómo piensa, su energía, algo que dijo, cómo te hace sentir." },
+  { id: "questions", n: 10, name: "Preguntas que conectan", sub: "Las preguntas que hacen que alguien quiera seguir hablando", color: T.orange,
+    formula: "¿Qué es lo que más te gusta de...? | ¿Cómo te imaginas...? | ¿Qué te apasiona?",
+    rule: "Las mejores conversaciones son sobre las preguntas correctas. Aléjate de las de sí/no. Pregunta sobre valores, sueños, momentos formativos. Una buena pregunta > diez declaraciones.",
+    ex: [{ es: "¿Qué es lo que más te gusta de vivir aquí?", en: "What do you love most about living here?" }, { es: "¿Cómo te imaginas tu vida en diez años?", en: "How do you imagine your life in ten years?" }, { es: "¿Qué te apasiona de verdad?", en: "What are you truly passionate about?" }, { es: "¿Qué fue lo que más te cambió?", en: "What changed you the most?" }, { es: "Si pudieras hacer cualquier cosa mañana, ¿qué harías?", en: "If you could do anything tomorrow, what would it be?" }],
+    drill: "Memoriza estas 5. Úsalas la próxima vez que conozcas a alguien. Observa cómo cambia la conversación." },
 ];
 
 // ── MISSIONS ────────────────────────────────────────────────────────────────
 interface MissionType {
-  id: number;
-  w: number;
-  day: number;
-  title: string;
-  loc: string;
-  desc: string;
-  vocab: string[];
-  diff: number;
-  icon: string;
+  id: number; w: number; day: number; icon: string; title: string;
+  diff: number; desc: string; vocab: string[];
 }
 
 const MISSIONS: MissionType[] = [
-  { id: 1, w: 1, day: 1, icon: "🚕", title: "El Taxi", loc: "Cualquier taxi en Cartagena", desc: "Take a real taxi. Tell the driver your destination. Ask how long, ask the price. Negotiate if needed.", vocab: ["¿Me lleva a...?", "¿Cuanto cobra?", "¿Cuanto tarda?", "Esta muy caro", "Dale, vamos."], diff: 1 },
-  { id: 2, w: 1, day: 2, icon: "🍽️", title: "El Restaurante", loc: "Restaurante local", desc: "Order a full meal. Ask what they recommend. Ask about ingredients. Get the check.", vocab: ["¿Que me recomienda?", "¿Que tiene de...?", "La cuenta, por favor.", "Estuvo delicioso."], diff: 1 },
-  { id: 3, w: 1, day: 3, icon: "🛒", title: "El Mercado", loc: "Mercado de Bazurto", desc: "Buy 5 things. Negotiate the price on at least one item. Have a short personal exchange.", vocab: ["¿Cuanto vale?", "¿Me hace un descuentico?", "¿Donde encuentro...?", "Esta fresco?"], diff: 1 },
-  { id: 4, w: 1, day: 4, icon: "🗺️", title: "Las Indicaciones", loc: "El Centro o Getsemani", desc: "Give someone directions to a place you know. Navigate entirely in Spanish.", vocab: ["Siga derecho.", "Doble a la izquierda.", "Esta a dos cuadras.", "No se puede perder."], diff: 1 },
-  { id: 5, w: 1, day: 5, icon: "🏠", title: "El Vecino", loc: "Tu edificio o barrio", desc: "Have a genuine 5-minute conversation with someone in your building you don't usually talk to.", vocab: ["¿Cuanto tiempo lleva aqui?", "¿Que tal el barrio?", "Que calor, ¿verdad?", "Mucho gusto."], diff: 2 },
-  { id: 6, w: 2, day: 8, icon: "🏗️", title: "El Contratista", loc: "Casa Badillo", desc: "Full project briefing at Casa Badillo in Spanish. Timeline, materials, raise one concern. No English.", vocab: ["¿Como vamos con el cronograma?", "¿Que falta?", "Eso no me cuadra.", "¿Cuando terminamos?"], diff: 3 },
-  { id: 7, w: 2, day: 9, icon: "🤝", title: "La Negociacion", loc: "Cualquier proveedor", desc: "Negotiate something — price, timeline, terms. Don't accept first offer. Go 3 rounds minimum.", vocab: ["Ese precio esta muy alto.", "¿Lo mejor que me puede hacer?", "Si me da X, cerramos hoy.", "Necesito pensarlo."], diff: 3 },
-  { id: 8, w: 2, day: 10, icon: "📋", title: "El Brief al Equipo", loc: "MachineMind", desc: "Brief your sales team entirely in Spanish for 10 minutes. Priorities, expectations, feedback.", vocab: ["Esta semana nos enfocamos en...", "Necesito que...", "Lo que espero es...", "¿Alguna pregunta?"], diff: 3 },
-  { id: 9, w: 2, day: 12, icon: "📦", title: "El Proveedor", loc: "Cualquier proveedor local", desc: "Get a quote. Ask about quality, delivery time, payment terms. Compare to a competitor.", vocab: ["¿Cuales son sus tiempos?", "¿Que garantia tiene?", "¿Tiene algo mas economico?", "¿Me puede dar eso por escrito?"], diff: 3 },
-  { id: 10, w: 3, day: 15, icon: "📖", title: "Mi Historia", loc: "Contexto social", desc: "Tell someone the complete story of why you came to Cartagena and what you're building.", vocab: ["Vine porque...", "Lo que mas me gusta es...", "El plan es...", "Lo mas dificil ha sido...", "Lo que nadie sabe es que..."], diff: 3 },
-  { id: 11, w: 3, day: 16, icon: "🍸", title: "El Bar", loc: "Bar local en Getsemani", desc: "Go to a local bar. Start a conversation with a stranger. Find out their story. Stay 30 minutes.", vocab: ["¿De donde eres?", "¿A que te dedicas?", "Oye, ¿que me recomiendas tomar?", "¡Brindemos!"], diff: 4 },
-  { id: 12, w: 3, day: 17, icon: "⚡", title: "El Debate", loc: "Cualquier contexto social", desc: "Have a real debate. Disagree respectfully. Hold your position through at least 2 exchanges.", vocab: ["Entiendo tu punto, pero...", "Yo lo veo diferente porque...", "Puede ser, aunque...", "Con todo respeto, no estoy de acuerdo."], diff: 4 },
-  { id: 13, w: 3, day: 18, icon: "🔥", title: "La Cita", loc: "Bar, restaurante, o cafe", desc: "Have a full date conversation in Spanish. Show genuine interest. Ask deeper questions. Be charming, not trying hard.", vocab: ["Me caes muy bien.", "¿Que te apasiona?", "Me gustaria verte de nuevo.", "La estoy pasando increible contigo."], diff: 4 },
-  { id: 14, w: 3, day: 19, icon: "😂", title: "El Humor", loc: "Cualquier contexto casual", desc: "Make someone genuinely laugh in Spanish. Tell a story with a punchline.", vocab: ["¿En serio? ¡No puede ser!", "Imaginante la situacion...", "La cosa es que...", "¡Me mato de la risa!"], diff: 4 },
-  { id: 15, w: 4, day: 22, icon: "💰", title: "El Pitch Completo", loc: "Con un cliente colombiano", desc: "Pitch MachineMind's AI services entirely in Spanish. Problem, solution, results, pricing. Handle objections.", vocab: ["Nuestro sistema le permite...", "El resultado es...", "La inversion es...", "¿Le interesaria una demostracion?"], diff: 5 },
-  { id: 16, w: 4, day: 24, icon: "💕", title: "La Segunda Cita", loc: "Cualquier lugar romantico", desc: "Have a deeper conversation. Talk about dreams, life plans, what you value. Be vulnerable in Spanish.", vocab: ["Lo que mas valoro en la vida es...", "Mi sueno es...", "Contigo me siento...", "Quiero que sepas que..."], diff: 5 },
-  { id: 17, w: 4, day: 25, icon: "🎯", title: "La Reunion", loc: "Contexto de negocios", desc: "Conduct a full 30-minute business meeting in Spanish. No English. If you don't know a word, describe it.", vocab: ["Lo que quiero decir es...", "Como iba diciendo...", "Para resumir...", "¿Estamos de acuerdo?", "El proximo paso es..."], diff: 5 },
+  { id: 1, w: 1, day: 1, icon: "🚕", title: "El Taxi", diff: 1, desc: "Full taxi conversation — destination, time, price, small talk, goodbye. No English.", vocab: ["¿Me lleva a...?", "¿Cuánto tarda?", "¿Cuánto cobra?", "Dale, vamos."] },
+  { id: 2, w: 1, day: 2, icon: "🍽️", title: "Restaurante", diff: 1, desc: "Order a full meal, ask for a recommendation, find out ingredients in one dish, leave a compliment.", vocab: ["¿Qué me recomienda?", "¿Esto lleva...?", "La cuenta", "Estuvo delicioso"] },
+  { id: 3, w: 1, day: 3, icon: "🛒", title: "El Mercado", diff: 1, desc: "Buy 5 things. Negotiate at least one price. Have a short personal exchange with a vendor.", vocab: ["¿Cuánto vale?", "¿Me hace un precio?", "¿Está fresco?", "Lléveme dos"] },
+  { id: 4, w: 1, day: 5, icon: "👋", title: "El Vecino", diff: 2, desc: "5-minute real conversation with someone in your building you don't normally talk to.", vocab: ["Mucho gusto, soy Phil.", "¿Cuánto tiempo lleva aquí?", "¿Qué tal?", "Hasta luego"] },
+  { id: 5, w: 2, day: 8, icon: "💰", title: "Negociación", diff: 3, desc: "Negotiate something — price, service, anything. Don't accept the first number. 3 rounds minimum.", vocab: ["Está muy caro", "¿Lo mejor que puede hacer?", "Si me da X, cerramos", "Lo pienso"] },
+  { id: 6, w: 2, day: 9, icon: "🗺️", title: "Indicaciones", diff: 2, desc: "Give someone real directions to somewhere you know in Cartagena. Entirely in Spanish.", vocab: ["Siga derecho", "Doble a la izquierda", "Está a dos cuadras", "Frente a..."] },
+  { id: 7, w: 2, day: 11, icon: "📖", title: "Mi Historia", diff: 3, desc: "Tell someone the full story of why you came to Cartagena and why you stayed. Make it compelling.", vocab: ["Vine porque...", "Lo que más me gusta...", "Lo difícil fue...", "Me quedé porque..."] },
+  { id: 8, w: 3, day: 14, icon: "🍺", title: "El Bar", diff: 4, desc: "Go to a local bar (no expat zone). Start a real conversation with a stranger. 30 minutes minimum.", vocab: ["¿De dónde eres?", "¿A qué te dedicas?", "¿Llevas mucho aquí?", "¡Brindemos!"] },
+  { id: 9, w: 3, day: 15, icon: "🗣️", title: "El Debate", diff: 4, desc: "Have a real debate about anything. Disagree respectfully. Hold your position through 2+ exchanges.", vocab: ["Entiendo, pero...", "Lo veo diferente porque...", "¿No crees que...?", "Puede ser, aunque..."] },
+  { id: 10, w: 3, day: 16, icon: "🔥", title: "El Cumplido", diff: 3, desc: "Give 3 specific, genuine compliments to 3 different women in Spanish today. Specific, never generic.", vocab: ["Tienes algo especial", "Me gusta cómo...", "Hay algo en ti que..."] },
+  { id: 11, w: 3, day: 17, icon: "💬", title: "La Conexión", diff: 4, desc: "15-minute real conversation with a woman you don't know. Use the deep questions. Get her number.", vocab: ["¿Qué te apasiona?", "¿Cómo te imaginas...?", "Cuéntame más", "¿Me das tu número?"] },
+  { id: 12, w: 3, day: 19, icon: "😄", title: "El Humor", diff: 4, desc: "Make someone genuinely laugh in Spanish. Tell a story with a punchline.", vocab: ["¿En serio? ¡No puede ser!", "Imagínate...", "La cosa es que...", "¡Me mató de la risa!"] },
+  { id: 13, w: 4, day: 22, icon: "🤝", title: "La Reunión", diff: 5, desc: "Full 30-minute conversation in Spanish. No English. Describe words you don't know instead of switching.", vocab: ["Lo que quiero decir es...", "¿Estamos de acuerdo?", "Para resumir..."] },
+  { id: 14, w: 4, day: 25, icon: "🌹", title: "La Cita", diff: 5, desc: "Go on a date conducted entirely in Spanish. Conversation, compliments, stories, a plan. Make it real.", vocab: ["Me gustas", "¿Qué te gusta hacer?", "Me la estoy pasando muy bien", "¿Cuándo te vuelvo a ver?"] },
+  { id: 15, w: 4, day: 28, icon: "🎤", title: "Habla sin parar", diff: 5, desc: "Talk for 10 minutes straight in Spanish about anything — your life, ideas, observations. Record yourself.", vocab: ["Como iba diciendo...", "O sea...", "La verdad es que...", "Lo que me parece interesante..."] },
 ];
 
 // ── TYPES ───────────────────────────────────────────────────────────────────
-interface VocabItem {
-  es: string;
-  en: string;
-  type?: string;
-}
-
+interface VocabItem { es: string; en: string }
 interface AIData {
-  response_es?: string;
-  response_en?: string;
-  correction?: string | null;
-  correction_note?: string | null;
-  pattern_name?: string;
-  pattern_formula?: string;
-  flow_connector?: string;
-  flow_connector_meaning?: string;
-  new_vocab?: VocabItem[];
-  fluency_points?: number;
-  encouragement?: string | null;
+  response_es?: string; response_en?: string; correction?: string | null;
+  correction_note?: string | null; pattern_name?: string; pattern_formula?: string;
+  flow_connector?: string; flow_connector_meaning?: string;
+  new_vocab?: VocabItem[]; fluency_points?: number; vibe?: string | null;
 }
-
-interface Message {
-  role: "user" | "ai";
-  text?: string;
-  d?: AIData;
-  raw?: string;
-  id: number;
-}
-
-interface Stats {
-  msgs: number;
-  corrections: number;
-  fp: number;
-  convos: number;
+interface Message { role: "user" | "ai"; text?: string; d?: AIData; raw?: string; id: number; userMsgId?: number }
+interface Stats { msgs: number; corrections: number; fp: number; convos: number }
+interface StreakData { count: number; date: string }
+interface CorrectionData {
+  correction: string | null; correction_note: string | null; fp: number;
+  pattern_name: string | null; pattern_formula?: string | null;
+  flow_connector: string | null; flow_connector_meaning: string | null;
+  new_vocab: VocabItem[]; vibe: string | null;
 }
 
 // ── SPEAK ───────────────────────────────────────────────────────────────────
-function speakES(text: string, rate = 0.82) {
+function speak(text: string) {
   if (typeof window === "undefined" || !window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = "es";
-  u.rate = rate;
-  const vs = window.speechSynthesis.getVoices();
-  const v = vs.find(v => v.lang.startsWith("es-CO")) ||
-    vs.find(v => v.lang.startsWith("es-US")) ||
-    vs.find(v => v.lang.startsWith("es"));
+  u.lang = "es"; u.rate = 0.84;
+  const voices = window.speechSynthesis.getVoices();
+  const v = voices.find(v => v.lang.startsWith("es-CO")) || voices.find(v => v.lang.startsWith("es"));
   if (v) u.voice = v;
   window.speechSynthesis.speak(u);
 }
 
 // ── STORAGE ─────────────────────────────────────────────────────────────────
-function store(key: string, val: unknown) {
-  try { localStorage.setItem(`es-${key}`, JSON.stringify(val)); } catch { /* noop */ }
-}
-function load<T>(key: string, fallback: T): T {
+const STORAGE_KEY = "phil_espanol";
+
+async function dbLoad(): Promise<{ vocab: VocabItem[]; done: number[]; stats: Stats; streak: StreakData }> {
+  const defaults = { vocab: [] as VocabItem[], done: [] as number[], stats: { msgs: 0, corrections: 0, fp: 0, convos: 0 }, streak: { count: 0, date: "" } };
   try {
-    const v = localStorage.getItem(`es-${key}`);
-    return v ? JSON.parse(v) : fallback;
-  } catch { return fallback; }
+    const { data } = await supabase.from("espanol_progress").select("*").eq("id", STORAGE_KEY).single();
+    if (data) return { vocab: data.vocab || [], done: data.done || [], stats: data.stats || defaults.stats, streak: data.streak || defaults.streak };
+  } catch { /* noop */ }
+  try {
+    return {
+      vocab: JSON.parse(localStorage.getItem("es-vocab") || "[]"),
+      done: JSON.parse(localStorage.getItem("es-missions") || "[]"),
+      stats: JSON.parse(localStorage.getItem("es-stats") || JSON.stringify(defaults.stats)),
+      streak: JSON.parse(localStorage.getItem("es-streak") || JSON.stringify(defaults.streak)),
+    };
+  } catch { return defaults; }
+}
+
+async function dbSave(field: string, value: unknown) {
+  try { localStorage.setItem(`es-${field}`, JSON.stringify(value)); } catch { /* noop */ }
+  try {
+    await supabase.from("espanol_progress").upsert({ id: STORAGE_KEY, [field]: value, updated_at: new Date().toISOString() }, { onConflict: "id" });
+  } catch { /* noop */ }
 }
 
 // ── PROMPT ──────────────────────────────────────────────────────────────────
 function buildPrompt(sc: typeof SCENARIOS[0]): string {
-  const datingExtra = sc.id === "dating" ? `
-DATING MODE: You play the role of an attractive, educated Colombian woman from Cartagena having a natural conversation with Phil. Be warm but not easy. Have your own personality and opinions. Make Phil work for it.
-- Respond naturally as a woman would in conversation — not as a language teacher
-- Compliments about specific things > generic. Ask about his life, not just appearance.
-- Colombian women respond to: playfulness, storytelling, ambition, humor
-- Key phrases to model: "me caes muy bien", "tienes algo especial", "me gustaria conocerte mejor"
-- In your response_es: Respond as the woman AND include brief coaching in brackets like [Coach: ahora puedes decir...]
-` : "";
+  return `${sc.prompt}
 
-  return `You are ESPANOL OS — Phil's elite Colombian Spanish coach. Phil is an American entrepreneur in Cartagena, Colombia, building Casa Badillo hotel and running MachineMind AI consulting.
+Phil is: American, 32, attractive, been living in Cartagena a while. Not a tourist. Speaks some Spanish — sometimes makes grammar mistakes, sometimes just broken phrases. That's normal. Understand him and keep going like a real person would.
 
-CURRENT SCENARIO: ${sc.label} — ${sc.sub}
-${datingExtra}
-YOUR VOICE: Educated Cartagenero — warm, direct, witty, opinionated. Use costeno: que mas, listo, dale, bacano, chevere, eso, de una, pues, la verdad, parce, imaginante, claro que si. Reference real Cartagena: Getsemani, El Centro, Bocagrande, Manga, la Popa.
+NEVER break character. NEVER mention language learning. NEVER say you're an AI. Just talk like a real person in Cartagena.
 
-PHIL'S WEAK SPOTS (model fixes naturally in YOUR responses):
-- Adjectives before nouns (English order) → model [noun]+[adj]
-- No time connectors → model cuando/mientras/despues de
-- No opinion launchers → model creo que/me parece/la verdad
-- Ser vs estar confusion
-- Stays in present tense only
+Use natural costeño speech: qué más, dale, listo, bacano, chévere, de una, pues, la verdad, ¡eso!, parce, ¡imagínate!, ¡claro!
 
-RETURN ONLY THIS JSON. NO MARKDOWN. NO CODE FENCES. PURE JSON:
-{"response_es":"Spanish response — natural, Colombian, ends with a question","response_en":"English translation","correction":null,"correction_note":null,"pattern_name":"Grammar pattern in YOUR response","pattern_formula":"Structural formula","flow_connector":"One phrase Phil can use RIGHT NOW","flow_connector_meaning":"English meaning","new_vocab":[{"es":"word","en":"meaning","type":"expression"}],"fluency_points":5,"encouragement":null}
+Keep responses conversational length — like real texting. Sometimes short, sometimes more. Always end with something that continues the conversation (question, comment, etc).
 
-RULES: correction=null if no error, else corrected sentence. correction_note=null if no error. new_vocab max 2 items. fluency_points 1-10. encouragement=null usually. ONLY JSON OUTPUT.`;
+RETURN ONLY THIS JSON — NO PREAMBLE, NO CODE FENCES, PURE JSON:
+{"response_es":"your natural Spanish response","response_en":"English translation","correction":null,"correction_note":null,"pattern_name":"grammar pattern in YOUR response","pattern_formula":"short formula","flow_connector":"one phrase Phil can use RIGHT NOW to continue","flow_connector_meaning":"English meaning","new_vocab":[{"es":"word","en":"meaning"}],"fluency_points":5,"vibe":null}
+
+STRICT RULES:
+- correction: null if Phil had no clear grammatical error. If error, write the corrected version of Phil's sentence.
+- correction_note: null if no error. ONE sentence max explaining the fix.
+- new_vocab: 1-2 items from your response Phil should know. Empty array [] if nothing new.
+- fluency_points: 1-10 rating of Phil's Spanish quality (1=single word, 10=complex correct sentences)
+- vibe: null usually. ONLY if Phil said something notably clever, charming, or funny — one brief genuine reaction in English (e.g. "Nice one" or "That landed well"). Keep it real.
+- OUTPUT ONLY THE JSON OBJECT. NOTHING ELSE.`;
 }
 
 // ── ICONS ───────────────────────────────────────────────────────────────────
 const ICONS = {
-  talk: <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>,
-  patterns: <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>,
-  missions: <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M9 11l3 3L22 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>,
-  vocab: <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>,
-  progress: <svg viewBox="0 0 24 24" width="20" height="20" fill="none"><path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+  talk: <svg viewBox="0 0 24 24" width="22" height="22" fill="none"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+  patterns: <svg viewBox="0 0 24 24" width="22" height="22" fill="none"><path d="M4 6h16M4 11h16M4 16h10" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>,
+  missions: <svg viewBox="0 0 24 24" width="22" height="22" fill="none"><path d="M9 11l3 3L22 4" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+  vocab: <svg viewBox="0 0 24 24" width="22" height="22" fill="none"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>,
+  progress: <svg viewBox="0 0 24 24" width="22" height="22" fill="none"><path d="M18 20V10M12 20V4M6 20v-6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg>,
 };
 
 // ── CSS ─────────────────────────────────────────────────────────────────────
 const CSS = `
-  @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,500&family=JetBrains+Mono:wght@400;500;700&display=swap');
-  *{box-sizing:border-box;margin:0;padding:0;}
-  ::-webkit-scrollbar{width:2px;}
-  ::-webkit-scrollbar-track{background:transparent;}
-  ::-webkit-scrollbar-thumb{background:#1c1c1c;border-radius:1px;}
-  @keyframes fadeUp{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
-  @keyframes pulse{0%,100%{opacity:.2}50%{opacity:1}}
-  .fu{animation:fadeUp .22s ease;}
-  .dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:${G};animation:pulse 1.3s ease infinite;margin-right:3px;}
-  .dot:nth-child(2){animation-delay:.22s}.dot:nth-child(3){animation-delay:.44s}
-  textarea:focus,input:focus{outline:none;}
-  textarea::placeholder,input::placeholder{color:#252525;}
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;1,500&family=JetBrains+Mono:wght@400;500&display=swap');
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  ::-webkit-scrollbar{display:none;}
+  html,body{height:100%;overflow:hidden;background:#0F0E0C;}
+  button{touch-action:manipulation;font-family:'Plus Jakarta Sans',sans-serif;cursor:pointer;border:none;background:none;}
+  textarea,input{font-family:'Plus Jakarta Sans',sans-serif;}
   textarea{resize:none;}
-  button{cursor:pointer;font-family:'Outfit',sans-serif;}
-  button:disabled{opacity:.25;cursor:not-allowed!important;}
+  textarea:focus,input:focus{outline:none;}
+  textarea::placeholder,input::placeholder{color:#3A3835;}
+  @keyframes slideUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes blink{0%,100%{opacity:.15}50%{opacity:1}}
+  @keyframes popIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+  @keyframes recording{0%,100%{box-shadow:0 0 0 0 rgba(201,112,112,.4)}50%{box-shadow:0 0 0 8px rgba(201,112,112,0)}}
+  .msg{animation:slideUp .2s cubic-bezier(.2,.8,.2,1);}
+  .popIn{animation:popIn .15s ease;}
+  .dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:${T.gold};animation:blink 1.3s ease infinite;margin:0 2px;}
+  .dot:nth-child(2){animation-delay:.2s}.dot:nth-child(3){animation-delay:.4s}
+  .press{transition:transform .1s,opacity .1s;}.press:active{transform:scale(.96);opacity:.8;}
+  .rec-pulse{animation:recording 1.5s ease infinite;}
+  button:disabled{opacity:.25!important;cursor:not-allowed!important;}
 `;
 
 // ── MAIN COMPONENT ──────────────────────────────────────────────────────────
@@ -337,85 +269,88 @@ export default function EspanolOS() {
   const [msgs, setMsgs] = useState<Message[]>([]);
   const [inp, setInp] = useState("");
   const [loading, setLoading] = useState(false);
-  const [listening, setListening] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [showEN, setShowEN] = useState(true);
-  const [showAnalysis, setShowAnalysis] = useState(false);
   const [showQuick, setShowQuick] = useState(false);
+  const [expandedUserMsg, setExpandedUserMsg] = useState<number | null>(null);
   const [expandPat, setExpandPat] = useState<string | null>(null);
   const [practiceText, setPracticeText] = useState<Record<string, string>>({});
-  const [activeMission, setActiveMission] = useState<MissionType | null>(null);
-
-  // Persistent state
-  const [vocab, setVocab] = useState<VocabItem[]>([]);
-  const [missionsDone, setMissionsDone] = useState<number[]>([]);
-  const [stats, setStats] = useState<Stats>({ msgs: 0, corrections: 0, fp: 0, convos: 0 });
-  const [streak, setStreak] = useState(0);
   const [mounted, setMounted] = useState(false);
 
-  const recRef = useRef<ReturnType<typeof Object> | null>(null);
+  // Persistent
+  const [vocab, setVocab] = useState<VocabItem[]>([]);
+  const [done, setDone] = useState<number[]>([]);
+  const [stats, setStats] = useState<Stats>({ msgs: 0, corrections: 0, fp: 0, convos: 0 });
+  const [streak, setStreak] = useState<StreakData>({ count: 0, date: "" });
+
+  // Correction data keyed by user message ID
+  const [msgCorrections, setMsgCorrections] = useState<Record<number, CorrectionData>>({});
+
+  const mediaRecRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  const lastAI = [...msgs].reverse().find(m => m.role === "ai");
-
-  // Load persistent data
+  // Load from DB
   useEffect(() => {
-    setVocab(load<VocabItem[]>("vocab", []));
-    setMissionsDone(load<number[]>("missions", []));
-    setStats(load<Stats>("stats", { msgs: 0, corrections: 0, fp: 0, convos: 0 }));
-    const streakData = load<{ count: number; date: string }>("streak", { count: 0, date: "" });
-    const today = new Date().toDateString();
-    setStreak(streakData.date === today ? streakData.count : Math.max(0, streakData.count - 1));
-    setMounted(true);
+    dbLoad().then(d => {
+      setVocab(d.vocab); setDone(d.done); setStats(d.stats); setStreak(d.streak);
+      setMounted(true);
+    });
     window.speechSynthesis?.getVoices();
   }, []);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [msgs, loading]);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs, loading]);
 
-  const updateStreak = useCallback(() => {
-    const today = new Date().toDateString();
-    const streakData = load<{ count: number; date: string }>("streak", { count: 0, date: "" });
-    const newStreak = streakData.date === today ? streakData.count : streakData.count + 1;
-    setStreak(newStreak);
-    store("streak", { count: newStreak, date: today });
-  }, []);
+  // ── WHISPER VOICE ─────────────────────────────────────────────────────────
+  const toggleRecord = useCallback(async () => {
+    if (recording) {
+      mediaRecRef.current?.stop();
+      setRecording(false);
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRec = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      chunksRef.current = [];
+      mediaRec.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mediaRec.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+        if (blob.size < 100) return;
+        const formData = new FormData();
+        formData.append("file", blob, "recording.webm");
+        try {
+          const res = await fetch("/api/espanol/whisper", { method: "POST", body: formData });
+          const data = await res.json();
+          if (data.text) {
+            setInp(prev => (prev ? prev + " " : "") + data.text);
+            inputRef.current?.focus();
+          }
+        } catch { /* noop */ }
+      };
+      mediaRecRef.current = mediaRec;
+      mediaRec.start();
+      setRecording(true);
+    } catch {
+      alert("Microphone access required for voice input.");
+    }
+  }, [recording]);
 
-  // Voice input
-  const toggleListen = useCallback(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) { alert("Voice input requires Chrome."); return; }
-    if (listening) { (recRef.current as { stop: () => void })?.stop(); setListening(false); return; }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const rec = new (SR as any)();
-    rec.lang = "es";
-    rec.interimResults = false;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    rec.onresult = (e: any) => {
-      setInp((p: string) => (p ? p + " " : "") + e.results[0][0].transcript);
-      setListening(false);
-    };
-    rec.onerror = () => setListening(false);
-    rec.onend = () => setListening(false);
-    recRef.current = rec;
-    rec.start();
-    setListening(true);
-  }, [listening]);
-
-  // Send message
+  // ── SEND ──────────────────────────────────────────────────────────────────
   const send = useCallback(async () => {
     if (!inp.trim() || loading) return;
     const txt = inp.trim();
-    const uMsg: Message = { role: "user", text: txt, id: Date.now() };
+    const userMsgId = Date.now();
+    const uMsg: Message = { role: "user", text: txt, id: userMsgId };
     const updated = [...msgs, uMsg];
-    setMsgs(updated);
-    setInp("");
-    setLoading(true);
-    setShowAnalysis(false);
-    setShowQuick(false);
-    updateStreak();
+    setMsgs(updated); setInp(""); setLoading(true);
+    setShowQuick(false); setExpandedUserMsg(null);
+
+    // Streak
+    const today = new Date().toDateString();
+    const newStreak = { count: streak.date === today ? streak.count : streak.count + 1, date: today };
+    setStreak(newStreak); dbSave("streak", newStreak);
 
     const apiMsgs = updated.map(m => ({
       role: m.role === "user" ? "user" as const : "assistant" as const,
@@ -431,133 +366,132 @@ export default function EspanolOS() {
       const data = await res.json();
       const raw = data.content?.[0]?.text || "{}";
       let d: AIData = {};
-      try {
-        d = JSON.parse(raw.replace(/```json|```/g, "").trim());
-      } catch {
-        d = { response_es: raw, response_en: "[parse error]" };
+      try { d = JSON.parse(raw.replace(/```json|```/g, "").trim()); } catch { d = { response_es: raw, response_en: "[parse error]" }; }
+
+      const aiMsg: Message = { role: "ai", d, raw, id: Date.now(), userMsgId };
+      setMsgs(prev => [...prev, aiMsg]);
+
+      // Store correction data keyed to userMsgId
+      setMsgCorrections(prev => ({ ...prev, [userMsgId]: {
+        correction: d.correction || null,
+        correction_note: d.correction_note || null,
+        fp: d.fluency_points || 0,
+        pattern_name: d.pattern_name || null,
+        pattern_formula: d.pattern_formula || null,
+        flow_connector: d.flow_connector || null,
+        flow_connector_meaning: d.flow_connector_meaning || null,
+        new_vocab: d.new_vocab || [],
+        vibe: d.vibe || null,
+      }}));
+
+      // Auto-expand if there's a correction
+      if (d.correction) {
+        setExpandedUserMsg(userMsgId);
       }
 
-      setMsgs(prev => [...prev, { role: "ai", d, raw, id: Date.now() }]);
-      setShowAnalysis(true);
-
-      // Update vocab
       if (d.new_vocab && d.new_vocab.length > 0) {
         setVocab(prev => {
           const nv = [...prev, ...d.new_vocab!].filter((v, i, a) => a.findIndex(x => x.es === v.es) === i);
-          store("vocab", nv);
+          dbSave("vocab", nv);
           return nv;
         });
       }
-
-      // Update stats
       setStats(prev => {
-        const ns = {
-          msgs: prev.msgs + 1,
-          corrections: prev.corrections + (d.correction ? 1 : 0),
-          fp: prev.fp + (d.fluency_points || 0),
-          convos: prev.convos,
-        };
-        store("stats", ns);
+        const ns = { msgs: prev.msgs + 1, corrections: prev.corrections + (d.correction ? 1 : 0), fp: prev.fp + (d.fluency_points || 0), convos: prev.convos };
+        dbSave("stats", ns);
         return ns;
       });
     } catch {
-      setMsgs(prev => [...prev, {
-        role: "ai",
-        d: { response_es: "Error de conexion. Intenta de nuevo.", response_en: "Connection error." },
-        raw: "{}",
-        id: Date.now(),
-      }]);
+      setMsgs(prev => [...prev, { role: "ai", d: { response_es: "Error de conexión. Intenta de nuevo.", response_en: "Connection error." }, raw: "{}", id: Date.now(), userMsgId }]);
     }
     setLoading(false);
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }, [inp, loading, msgs, sc, updateStreak]);
+    setTimeout(() => inputRef.current?.focus(), 80);
+  }, [inp, loading, msgs, sc, streak]);
 
   const newConvo = useCallback(() => {
-    setMsgs([]);
-    setActiveMission(null);
-    setShowAnalysis(false);
-    setShowQuick(false);
-    setStats(prev => {
-      const ns = { ...prev, convos: prev.convos + 1 };
-      store("stats", ns);
-      return ns;
-    });
+    setMsgs([]); setShowQuick(false); setExpandedUserMsg(null); setMsgCorrections({});
+    setStats(prev => { const ns = { ...prev, convos: prev.convos + 1 }; dbSave("stats", ns); return ns; });
   }, []);
 
   const completeMission = useCallback((id: number) => {
-    setMissionsDone(prev => {
-      const u = [...new Set([...prev, id])];
-      store("missions", u);
-      return u;
-    });
+    setDone(prev => { const u = [...new Set([...prev, id])]; dbSave("done", u); return u; });
   }, []);
 
-  const fluency = Math.min(100, Math.round(stats.fp * 0.7 + vocab.length * 0.6 + missionsDone.length * 3));
+  const fluency = Math.min(100, Math.round(stats.fp * 0.7 + vocab.length * 0.6 + done.length * 3));
 
-  if (!mounted) return <div style={{ height: "100dvh", background: "#050505" }} />;
+  if (!mounted) return <div style={{ height: "100dvh", background: T.bg }} />;
 
   return (
-    <div style={{ height: "100dvh", background: "#050505", color: "#e2e2e2", fontFamily: "'Outfit',sans-serif", display: "flex", flexDirection: "column", overflow: "hidden", maxWidth: 520, margin: "0 auto", position: "relative" }}>
+    <div style={{ height: "100dvh", background: T.bg, color: T.cream, fontFamily: "'Plus Jakarta Sans',sans-serif", display: "flex", flexDirection: "column", overflow: "hidden", maxWidth: 500, margin: "0 auto" }}>
       <style>{CSS}</style>
 
-      {/* ── TOP HEADER ── */}
-      <div style={{ flexShrink: 0, padding: "10px 16px 8px", borderBottom: "1px solid #0d0d0d", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      {/* HEADER */}
+      <div style={{ flexShrink: 0, padding: "14px 18px 10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 17, color: G, fontWeight: 700 }}>ESPANOL</span>
-          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 17, color: "#181818", fontWeight: 700 }}>OS</span>
+          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, color: T.gold, fontWeight: 700 }}>Español</span>
+          <span style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, color: T.cream3, fontStyle: "italic" }}>OS</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 10px", background: "#0a0a0a", border: "1px solid #141414", borderRadius: 20 }}>
-            <span style={{ fontSize: 12 }}>🔥</span>
-            <span style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 11, color: G, fontWeight: 700 }}>{streak}</span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, background: T.s1, padding: "5px 12px", borderRadius: 20, border: `1px solid ${T.border}` }}>
+            <span style={{ fontSize: 13 }}>🔥</span>
+            <span style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 12, color: T.gold, fontWeight: 700 }}>{streak.count}</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", background: "#0a0a0a", border: "1px solid #141414", borderRadius: 20 }}>
-            <div style={{ width: 40, height: 3, background: "#111", borderRadius: 2, overflow: "hidden" }}>
-              <div style={{ width: `${fluency}%`, height: "100%", background: G, borderRadius: 2, transition: "width .5s" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 6, background: T.s1, padding: "5px 12px", borderRadius: 20, border: `1px solid ${T.border}` }}>
+            <div style={{ width: 42, height: 4, background: T.s2, borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ width: `${fluency}%`, height: "100%", background: T.gold, transition: "width .5s" }} />
             </div>
-            <span style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 11, color: G, fontWeight: 700 }}>{fluency}</span>
+            <span style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 12, color: T.gold, fontWeight: 700 }}>{fluency}</span>
           </div>
         </div>
       </div>
 
-      {/* ── CONTENT ── */}
       <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column" }}>
 
-        {/* ═══ TAB: CONVERSAR ═══ */}
+        {/* ══════ CONVERSAR ══════ */}
         {tab === "talk" && (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-            {/* Scenario scroll */}
-            <div style={{ flexShrink: 0, overflowX: "auto", display: "flex", gap: 6, padding: "8px 14px", borderBottom: "1px solid #0a0a0a" }}>
+
+            {/* Scenario pills */}
+            <div style={{ flexShrink: 0, overflowX: "auto", display: "flex", gap: 7, padding: "4px 18px 12px" }}>
               {SCENARIOS.map(s => (
-                <button key={s.id} onClick={() => { setSc(s); newConvo(); }}
-                  style={{ flexShrink: 0, padding: "5px 12px", borderRadius: 20, border: `1px solid ${sc.id === s.id ? s.color + "55" : "#141414"}`, background: sc.id === s.id ? s.color + "0d" : "none", color: sc.id === s.id ? s.color : "#2e2e2e", fontSize: 11, fontWeight: 600, whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 5 }}>
-                  <span style={{ fontSize: 13 }}>{s.icon}</span> {s.label}
+                <button key={s.id} className="press"
+                  onClick={() => { setSc(s); newConvo(); }}
+                  style={{ flexShrink: 0, padding: "7px 14px", borderRadius: 20, border: `1.5px solid ${sc.id === s.id ? s.color + "70" : T.border}`, background: sc.id === s.id ? s.color + "15" : T.s1, color: sc.id === s.id ? s.color : T.cream3, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 5, transition: "all .18s" }}>
+                  {s.icon} {s.label}
                 </button>
               ))}
             </div>
 
+            {/* Persona header */}
+            <div style={{ flexShrink: 0, marginBottom: 2, padding: "6px 18px 8px", display: "flex", alignItems: "center", gap: 10, borderBottom: `1px solid ${T.border}` }}>
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: sc.avatarColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{sc.avatarLetter}</span>
+              </div>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.cream, lineHeight: 1.2 }}>{sc.personaName}, {sc.personaAge}</div>
+                <div style={{ fontSize: 11, color: T.cream3 }}>{sc.personaDesc}</div>
+              </div>
+              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5 }}>
+                <div style={{ width: 6, height: 6, borderRadius: "50%", background: T.green }} />
+                <span style={{ fontSize: 11, color: T.cream3 }}>en línea</span>
+              </div>
+            </div>
+
             {/* Messages */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "14px 14px 0", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ flex: 1, overflowY: "auto", padding: "12px 18px 0" }}>
               {msgs.length === 0 && (
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 8, textAlign: "center", padding: "0 24px" }}>
-                  <div style={{ fontSize: 11, color: sc.color, letterSpacing: "2px", fontWeight: 700, marginBottom: 4 }}>{sc.icon} {sc.label.toUpperCase()}</div>
-                  <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 36, color: "#0d0d0d", fontStyle: "italic", lineHeight: 1 }}>Habla.</div>
-                  <div style={{ fontSize: 12, color: "#1c1c1c", lineHeight: 2, marginTop: 6 }}>
-                    Escribe en espanol.<br />
-                    <span style={{ color: G }}>Roto, simple, una palabra.</span><br />
-                    <span style={{ color: "#1a1a1a" }}>El sistema te corrige en tiempo real.</span>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "80%", gap: 10, textAlign: "center", padding: "0 16px 60px" }}>
+                  <div style={{ width: 52, height: 52, borderRadius: "50%", background: sc.avatarColor, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 2 }}>
+                    <span style={{ fontSize: 22, fontWeight: 700, color: "#fff" }}>{sc.avatarLetter}</span>
                   </div>
-                  {activeMission && (
-                    <div style={{ marginTop: 16, padding: "12px 16px", background: "rgba(201,168,76,.07)", border: "1px solid rgba(201,168,76,.2)", borderRadius: 10, width: "100%", textAlign: "left" }}>
-                      <div style={{ fontSize: 9, color: G, letterSpacing: "2px", fontWeight: 700, marginBottom: 4 }}>MISION ACTIVA</div>
-                      <div style={{ fontSize: 13, color: "#c8c8c8", fontWeight: 600, marginBottom: 3 }}>{activeMission.icon} {activeMission.title}</div>
-                      <div style={{ fontSize: 11, color: "#333", lineHeight: 1.6 }}>{activeMission.desc}</div>
-                    </div>
-                  )}
-                  <div style={{ marginTop: 16, display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: T.cream }}>{sc.personaName}</div>
+                  <div style={{ fontSize: 13, color: T.cream3, lineHeight: 1.7, maxWidth: 240 }}>{sc.personaDesc}</div>
+                  <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 32, color: T.s3, fontStyle: "italic", marginTop: 8 }}>Habla.</div>
+                  <div style={{ fontSize: 13, color: T.cream3, lineHeight: 1.8 }}>Escribe cualquier cosa en español.<br /><span style={{ color: T.goldD }}>Roto está bien.</span></div>
+                  <div style={{ marginTop: 10, display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center" }}>
                     {(QUICK[sc.id] || []).map((q, i) => (
-                      <button key={i} onClick={() => setInp(q)}
-                        style={{ padding: "6px 12px", borderRadius: 16, border: "1px solid #141414", background: "#0a0a0a", color: "#333", fontSize: 11, fontStyle: "italic" }}>
+                      <button key={i} className="press" onClick={() => setInp(q)}
+                        style={{ padding: "7px 13px", borderRadius: 16, border: `1px solid ${T.border}`, background: T.s1, color: T.cream2, fontSize: 12, fontStyle: "italic" }}>
                         &ldquo;{q}&rdquo;
                       </button>
                     ))}
@@ -565,206 +499,245 @@ export default function EspanolOS() {
                 </div>
               )}
 
-              {msgs.map(msg => (
-                <div key={msg.id} className="fu" style={{ display: "flex", flexDirection: "column", alignItems: msg.role === "user" ? "flex-end" : "flex-start", gap: 4 }}>
-                  {msg.role === "user" ? (
-                    <div style={{ background: "#0f0f0f", border: "1px solid #191919", borderRadius: "16px 16px 4px 16px", padding: "10px 14px", maxWidth: "82%", fontSize: 14, lineHeight: 1.65, color: "#c8c8c8" }}>{msg.text}</div>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 3, maxWidth: "86%" }}>
-                      <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
-                        <div style={{ background: "#0b0b0b", border: "1px solid #141414", borderRadius: "16px 16px 16px 4px", padding: "10px 14px", fontSize: 14, lineHeight: 1.72, color: "#e2e2e2", flex: 1 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingBottom: 12 }}>
+                {msgs.map(msg => {
+                  if (msg.role === "user") {
+                    const corrData = msgCorrections[msg.id];
+                    const isExpanded = expandedUserMsg === msg.id;
+                    const hasCorrectionData = corrData !== undefined;
+                    const hasError = hasCorrectionData && corrData.correction;
+                    const dotColor = hasCorrectionData ? (hasError ? T.red : T.green) : "transparent";
+
+                    return (
+                      <div key={msg.id} className="msg" style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 6 }}>
+                          {/* Quality indicator dot */}
+                          {hasCorrectionData && (
+                            <div style={{ width: 7, height: 7, borderRadius: "50%", background: hasError ? T.red : T.green, flexShrink: 0, marginTop: 6 }} />
+                          )}
+                          {/* Bubble — tappable */}
+                          <button className="press" onClick={() => {
+                            if (!hasCorrectionData) return;
+                            setExpandedUserMsg(isExpanded ? null : msg.id);
+                          }}
+                            style={{ background: T.s2, borderLeft: `3px solid ${sc.color}`, borderRadius: "18px 18px 4px 18px", padding: "11px 15px", maxWidth: "80%", fontSize: 15, lineHeight: 1.6, color: T.cream, textAlign: "left", cursor: hasCorrectionData ? "pointer" : "default", borderTop: "none", borderRight: "none", borderBottom: "none" }}>
+                            {msg.text}
+                          </button>
+                        </div>
+                        {/* Tap hint */}
+                        {hasCorrectionData && !isExpanded && (
+                          <div style={{ fontSize: 10, color: T.cream3, paddingRight: 4, display: "flex", alignItems: "center", gap: 4 }}>
+                            <div style={{ width: 5, height: 5, borderRadius: "50%", background: dotColor }} />
+                            {hasError ? "Toca para ver corrección" : "correcto — toca para ver análisis"}
+                          </div>
+                        )}
+                        {/* Expanded correction card */}
+                        {isExpanded && hasCorrectionData && (
+                          <div className="popIn" style={{ width: "86%", background: T.s1, border: `1px solid ${hasError ? T.red + "40" : T.green + "40"}`, borderRadius: 12, padding: "12px 14px", marginRight: 0 }}>
+                            {/* FP bar */}
+                            <div style={{ display: "flex", gap: 2, marginBottom: 8, alignItems: "center" }}>
+                              {Array.from({ length: 10 }).map((_, i) => (
+                                <div key={i} style={{ width: 16, height: 4, borderRadius: 2, background: i < (corrData.fp || 0) ? T.gold : T.s3, flex: 1 }} />
+                              ))}
+                              <span style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 10, color: T.gold, marginLeft: 6, flexShrink: 0 }}>{corrData.fp}/10</span>
+                            </div>
+
+                            {!hasError && (
+                              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: corrData.vibe ? 8 : 0 }}>
+                                <span style={{ color: T.green, fontSize: 15 }}>✓</span>
+                                <span style={{ fontSize: 13, color: T.green, fontWeight: 600 }}>Sin errores gramaticales</span>
+                              </div>
+                            )}
+
+                            {hasError && (
+                              <div style={{ marginBottom: 8 }}>
+                                <div style={{ fontSize: 10, color: T.red, fontWeight: 700, letterSpacing: "1.5px", marginBottom: 5 }}>CORRECCIÓN</div>
+                                <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 13, color: T.red, lineHeight: 1.5, background: `${T.red}0d`, padding: "8px 10px", borderRadius: 8 }}>
+                                  {corrData.correction}
+                                </div>
+                                {corrData.correction_note && (
+                                  <div style={{ fontSize: 12, color: "#8a5555", marginTop: 5, lineHeight: 1.6 }}>{corrData.correction_note}</div>
+                                )}
+                              </div>
+                            )}
+
+                            {corrData.vibe && (
+                              <div style={{ fontSize: 12, color: T.goldD, fontStyle: "italic", borderTop: `1px solid ${T.border}`, paddingTop: 6 }}>{corrData.vibe}</div>
+                            )}
+
+                            {corrData.pattern_name && (
+                              <div style={{ marginTop: 8, borderTop: `1px solid ${T.border}`, paddingTop: 8 }}>
+                                <div style={{ fontSize: 10, color: T.goldD, fontWeight: 700, letterSpacing: "1px", marginBottom: 3 }}>PATRÓN GRAMÁTICO</div>
+                                <div style={{ fontSize: 12, color: T.gold }}>{corrData.pattern_name}</div>
+                                {corrData.pattern_formula && <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 10, color: T.goldD, marginTop: 2 }}>{corrData.pattern_formula}</div>}
+                              </div>
+                            )}
+
+                            {corrData.flow_connector && (
+                              <button className="press" onClick={() => {
+                                setInp(p => (p ? p + " " : "") + corrData.flow_connector);
+                                setExpandedUserMsg(null);
+                                inputRef.current?.focus();
+                              }}
+                                style={{ marginTop: 8, width: "100%", padding: "8px 12px", borderRadius: 10, background: `${T.blue}12`, border: `1px solid ${T.blue}35`, color: T.blue, fontSize: 13, fontWeight: 600, fontStyle: "italic", textAlign: "left" }}>
+                                Di ahora → &ldquo;{corrData.flow_connector}&rdquo;
+                                <span style={{ fontSize: 11, color: T.cream3, fontStyle: "normal", marginLeft: 4 }}>({corrData.flow_connector_meaning})</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // AI message
+                  return (
+                    <div key={msg.id} className="msg" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+                      <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+                        {/* Small avatar */}
+                        <div style={{ width: 26, height: 26, borderRadius: "50%", background: sc.avatarColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginBottom: 2 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "#fff" }}>{sc.avatarLetter}</span>
+                        </div>
+                        <div style={{ background: T.s1, border: `1px solid ${T.border}`, borderRadius: "4px 18px 18px 18px", padding: "12px 16px", fontSize: 15, lineHeight: 1.7, color: T.cream, maxWidth: "82%" }}>
                           {msg.d?.response_es}
                         </div>
                         {msg.d?.response_es && (
-                          <button onClick={() => speakES(msg.d!.response_es!)} style={{ background: "none", border: "none", fontSize: 14, opacity: .3, padding: "8px 4px", flexShrink: 0, lineHeight: 1 }}>🔊</button>
+                          <button onClick={() => speak(msg.d!.response_es!)} style={{ opacity: .3, fontSize: 15, paddingBottom: 4, flexShrink: 0 }}>🔊</button>
                         )}
                       </div>
+                      {msg.d?.vibe && <div style={{ fontSize: 12, color: T.goldD, paddingLeft: 34, fontStyle: "italic" }}>{msg.d.vibe}</div>}
                       {showEN && msg.d?.response_en && (
-                        <div style={{ padding: "2px 6px", fontSize: 11, color: "#252525", fontStyle: "italic", lineHeight: 1.6 }}>{msg.d.response_en}</div>
+                        <div style={{ fontSize: 12, color: T.cream3, paddingLeft: 34, fontStyle: "italic", lineHeight: 1.6 }}>{msg.d.response_en}</div>
                       )}
                     </div>
-                  )}
-                </div>
-              ))}
+                  );
+                })}
 
-              {loading && <div style={{ display: "flex", gap: 2, padding: "2px" }}><div className="dot" /><div className="dot" /><div className="dot" /></div>}
-              <div ref={bottomRef} style={{ height: 8 }} />
+                {loading && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ width: 26, height: 26, borderRadius: "50%", background: sc.avatarColor, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#fff" }}>{sc.avatarLetter}</span>
+                    </div>
+                    <div style={{ background: T.s1, border: `1px solid ${T.border}`, borderRadius: "4px 18px 18px 18px", padding: "12px 16px" }}>
+                      <div className="dot" /><div className="dot" /><div className="dot" />
+                    </div>
+                  </div>
+                )}
+                <div ref={bottomRef} />
+              </div>
             </div>
 
-            {/* ── ANALYSIS DRAWER ── */}
-            {showAnalysis && lastAI && (
-              <div className="fu" style={{ flexShrink: 0, borderTop: "1px solid #0d0d0d", background: "#060606", maxHeight: 220, overflowY: "auto" }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px 0" }}>
-                  <span style={{ fontSize: 9, letterSpacing: "2px", color: "#252525", fontWeight: 700 }}>ANALISIS</span>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => setShowEN(p => !p)} style={{ fontSize: 9, color: "#252525", background: "none", border: "1px solid #141414", borderRadius: 4, padding: "2px 8px", letterSpacing: "1px", fontWeight: 700 }}>EN {showEN ? "ON" : "OFF"}</button>
-                    <button onClick={() => setShowAnalysis(false)} style={{ fontSize: 9, color: "#252525", background: "none", border: "1px solid #141414", borderRadius: 4, padding: "2px 8px" }}>✕</button>
-                  </div>
-                </div>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 6, padding: "8px 14px 12px" }}>
-                  {/* Fluency bar */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 20, border: "1px solid #141414", background: "#0a0a0a" }}>
-                    <div style={{ display: "flex", gap: 1 }}>
-                      {Array.from({ length: 10 }).map((_, i) => (
-                        <div key={i} style={{ width: 4, height: 8, borderRadius: 1, background: i < (lastAI.d?.fluency_points || 0) ? G : "#111" }} />
-                      ))}
-                    </div>
-                    <span style={{ fontSize: 9, color: G, fontFamily: "JetBrains Mono,monospace", fontWeight: 700 }}>{lastAI.d?.fluency_points || 0}/10</span>
-                  </div>
-
-                  {/* No error */}
-                  {!lastAI.d?.correction && (
-                    <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "5px 10px", borderRadius: 20, border: `1px solid ${GR}30`, background: `${GR}08`, fontSize: 11, color: GR, fontWeight: 500 }}>
-                      <span>✓</span><span>Sin errores</span>
-                    </div>
-                  )}
-
-                  {/* Correction */}
-                  {lastAI.d?.correction && (
-                    <div style={{ width: "100%", padding: "8px 10px", borderRadius: 8, border: `1px solid ${RD}25`, background: `${RD}07` }}>
-                      <div style={{ fontSize: 9, color: RD, letterSpacing: "1.5px", fontWeight: 700, marginBottom: 3 }}>CORRECCION</div>
-                      <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 12, color: RD, lineHeight: 1.5 }}>{lastAI.d.correction}</div>
-                      {lastAI.d.correction_note && <div style={{ fontSize: 11, color: "#5a2a2a", marginTop: 3, lineHeight: 1.5 }}>{lastAI.d.correction_note}</div>}
-                    </div>
-                  )}
-
-                  {/* Encouragement */}
-                  {lastAI.d?.encouragement && (
-                    <div style={{ width: "100%", padding: "7px 10px", borderRadius: 8, border: `1px solid ${G}20`, background: `${G}06`, fontSize: 11, color: "#7a6222", lineHeight: 1.5 }}>⭐ {lastAI.d.encouragement}</div>
-                  )}
-
-                  {/* Pattern */}
-                  {lastAI.d?.pattern_name && (
-                    <div style={{ padding: "5px 10px", borderRadius: 20, border: `1px solid ${G}30`, background: `${G}08` }}>
-                      <div style={{ fontSize: 9, color: G, letterSpacing: "1px", fontWeight: 700 }}>{lastAI.d.pattern_name}</div>
-                      <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 9, color: "#5a4a18", marginTop: 1 }}>{lastAI.d.pattern_formula}</div>
-                    </div>
-                  )}
-
-                  {/* Flow connector */}
-                  {lastAI.d?.flow_connector && (
-                    <button onClick={() => { setInp(p => (p ? p + " " : "") + lastAI.d!.flow_connector!); setShowAnalysis(false); inputRef.current?.focus(); }}
-                      style={{ padding: "6px 12px", borderRadius: 20, border: `1px solid ${B}35`, background: `${B}08`, color: B, fontSize: 12, fontWeight: 600, fontStyle: "italic", display: "flex", alignItems: "center", gap: 5 }}>
-                      &ldquo;{lastAI.d.flow_connector}&rdquo; <span style={{ fontSize: 9, opacity: .6, fontStyle: "normal" }}>→ insertar</span>
-                    </button>
-                  )}
-
-                  {/* Vocab chips */}
-                  {lastAI.d?.new_vocab?.map((v, i) => (
-                    <button key={i} onClick={() => speakES(v.es)}
-                      style={{ padding: "5px 10px", borderRadius: 20, border: "1px solid #141414", background: "#0a0a0a", fontSize: 11, color: "#3a3a3a", fontStyle: "italic", display: "flex", alignItems: "center", gap: 4 }}>
-                      🔊 {v.es} — <span style={{ color: "#252525", fontStyle: "normal" }}>{v.en}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* ── QUICK PHRASES ── */}
+            {/* Quick phrases drawer */}
             {showQuick && (
-              <div className="fu" style={{ flexShrink: 0, borderTop: "1px solid #0d0d0d", background: "#060606", padding: "8px 14px", display: "flex", flexWrap: "wrap", gap: 5 }}>
+              <div style={{ flexShrink: 0, background: T.s1, borderTop: `1px solid ${T.border}`, padding: "10px 16px", display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {(QUICK[sc.id] || []).map((q, i) => (
-                  <button key={i} onClick={() => { setInp(q); setShowQuick(false); inputRef.current?.focus(); }}
-                    style={{ padding: "5px 11px", borderRadius: 14, border: "1px solid #161616", background: "#0a0a0a", color: "#3a3a3a", fontSize: 11, fontStyle: "italic" }}>
+                  <button key={i} className="press" onClick={() => { setInp(q); setShowQuick(false); inputRef.current?.focus(); }}
+                    style={{ padding: "6px 12px", borderRadius: 14, background: T.s2, border: `1px solid ${T.border}`, color: T.cream2, fontSize: 13, fontStyle: "italic" }}>
                     &ldquo;{q}&rdquo;
                   </button>
                 ))}
               </div>
             )}
 
-            {/* ── INPUT AREA ── */}
-            <div style={{ flexShrink: 0, padding: "10px 12px", borderTop: "1px solid #0a0a0a", background: "#050505" }}>
+            {/* INPUT */}
+            <div style={{ flexShrink: 0, padding: "10px 14px", paddingBottom: "calc(10px + env(safe-area-inset-bottom,0px))", background: T.bg, borderTop: `1px solid ${T.border}` }}>
+              {/* Toolbar */}
               <div style={{ display: "flex", gap: 6, marginBottom: 8, overflowX: "auto" }}>
-                {lastAI && (
-                  <button onClick={() => { setShowAnalysis(p => !p); setShowQuick(false); }}
-                    style={{ flexShrink: 0, padding: "4px 10px", borderRadius: 14, border: `1px solid ${showAnalysis ? G + "40" : "#141414"}`, background: showAnalysis ? `${G}08` : "none", color: showAnalysis ? G : "#252525", fontSize: 9, fontWeight: 700, letterSpacing: "1.5px", display: "flex", alignItems: "center", gap: 4 }}>
-                    {lastAI.d?.correction ? <span style={{ color: RD, fontSize: 8 }}>●</span> : <span style={{ color: GR, fontSize: 8 }}>●</span>}
-                    ANALISIS
-                  </button>
-                )}
-                <button onClick={() => { setShowQuick(p => !p); setShowAnalysis(false); }}
-                  style={{ flexShrink: 0, padding: "4px 10px", borderRadius: 14, border: `1px solid ${showQuick ? B + "40" : "#141414"}`, background: showQuick ? `${B}08` : "none", color: showQuick ? B : "#252525", fontSize: 9, fontWeight: 700, letterSpacing: "1.5px" }}>
-                  FRASES
+                <button className="press" onClick={() => setShowQuick(p => !p)}
+                  style={{ flexShrink: 0, padding: "5px 12px", borderRadius: 14, background: showQuick ? `${T.blue}18` : T.s1, border: `1px solid ${showQuick ? T.blue + "50" : T.border}`, color: showQuick ? T.blue : T.cream3, fontSize: 12, fontWeight: 600 }}>
+                  Frases rápidas
                 </button>
-                <button onClick={() => setShowEN(p => !p)}
-                  style={{ flexShrink: 0, padding: "4px 10px", borderRadius: 14, border: "1px solid #141414", color: "#252525", fontSize: 9, fontWeight: 700, letterSpacing: "1.5px", background: "none" }}>
-                  EN {showEN ? "ON" : "OFF"}
+                <button className="press" onClick={() => setShowEN(p => !p)}
+                  style={{ flexShrink: 0, padding: "5px 12px", borderRadius: 14, background: T.s1, border: `1px solid ${T.border}`, color: T.cream3, fontSize: 12, fontWeight: 600 }}>
+                  EN {showEN ? "✓" : "✗"}
                 </button>
-                <button onClick={newConvo}
-                  style={{ flexShrink: 0, padding: "4px 10px", borderRadius: 14, border: "1px solid #141414", color: "#252525", fontSize: 9, fontWeight: 700, letterSpacing: "1.5px", background: "none", marginLeft: "auto" }}>
-                  NUEVA
+                <button className="press" onClick={newConvo}
+                  style={{ flexShrink: 0, padding: "5px 12px", borderRadius: 14, background: T.s1, border: `1px solid ${T.border}`, color: T.cream3, fontSize: 12, fontWeight: 600, marginLeft: "auto" }}>
+                  Nueva
                 </button>
               </div>
 
+              {/* Input row */}
               <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-                <button onClick={toggleListen}
-                  style={{ width: 44, height: 44, borderRadius: 12, border: `1px solid ${listening ? "rgba(222,100,100,.5)" : "#141414"}`, background: listening ? "rgba(222,100,100,.08)" : "none", fontSize: 18, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", transition: "all .2s" }}>
-                  {listening ? "🔴" : "🎤"}
+                {/* Mic — SVG icon */}
+                <button className={`press ${recording ? "rec-pulse" : ""}`} onClick={toggleRecord}
+                  style={{ width: 48, height: 48, borderRadius: 14, background: recording ? `${T.red}20` : T.s1, border: `1.5px solid ${recording ? T.red + "70" : T.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {recording ? (
+                    <div style={{ width: 10, height: 10, borderRadius: 2, background: T.red }} />
+                  ) : (
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+                      <rect x="9" y="2" width="6" height="11" rx="3" stroke={T.cream2} strokeWidth="1.7" />
+                      <path d="M5 10a7 7 0 0 0 14 0" stroke={T.cream2} strokeWidth="1.7" strokeLinecap="round" />
+                      <path d="M12 19v3M9 22h6" stroke={T.cream2} strokeWidth="1.7" strokeLinecap="round" />
+                    </svg>
+                  )}
                 </button>
+
+                {/* Text area */}
                 <textarea ref={inputRef} value={inp} onChange={e => setInp(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                  placeholder="Escribe en espanol..."
+                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey && window.innerWidth > 500) { e.preventDefault(); send(); } }}
+                  placeholder="Escribe en español..."
                   rows={2}
-                  style={{ flex: 1, background: "#0a0a0a", border: "1px solid #141414", borderRadius: 12, color: "#e2e2e2", fontFamily: "'Outfit',sans-serif", fontSize: 14, padding: "10px 12px", lineHeight: 1.5, minHeight: 44, maxHeight: 90 }} />
-                <button onClick={send} disabled={loading || !inp.trim()}
-                  style={{ width: 44, height: 44, borderRadius: 12, background: inp.trim() && !loading ? G : "#0f0f0f", border: "none", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .2s" }}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z" stroke={inp.trim() && !loading ? "#000" : "#222"} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  style={{ flex: 1, background: T.s1, border: `1.5px solid ${inp.trim() ? T.gold + "50" : T.border}`, borderRadius: 14, color: T.cream, fontSize: 15, padding: "11px 14px", lineHeight: 1.5, minHeight: 48, maxHeight: 100, transition: "border-color .2s" }}
+                />
+
+                {/* Send — SVG arrow */}
+                <button className="press" onClick={send} disabled={loading || !inp.trim()}
+                  style={{ width: 48, height: 48, borderRadius: 14, background: inp.trim() && !loading ? T.gold : T.s1, border: `1.5px solid ${inp.trim() && !loading ? T.gold : T.border}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .18s" }}>
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+                    <path d="M22 2L11 13M22 2L15 22L11 13L2 9L22 2Z" stroke={inp.trim() && !loading ? "#000" : T.cream3} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </button>
-              </div>
-              <div style={{ marginTop: 5, fontSize: 9, color: "#1a1a1a", letterSpacing: ".5px", display: "flex", justifyContent: "space-between" }}>
-                <span>{stats.msgs} msgs · {vocab.length} vocab</span>
-                <span>{missionsDone.length}/{MISSIONS.length} misiones</span>
               </div>
             </div>
           </div>
         )}
 
-        {/* ═══ TAB: PATRONES ═══ */}
+        {/* ══════ PATRONES ══════ */}
         {tab === "patterns" && (
-          <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px" }}>
-            <div style={{ marginBottom: 18 }}>
-              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, color: G, marginBottom: 4 }}>10 Patrones. Todo el Espanol.</div>
-              <div style={{ fontSize: 11, color: "#2e2e2e", lineHeight: 1.8 }}>Domina estas estructuras y puedes expresar cualquier cosa. Incluye patrones de flirteo.</div>
+          <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 24px" }}>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: T.cream, marginBottom: 6 }}>10 Patrones.</div>
+              <div style={{ fontSize: 14, color: T.cream3, lineHeight: 1.75 }}>Cada uno desbloquea cientos de frases. Estudia → escribe → practica en conversación real.</div>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {PATTERNS.map(p => (
-                <div key={p.id} onClick={() => setExpandPat(expandPat === p.id ? null : p.id)}
-                  style={{ background: "#080808", border: `1px solid ${expandPat === p.id ? p.color + "35" : "#0f0f0f"}`, borderRadius: 10, padding: "13px 14px", transition: "border-color .2s" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                <div key={p.id} className="press" onClick={() => setExpandPat(expandPat === p.id ? null : p.id)}
+                  style={{ background: T.s1, border: `1.5px solid ${expandPat === p.id ? p.color + "50" : T.border}`, borderRadius: 14, overflow: "hidden", transition: "border-color .2s", cursor: "pointer" }}>
+                  <div style={{ padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                     <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 2 }}>
-                        <span style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 9, color: "#222" }}>#{p.n.toString().padStart(2, "0")}</span>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "#d0d0d0" }}>{p.name}</span>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 4 }}>
+                        <span style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 10, color: T.cream3 }}>#{p.n.toString().padStart(2, "0")}</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: T.cream }}>{p.name}</span>
                       </div>
-                      <div style={{ fontSize: 11, color: "#2a2a2a", marginBottom: 3 }}>{p.sub}</div>
-                      <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 10, color: p.color }}>{p.formula}</div>
+                      <div style={{ fontSize: 12, color: T.cream3, marginBottom: 6 }}>{p.sub}</div>
+                      <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 11, color: p.color, background: `${p.color}12`, padding: "3px 9px", borderRadius: 6, display: "inline-block" }}>{p.formula}</div>
                     </div>
-                    <span style={{ color: "#2a2a2a", fontSize: 10, flexShrink: 0 }}>{expandPat === p.id ? "▲" : "▼"}</span>
+                    <span style={{ color: T.cream3, fontSize: 12, marginTop: 2, flexShrink: 0 }}>{expandPat === p.id ? "▲" : "▼"}</span>
                   </div>
-
                   {expandPat === p.id && (
-                    <div style={{ marginTop: 14 }} onClick={e => e.stopPropagation()}>
-                      <div style={{ background: "#050505", border: "1px solid #0d0d0d", borderRadius: 7, padding: "9px 11px", fontSize: 11, color: "#363636", lineHeight: 1.8, marginBottom: 12 }}>
-                        <span style={{ color: p.color }}>Rule — </span>{p.rule}
-                      </div>
-                      {p.examples.map((ex, i) => (
-                        <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", padding: "7px 0", borderBottom: "1px solid #0c0c0c", flexWrap: "wrap" }}>
-                          <button onClick={() => speakES(ex.es)} style={{ background: "none", border: "none", fontSize: 12, opacity: .35, flexShrink: 0 }}>🔊</button>
-                          <span style={{ fontSize: 13, color: "#d0d0d0", fontStyle: "italic", flex: "1 1 auto", minWidth: 160 }}>&ldquo;{ex.es}&rdquo;</span>
-                          <span style={{ fontSize: 10, color: "#2e2e2e", flex: "1 1 auto" }}>— {ex.en}</span>
+                    <div style={{ borderTop: `1px solid ${T.border}`, padding: "14px 16px" }} onClick={e => e.stopPropagation()}>
+                      <div style={{ fontSize: 13, color: T.cream2, lineHeight: 1.8, background: T.s2, borderRadius: 10, padding: "10px 14px", marginBottom: 14 }}>{p.rule}</div>
+                      {p.ex.map((e, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>
+                          <button onClick={() => speak(e.es)} style={{ opacity: .35, fontSize: 15, flexShrink: 0 }}>🔊</button>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 14, color: T.cream, fontStyle: "italic", marginBottom: 2 }}>&ldquo;{e.es}&rdquo;</div>
+                            <div style={{ fontSize: 12, color: T.cream3 }}>{e.en}</div>
+                          </div>
                         </div>
                       ))}
-                      <div style={{ marginTop: 12, background: `${p.color}07`, border: `1px solid ${p.color}18`, borderRadius: 7, padding: "8px 11px", marginBottom: 12 }}>
-                        <div style={{ fontSize: 9, color: p.color, letterSpacing: "1.5px", fontWeight: 700, marginBottom: 3 }}>DRILL</div>
-                        <div style={{ fontSize: 11, color: "#363636", lineHeight: 1.7 }}>{p.drill}</div>
+                      <div style={{ marginTop: 12, background: `${p.color}0d`, border: `1px solid ${p.color}25`, borderRadius: 10, padding: "10px 14px", marginBottom: 12 }}>
+                        <div style={{ fontSize: 10, color: p.color, fontWeight: 700, letterSpacing: "1.5px", marginBottom: 4 }}>DRILL</div>
+                        <div style={{ fontSize: 13, color: T.cream3, lineHeight: 1.7 }}>{p.drill}</div>
                       </div>
-                      <div style={{ display: "flex", gap: 7 }}>
+                      <div style={{ display: "flex", gap: 8 }}>
                         <input value={practiceText[p.id] || ""} onChange={e => setPracticeText(prev => ({ ...prev, [p.id]: e.target.value }))}
-                          placeholder="Tu intento en espanol..."
-                          style={{ flex: 1, background: "#060606", border: "1px solid #141414", borderRadius: 8, color: "#e0e0e0", fontFamily: "'Outfit',sans-serif", fontSize: 13, padding: "9px 11px" }} />
-                        <button style={{ background: p.color, color: "#000", border: "none", borderRadius: 8, padding: "9px 14px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}
+                          placeholder="Tu intento en español..."
+                          style={{ flex: 1, background: T.s2, border: `1.5px solid ${T.border}`, borderRadius: 10, color: T.cream, fontSize: 14, padding: "10px 13px" }} />
+                        <button className="press" style={{ background: p.color, color: "#000", borderRadius: 10, padding: "10px 16px", fontSize: 13, fontWeight: 700, whiteSpace: "nowrap" }}
                           onClick={() => { if (practiceText[p.id]) { setInp(practiceText[p.id]); setTab("talk"); } }}>
-                          → Ir
+                          Practicar
                         </button>
                       </div>
                     </div>
@@ -775,71 +748,58 @@ export default function EspanolOS() {
           </div>
         )}
 
-        {/* ═══ TAB: MISIONES ═══ */}
+        {/* ══════ MISIONES ══════ */}
         {tab === "missions" && (
-          <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px" }}>
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, color: G, marginBottom: 4 }}>17 Misiones. Tu Vida Real.</div>
-              <div style={{ fontSize: 11, color: "#2e2e2e", lineHeight: 1.7 }}>Negocios, vida diaria, citas. El lenguaje bajo presion real se queda para siempre.</div>
-              <div style={{ display: "flex", gap: 10, marginTop: 8, flexWrap: "wrap" }}>
-                {[1, 2, 3, 4].map(w => {
-                  const tot = MISSIONS.filter(m => m.w === w).length;
-                  const done = MISSIONS.filter(m => m.w === w && missionsDone.includes(m.id)).length;
-                  const c = done === tot ? GR : G;
-                  return <span key={w} style={{ fontSize: 10, color: c }}>S{w}: {done}/{tot}</span>;
-                })}
-              </div>
+          <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 24px" }}>
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: T.cream, marginBottom: 6 }}>15 Misiones.</div>
+              <div style={{ fontSize: 14, color: T.cream3, lineHeight: 1.7 }}>Una por día. El lenguaje bajo presión real se graba para siempre.</div>
             </div>
-            {[1, 2, 3, 4].map(wk => {
+            {([1, 2, 3, 4] as const).map(wk => {
               const wm = MISSIONS.filter(m => m.w === wk);
-              const wn: Record<number, string> = { 1: "Supervivencia", 2: "Comercio", 3: "Social + Dating", 4: "Fluidez" };
+              const wn: Record<number, string> = { 1: "Supervivencia", 2: "Movilidad", 3: "Social + Mujeres", 4: "Fluidez" };
               return (
-                <div key={wk} style={{ marginBottom: 24 }}>
-                  <div style={{ fontSize: 9, color: "#2a2a2a", letterSpacing: "2px", fontWeight: 700, marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                <div key={wk} style={{ marginBottom: 28 }}>
+                  <div style={{ fontSize: 11, color: T.cream3, fontWeight: 700, letterSpacing: "2px", marginBottom: 12, display: "flex", alignItems: "center", gap: 10 }}>
                     SEMANA {wk} — {wn[wk]}
-                    <div style={{ flex: 1, height: 1, background: "#0d0d0d" }} />
+                    <div style={{ flex: 1, height: 1, background: T.border }} />
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {wm.map(m => {
-                      const done = missionsDone.includes(m.id);
+                      const isDone = done.includes(m.id);
                       return (
-                        <div key={m.id} style={{ background: done ? "#060606" : "#090909", border: `1px solid ${done ? GR + "20" : "#0f0f0f"}`, borderRadius: 10, padding: "13px 14px", opacity: done ? .6 : 1 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
+                        <div key={m.id} style={{ background: T.s1, border: `1.5px solid ${isDone ? T.green + "30" : T.border}`, borderRadius: 14, padding: "14px 16px", opacity: isDone ? .6 : 1 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
                             <div style={{ flex: 1 }}>
-                              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
-                                <span style={{ fontSize: 9, color: "#252525", letterSpacing: "1px" }}>DIA {m.day}</span>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                                <span style={{ fontSize: 9, color: T.cream3, fontWeight: 600, letterSpacing: "1px" }}>DÍA {m.day}</span>
                                 <div style={{ display: "flex", gap: 2 }}>
-                                  {Array.from({ length: 5 }).map((_, i) => <div key={i} style={{ width: 4, height: 4, borderRadius: "50%", background: i < m.diff ? G : "#111" }} />)}
+                                  {Array.from({ length: 5 }).map((_, i) => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: i < m.diff ? T.gold : T.s2 }} />)}
                                 </div>
                               </div>
-                              <div style={{ fontSize: 14, fontWeight: 600, color: done ? "#333" : "#d0d0d0", marginBottom: 3 }}>{m.icon} {m.title}</div>
-                              <div style={{ fontSize: 11, color: "#2e2e2e", lineHeight: 1.6, marginBottom: 6 }}>{m.desc}</div>
-                              <div style={{ fontSize: 9, color: "#222", marginBottom: 8 }}>📍 {m.loc}</div>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                              <div style={{ fontSize: 15, fontWeight: 700, color: isDone ? T.cream3 : T.cream, marginBottom: 5 }}>{m.icon} {m.title}</div>
+                              <div style={{ fontSize: 13, color: T.cream3, lineHeight: 1.65, marginBottom: 8 }}>{m.desc}</div>
+                              <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
                                 {m.vocab.map((v, i) => (
-                                  <button key={i} onClick={() => speakES(v)}
-                                    style={{ fontSize: 9, color: "#333", background: "#0c0c0c", border: "1px solid #131313", borderRadius: 4, padding: "2px 7px", fontStyle: "italic" }}>
+                                  <button key={i} className="press" onClick={() => speak(v)}
+                                    style={{ fontSize: 11, color: T.cream3, background: T.s2, border: `1px solid ${T.border}`, borderRadius: 8, padding: "3px 9px", fontStyle: "italic" }}>
                                     🔊 {v}
                                   </button>
                                 ))}
                               </div>
                             </div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 5, flexShrink: 0 }}>
-                              {!done && (
-                                <button onClick={() => {
-                                  setActiveMission(m);
-                                  const targetSc = [13, 16].includes(m.id) ? SCENARIOS.find(s => s.id === "dating") : SCENARIOS.find(s => s.id === "biz");
-                                  setSc(targetSc || SCENARIOS[0]);
-                                  setTab("talk");
-                                  newConvo();
-                                }}
-                                  style={{ background: G, color: "#000", border: "none", borderRadius: 7, padding: "7px 12px", fontSize: 10, fontWeight: 700, whiteSpace: "nowrap" }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 6, flexShrink: 0 }}>
+                              {!isDone && (
+                                <button className="press" onClick={() => {
+                                  const target = m.id >= 10 && m.id <= 11 ? SCENARIOS.find(s => s.id === "dating") || SCENARIOS[0] : SCENARIOS[0];
+                                  setSc(target); newConvo(); setTab("talk");
+                                }} style={{ background: T.gold, color: "#000", borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 700 }}>
                                   Practicar
                                 </button>
                               )}
-                              <button onClick={() => !done && completeMission(m.id)}
-                                style={{ background: done ? "#090909" : "none", border: `1px solid ${done ? GR + "35" : "#161616"}`, borderRadius: 7, padding: "7px 12px", fontSize: 10, fontWeight: 600, color: done ? GR : "#2a2a2a", whiteSpace: "nowrap" }}>
-                                {done ? "✓ Hecha" : "Marcar lista"}
+                              <button className="press" onClick={() => !isDone && completeMission(m.id)}
+                                style={{ background: isDone ? `${T.green}15` : "none", border: `1.5px solid ${isDone ? T.green + "40" : T.border}`, borderRadius: 10, padding: "8px 14px", fontSize: 12, fontWeight: 600, color: isDone ? T.green : T.cream3 }}>
+                                {isDone ? "✓ Hecha" : "Marcar"}
                               </button>
                             </div>
                           </div>
@@ -853,147 +813,103 @@ export default function EspanolOS() {
           </div>
         )}
 
-        {/* ═══ TAB: VOCAB ═══ */}
+        {/* ══════ VOCAB ══════ */}
         {tab === "vocab" && (
-          <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px" }}>
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, color: G, marginBottom: 4 }}>Tu Vocabulario</div>
-              <div style={{ fontSize: 11, color: "#2e2e2e", lineHeight: 1.7 }}>Cada palabra salio de una conversacion real tuya. {vocab.length} palabras acumuladas.</div>
+          <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 24px" }}>
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: T.cream, marginBottom: 6 }}>Tu Vocabulario</div>
+              <div style={{ fontSize: 14, color: T.cream3 }}>{vocab.length} palabras de conversaciones reales tuyas.</div>
             </div>
             {vocab.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "50px 0", color: "#1c1c1c" }}>
-                <div style={{ fontSize: 40, marginBottom: 10 }}>📚</div>
-                <div style={{ fontSize: 12, lineHeight: 2 }}>Empieza a conversar.<br />Tu banco crece automaticamente.</div>
+              <div style={{ textAlign: "center", padding: "60px 0", color: T.cream3 }}>
+                <div style={{ fontSize: 44, marginBottom: 14 }}>📚</div>
+                <div style={{ fontSize: 14, lineHeight: 1.9 }}>Empieza a conversar.<br />Tu banco crece solo.</div>
               </div>
             ) : (
               <>
-                {/* Spaced repetition review */}
-                <div style={{ marginBottom: 14, padding: "10px 12px", background: "rgba(201,168,76,.05)", border: "1px solid rgba(201,168,76,.15)", borderRadius: 8 }}>
-                  <div style={{ fontSize: 9, color: G, letterSpacing: "1.5px", fontWeight: 700, marginBottom: 6 }}>REPASAR AHORA</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                    {vocab.slice(-6).map((v, i) => (
-                      <button key={i} onClick={() => speakES(v.es)}
-                        style={{ padding: "4px 10px", borderRadius: 12, border: `1px solid ${G}25`, background: `${G}07`, fontSize: 11, color: "#7a6020", fontStyle: "italic" }}>
+                <div style={{ marginBottom: 14, background: `${T.gold}0a`, border: `1px solid ${T.gold}22`, borderRadius: 12, padding: "12px 14px" }}>
+                  <div style={{ fontSize: 10, color: T.goldD, fontWeight: 700, letterSpacing: "1.5px", marginBottom: 8 }}>REPASAR AHORA</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {vocab.slice(-8).map((v, i) => (
+                      <button key={i} className="press" onClick={() => speak(v.es)}
+                        style={{ padding: "5px 11px", borderRadius: 12, background: `${T.gold}10`, border: `1px solid ${T.gold}22`, fontSize: 13, color: T.goldD, fontStyle: "italic" }}>
                         🔊 {v.es}
                       </button>
                     ))}
                   </div>
                 </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {[...vocab].reverse().map((v, i) => (
-                    <div key={i} style={{ background: "#080808", border: "1px solid #0f0f0f", borderRadius: 8, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div key={i} style={{ background: T.s1, border: `1px solid ${T.border}`, borderRadius: 12, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div>
-                        <div style={{ fontSize: 13, color: "#d0d0d0", fontStyle: "italic", marginBottom: 2 }}>{v.es}</div>
-                        <div style={{ fontSize: 10, color: "#2a2a2a" }}>{v.en}</div>
-                        {v.type && <div style={{ fontSize: 8, color: "#1c1c1c", marginTop: 1, letterSpacing: "1px" }}>{v.type}</div>}
+                        <div style={{ fontSize: 15, color: T.cream, fontStyle: "italic", marginBottom: 2 }}>{v.es}</div>
+                        <div style={{ fontSize: 12, color: T.cream3 }}>{v.en}</div>
                       </div>
-                      <button onClick={() => speakES(v.es)} style={{ background: "none", border: "none", fontSize: 16, opacity: .25, flexShrink: 0 }}>🔊</button>
+                      <button className="press" onClick={() => speak(v.es)} style={{ fontSize: 18, opacity: .3 }}>🔊</button>
                     </div>
                   ))}
-                </div>
-                <div style={{ textAlign: "center", marginTop: 16 }}>
-                  <button onClick={() => { setVocab([]); store("vocab", []); }}
-                    style={{ background: "none", border: "1px solid #141414", borderRadius: 6, padding: "6px 16px", fontSize: 9, color: "#222", letterSpacing: "1.5px" }}>
-                    LIMPIAR TODO
-                  </button>
                 </div>
               </>
             )}
           </div>
         )}
 
-        {/* ═══ TAB: PROGRESO ═══ */}
+        {/* ══════ PROGRESO ══════ */}
         {tab === "progress" && (
-          <div style={{ flex: 1, overflowY: "auto", padding: "16px 14px" }}>
-            <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 20, color: G, marginBottom: 18 }}>Tu Progreso</div>
+          <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px 24px" }}>
+            <div style={{ fontFamily: "'Playfair Display',serif", fontSize: 22, color: T.cream, marginBottom: 18 }}>Progreso</div>
 
-            {/* Fluency */}
-            <div style={{ background: "#080808", border: "1px solid #111", borderRadius: 12, padding: 18, marginBottom: 12 }}>
-              <div style={{ fontSize: 9, color: "#252525", letterSpacing: "2px", fontWeight: 700, marginBottom: 10 }}>FLUIDEZ ACUMULADA</div>
-              <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 12 }}>
-                <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 44, color: G, fontWeight: 700, lineHeight: 1 }}>{fluency}</div>
-                <div style={{ fontSize: 13, color: "#252525" }}>/100</div>
+            <div style={{ background: T.s1, border: `1px solid ${T.border}`, borderRadius: 16, padding: "20px 18px", marginBottom: 12 }}>
+              <div style={{ fontSize: 11, color: T.cream3, fontWeight: 700, letterSpacing: "2px", marginBottom: 12 }}>FLUIDEZ</div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 14 }}>
+                <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 52, color: T.gold, fontWeight: 700, lineHeight: 1 }}>{fluency}</div>
+                <div style={{ fontSize: 16, color: T.cream3 }}>/100</div>
               </div>
-              <div style={{ height: 5, background: "#0f0f0f", borderRadius: 3, overflow: "hidden", marginBottom: 8 }}>
-                <div style={{ width: `${fluency}%`, height: "100%", background: `linear-gradient(90deg,${G}77,${G})`, borderRadius: 3, transition: "width .8s ease" }} />
+              <div style={{ height: 6, background: T.s2, borderRadius: 3, overflow: "hidden", marginBottom: 10 }}>
+                <div style={{ width: `${fluency}%`, height: "100%", background: `linear-gradient(90deg,${T.goldD},${T.goldL})`, borderRadius: 3, transition: "width .8s" }} />
               </div>
-              <div style={{ fontSize: 11, color: "#2e2e2e" }}>
-                {fluency < 15 ? "Principiante — buen comienzo" : fluency < 35 ? "Basico — ya puedes sobrevivir" : fluency < 55 ? "Intermedio — las conversaciones fluyen" : fluency < 75 ? "Avanzado — casi nativo" : "Fluido — felicitaciones, parcero!"}
+              <div style={{ fontSize: 13, color: T.cream3 }}>
+                {fluency < 15 ? "Principiante" : fluency < 35 ? "Básico — ya puedes sobrevivir" : fluency < 55 ? "Intermedio — las conversaciones fluyen" : fluency < 75 ? "Avanzado" : "Fluido — ¡felicitaciones!"}
               </div>
             </div>
 
-            {/* Streak */}
-            <div style={{ background: "#080808", border: "1px solid #111", borderRadius: 12, padding: 18, marginBottom: 12, display: "flex", alignItems: "center", gap: 14 }}>
-              <div style={{ fontSize: 36 }}>🔥</div>
+            <div style={{ background: T.s1, border: `1px solid ${T.border}`, borderRadius: 16, padding: "18px", marginBottom: 12, display: "flex", alignItems: "center", gap: 16 }}>
+              <span style={{ fontSize: 38 }}>🔥</span>
               <div>
-                <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 32, color: G, fontWeight: 700, lineHeight: 1 }}>{streak}</div>
-                <div style={{ fontSize: 10, color: "#252525", marginTop: 2 }}>DIAS DE RACHA CONSECUTIVOS</div>
+                <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 40, color: T.gold, fontWeight: 700, lineHeight: 1 }}>{streak.count}</div>
+                <div style={{ fontSize: 12, color: T.cream3, marginTop: 3 }}>DÍAS CONSECUTIVOS</div>
               </div>
             </div>
 
-            {/* Stats grid */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
               {[
-                { label: "Mensajes", val: stats.msgs, c: G },
-                { label: "Correcciones", val: stats.corrections, c: RD },
-                { label: "Palabras", val: vocab.length, c: B },
-                { label: "Misiones", val: missionsDone.length, c: GR },
-                { label: "Conversaciones", val: stats.convos, c: G },
-                { label: "Puntos Fluidez", val: stats.fp, c: B },
+                { label: "Mensajes", val: stats.msgs, c: T.gold },
+                { label: "Correcciones", val: stats.corrections, c: T.red },
+                { label: "Palabras", val: vocab.length, c: T.blue },
+                { label: "Misiones", val: done.length, c: T.green },
+                { label: "Conversaciones", val: stats.convos, c: T.gold },
+                { label: "Puntos FP", val: stats.fp, c: T.blue },
               ].map((s, i) => (
-                <div key={i} style={{ background: "#080808", border: "1px solid #0f0f0f", borderRadius: 10, padding: "14px 14px" }}>
-                  <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 28, color: s.c, fontWeight: 700, lineHeight: 1, marginBottom: 4 }}>{s.val}</div>
-                  <div style={{ fontSize: 9, color: "#2a2a2a", letterSpacing: ".5px" }}>{s.label}</div>
+                <div key={i} style={{ background: T.s1, border: `1px solid ${T.border}`, borderRadius: 14, padding: "16px" }}>
+                  <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 32, color: s.c, fontWeight: 700, lineHeight: 1, marginBottom: 6 }}>{s.val}</div>
+                  <div style={{ fontSize: 12, color: T.cream3 }}>{s.label}</div>
                 </div>
               ))}
-            </div>
-
-            {/* Mission progress */}
-            <div style={{ background: "#080808", border: "1px solid #111", borderRadius: 12, padding: 16, marginBottom: 12 }}>
-              <div style={{ fontSize: 9, color: "#252525", letterSpacing: "2px", fontWeight: 700, marginBottom: 12 }}>PROGRESO POR SEMANA</div>
-              {[1, 2, 3, 4].map(w => {
-                const tot = MISSIONS.filter(m => m.w === w).length;
-                const done = MISSIONS.filter(m => m.w === w && missionsDone.includes(m.id)).length;
-                const pct = Math.round(done / tot * 100);
-                const wn: Record<number, string> = { 1: "Supervivencia", 2: "Comercio", 3: "Social + Dating", 4: "Fluidez" };
-                return (
-                  <div key={w} style={{ marginBottom: 10 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-                      <span style={{ fontSize: 11, color: "#333" }}>Semana {w} — {wn[w]}</span>
-                      <span style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 10, color: done === tot ? GR : "#2a2a2a" }}>{done}/{tot}</span>
-                    </div>
-                    <div style={{ height: 3, background: "#0f0f0f", borderRadius: 2, overflow: "hidden" }}>
-                      <div style={{ width: `${pct}%`, height: "100%", background: done === tot ? GR : G, borderRadius: 2, transition: "width .4s" }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div style={{ textAlign: "center" }}>
-              <button onClick={() => { const r: Stats = { msgs: 0, corrections: 0, fp: 0, convos: 0 }; setStats(r); store("stats", r); }}
-                style={{ background: "none", border: "1px solid #141414", borderRadius: 6, padding: "6px 18px", fontSize: 9, color: "#222", letterSpacing: "1.5px" }}>
-                RESETEAR ESTADISTICAS
-              </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* ── BOTTOM NAV ── */}
-      <div style={{ flexShrink: 0, borderTop: "1px solid #0d0d0d", background: "#050505", display: "flex", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
-        {([
-          { id: "talk", label: "Hablar" },
-          { id: "patterns", label: "Patrones" },
-          { id: "missions", label: "Misiones" },
-          { id: "vocab", label: "Vocab" },
-          { id: "progress", label: "Progreso" },
-        ] as const).map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            style={{ flex: 1, padding: "10px 4px", background: "none", border: "none", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, color: tab === t.id ? G : "#252525", transition: "color .2s" }}>
-            <div style={{ opacity: tab === t.id ? 1 : .35 }}>{ICONS[t.id]}</div>
-            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.5px" }}>{t.label}</span>
-            {tab === t.id && <div style={{ width: 4, height: 4, borderRadius: "50%", background: G }} />}
+      {/* BOTTOM NAV */}
+      <div style={{ flexShrink: 0, background: T.bg, borderTop: `1px solid ${T.border}`, display: "flex", paddingBottom: "env(safe-area-inset-bottom,0px)" }}>
+        {(["talk", "patterns", "missions", "vocab", "progress"] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)}
+            style={{ flex: 1, padding: "12px 4px 10px", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, color: tab === t ? T.gold : T.cream3, transition: "color .2s" }}>
+            <div style={{ opacity: tab === t ? 1 : .35, transition: "opacity .2s" }}>{ICONS[t]}</div>
+            <span style={{ fontSize: 10, fontWeight: 700 }}>
+              {t === "talk" ? "Hablar" : t === "patterns" ? "Patrones" : t === "missions" ? "Misiones" : t === "vocab" ? "Vocab" : "Progreso"}
+            </span>
+            {tab === t && <div style={{ width: 18, height: 2.5, borderRadius: 2, background: T.gold }} />}
           </button>
         ))}
       </div>
