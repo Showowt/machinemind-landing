@@ -55,7 +55,7 @@ body {
   font-family: var(--font-satoshi);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  scroll-behavior: smooth;
+  /* scroll-behavior: smooth — REMOVED: conflicts with GSAP ScrollTrigger */
 }
 
 /* Selection — Gold */
@@ -251,14 +251,7 @@ body {
    ═══════════════════════════════════════════════════════════════ */
 
 .film-grain {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  opacity: 0.03;
-  z-index: 9999;
+  display: none; /* disabled for performance — SVG filter causes constant repaints */
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -266,14 +259,7 @@ body {
    ═══════════════════════════════════════════════════════════════ */
 
 .vignette {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  box-shadow: inset 0 0 200px rgba(0, 0, 0, 0.6);
-  z-index: 9998;
+  display: none; /* disabled for performance — 200px inset shadow causes constant repaints */
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -294,15 +280,7 @@ body {
    ANIMATIONS — GSAP Reveal Targets
    ═══════════════════════════════════════════════════════════════ */
 
-.reveal-up {
-  opacity: 0;
-  transform: translateY(40px);
-}
-
-.reveal-up.revealed {
-  opacity: 1;
-  transform: translateY(0);
-}
+/* reveal-up initial state handled by GSAP .from() — no CSS needed */
 
 /* ═══════════════════════════════════════════════════════════════
    SCROLLBAR — Minimal Gold

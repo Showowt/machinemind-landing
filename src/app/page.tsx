@@ -2,9 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-const TOTAL_FRAMES = 150;
-const FRAME_PATH = (i: number) => `/frames/frame-${String(i).padStart(4, '0')}.jpg`;
-
 interface Project {
   name: string; type: string; industry: string;
   desc: string; color: string; tag?: string; url?: string;
@@ -50,61 +47,30 @@ const PROJECTS: Project[] = [
 const INDUSTRIES = ['All', ...Array.from(new Set(PROJECTS.map(p => p.industry)))];
 
 export default function Home() {
-  const [preloaderVisible, setPreloaderVisible] = useState(true);
-  const [preloaderFading, setPreloaderFading] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [ready, setReady] = useState(false);
   const [activeFilter, setActiveFilter] = useState('All');
   const [visibleProjects, setVisibleProjects] = useState(12);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const framesRef = useRef<HTMLImageElement[]>([]);
-  const framesLoaded = useRef(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const filteredProjects = activeFilter === 'All'
     ? PROJECTS : PROJECTS.filter(p => p.industry === activeFilter);
 
-  // ── LOAD FRAMES ──
+  // ── VIDEO READY → fade in site ──
   useEffect(() => {
-    let count = 0;
-    const imgs: HTMLImageElement[] = [];
-
-    const load = (idx: number) => new Promise<HTMLImageElement>((resolve) => {
-      const img = new Image();
-      img.onload = img.onerror = () => {
-        count++;
-        setProgress((count / TOTAL_FRAMES) * 100);
-        resolve(img);
-      };
-      img.src = FRAME_PATH(idx);
-    });
-
-    (async () => {
-      for (let i = 1; i <= TOTAL_FRAMES; i += 20) {
-        const batch = [];
-        for (let j = i; j < Math.min(i + 20, TOTAL_FRAMES + 1); j++) batch.push(load(j));
-        const res = await Promise.all(batch);
-        imgs.push(...res);
-      }
-      framesRef.current = imgs;
-      framesLoaded.current = true;
-
-      const c = canvasRef.current;
-      if (c) {
-        c.width = window.innerWidth;
-        c.height = window.innerHeight;
-        const ctx = c.getContext('2d', { alpha: false });
-        if (ctx && imgs[0]?.naturalWidth) drawCover(ctx, imgs[0], c.width, c.height);
-      }
-
-      setPreloaderFading(true);
-      setTimeout(() => setPreloaderVisible(false), 800);
-    })();
+    const v = videoRef.current;
+    if (!v) return;
+    const onReady = () => setReady(true);
+    if (v.readyState >= 3) { setReady(true); return; }
+    v.addEventListener('canplay', onReady);
+    // Fallback: show site after 2s even if video hasn't loaded
+    const fallback = setTimeout(() => setReady(true), 2000);
+    return () => { v.removeEventListener('canplay', onReady); clearTimeout(fallback); };
   }, []);
 
-  // ── SCROLL ENGINE — native scroll + GSAP only, no Lenis ──
+  // ── GSAP ANIMATIONS (only after ready) ──
   useEffect(() => {
-    if (preloaderVisible) return;
-
+    if (!ready) return;
     let destroyed = false;
 
     const init = async () => {
@@ -112,94 +78,47 @@ export default function Home() {
       const gsap = gsapModule.default;
       const { ScrollTrigger } = await import('gsap/ScrollTrigger');
       gsap.registerPlugin(ScrollTrigger);
-
       if (destroyed) return;
 
-      // ── CANVAS ──
-      const canvas = canvasRef.current;
-      const frames = framesRef.current;
-      if (!canvas || !frames.length) return;
-      const ctx = canvas.getContext('2d', { alpha: false });
-      if (!ctx) return;
-
-      const resize = () => {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-        // Redraw current frame on resize
-        if (lastDrawn >= 0 && frames[lastDrawn]?.naturalWidth) {
-          drawCover(ctx, frames[lastDrawn], canvas.width, canvas.height);
-        }
-      };
-      resize();
-      window.addEventListener('resize', resize, { passive: true });
-
-      let lastDrawn = -1;
-
-      // ScrollTrigger directly controls frame index — no extra lerp needed
-      // scrub: 0.3 gives GSAP-handled smoothing (single layer, not triple)
-      ScrollTrigger.create({
-        trigger: document.documentElement,
-        start: 'top top',
-        end: 'bottom bottom',
-        scrub: 0.3,
-        onUpdate: (self) => {
-          const idx = Math.min(Math.max(Math.round(self.progress * (TOTAL_FRAMES - 1)), 0), frames.length - 1);
-          if (idx !== lastDrawn) {
-            const img = frames[idx];
-            if (img?.naturalWidth) {
-              drawCover(ctx, img, canvas.width, canvas.height);
-            }
-            lastDrawn = idx;
-          }
-        },
-      });
-
-      // ── NAV + PROGRESS BAR (lightweight, on scroll event) ──
+      // ── NAV + PROGRESS ──
       const nav = document.querySelector('.nav') as HTMLElement;
       const bar = document.querySelector('.scroll-progress') as HTMLElement;
-
-      const onScroll = () => {
+      window.addEventListener('scroll', () => {
         const scrollY = window.scrollY;
         const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
-
-        if (nav) {
-          nav.style.background = scrollY > 60 ? 'rgba(6,6,10,0.92)' : 'transparent';
-        }
-        if (bar) {
-          bar.style.transform = `scaleX(${(scrollY / Math.max(1, maxScroll)).toFixed(5)})`;
-        }
-      };
-      window.addEventListener('scroll', onScroll, { passive: true });
+        if (nav) nav.style.background = scrollY > 60 ? 'rgba(6,6,10,0.92)' : 'transparent';
+        if (bar) bar.style.transform = `scaleX(${(scrollY / Math.max(1, maxScroll))})`;
+      }, { passive: true });
 
       // ── HERO ENTRANCE ──
-      const tl = gsap.timeline({ delay: 0.2 });
+      const tl = gsap.timeline({ delay: 0.3 });
       tl.from('.hero-eyebrow', { y: 30, opacity: 0, duration: 1, ease: 'power4.out' })
-        .from('.hero-title-line', { y: 120, opacity: 0, duration: 1.4, stagger: 0.2, ease: 'power4.out' }, '-=0.6')
-        .from('.hero-subtitle', { y: 40, opacity: 0, duration: 1, ease: 'power3.out' }, '-=0.7')
-        .from('.hero-cta-wrap', { y: 30, opacity: 0, duration: 0.8, ease: 'power3.out' }, '-=0.5')
-        .from('.hero-scroll-indicator', { opacity: 0, duration: 1.2 }, '-=0.3');
+        .from('.hero-title-line', { y: 100, opacity: 0, duration: 1.2, stagger: 0.15, ease: 'power4.out' }, '-=0.6')
+        .from('.hero-subtitle', { y: 30, opacity: 0, duration: 0.8, ease: 'power3.out' }, '-=0.5')
+        .from('.hero-cta-wrap', { y: 20, opacity: 0, duration: 0.6, ease: 'power3.out' }, '-=0.3')
+        .from('.hero-scroll-indicator', { opacity: 0, duration: 1 }, '-=0.2');
 
       // ── HERO PARALLAX ──
       gsap.to('.hero-content', {
-        y: -150, opacity: 0,
-        scrollTrigger: { trigger: '.hero', start: 'top top', end: '60% top', scrub: 1.5 },
+        y: -120, opacity: 0,
+        scrollTrigger: { trigger: '.hero', start: 'top top', end: '60% top', scrub: true },
       });
       gsap.to('.hero-scroll-indicator', {
         opacity: 0,
-        scrollTrigger: { trigger: '.hero', start: '20% top', end: '40% top', scrub: true },
+        scrollTrigger: { trigger: '.hero', start: '15% top', end: '35% top', scrub: true },
       });
 
       // ── REVEAL ANIMATIONS ──
       gsap.utils.toArray<HTMLElement>('.reveal-up').forEach((el) => {
         gsap.from(el, {
-          y: 60, opacity: 0, duration: 1, ease: 'power3.out',
-          scrollTrigger: { trigger: el, start: 'top 90%', toggleActions: 'play none none none' },
+          y: 50, opacity: 0, duration: 0.8, ease: 'power3.out',
+          scrollTrigger: { trigger: el, start: 'top 88%', toggleActions: 'play none none none' },
         });
       });
 
       gsap.utils.toArray<HTMLElement>('.stagger-children').forEach((container) => {
         gsap.from(container.children, {
-          y: 40, opacity: 0, duration: 0.8, stagger: 0.08, ease: 'power3.out',
+          y: 30, opacity: 0, duration: 0.6, stagger: 0.06, ease: 'power3.out',
           scrollTrigger: { trigger: container, start: 'top 85%', toggleActions: 'play none none none' },
         });
       });
@@ -209,7 +128,7 @@ export default function Home() {
         const target = parseInt(el.dataset.target || '0');
         const obj = { val: 0 };
         gsap.to(obj, {
-          val: target, duration: 2.5, ease: 'power2.out',
+          val: target, duration: 2, ease: 'power2.out',
           scrollTrigger: { trigger: el, start: 'top 90%', toggleActions: 'play none none none' },
           onUpdate: () => { el.textContent = Math.round(obj.val) + (el.dataset.suffix || ''); },
         });
@@ -218,7 +137,7 @@ export default function Home() {
       // ── DIVIDERS ──
       gsap.utils.toArray<HTMLElement>('.section-divider').forEach((el) => {
         gsap.fromTo(el, { scaleX: 0 }, {
-          scaleX: 1, duration: 1.5, ease: 'power3.inOut',
+          scaleX: 1, duration: 1.2, ease: 'power3.inOut',
           scrollTrigger: { trigger: el, start: 'top 92%', toggleActions: 'play none none none' },
         });
       });
@@ -226,94 +145,57 @@ export default function Home() {
       // ── SCALE-IN ──
       gsap.utils.toArray<HTMLElement>('.scale-in').forEach((el) => {
         gsap.from(el, {
-          scale: 0.95, opacity: 0, duration: 0.8, ease: 'power2.out',
-          scrollTrigger: { trigger: el, start: 'top 90%', toggleActions: 'play none none none' },
+          scale: 0.96, opacity: 0, duration: 0.7, ease: 'power2.out',
+          scrollTrigger: { trigger: el, start: 'top 88%', toggleActions: 'play none none none' },
         });
       });
     };
 
     init();
     return () => { destroyed = true; };
-  }, [preloaderVisible]);
-
-  // ── CUSTOM CURSOR (desktop only, own RAF) ──
-  useEffect(() => {
-    if (preloaderVisible) return;
-    if (window.matchMedia('(max-width: 768px)').matches) return;
-    if (window.matchMedia('(pointer: coarse)').matches) return;
-
-    const cursor = document.querySelector('.cursor') as HTMLElement;
-    const dot = document.querySelector('.cursor-dot') as HTMLElement;
-    if (!cursor || !dot) return;
-
-    let mx = 0, my = 0, cx = 0, cy = 0, dx2 = 0, dy2 = 0, raf: number;
-
-    const move = (e: MouseEvent) => { mx = e.clientX; my = e.clientY; };
-    const tick = () => {
-      cx += (mx - cx) * 0.1; cy += (my - cy) * 0.1;
-      cursor.style.transform = `translate3d(${cx - 18}px,${cy - 18}px,0)`;
-      dx2 += (mx - dx2) * 0.3; dy2 += (my - dy2) * 0.3;
-      dot.style.transform = `translate3d(${dx2 - 2.5}px,${dy2 - 2.5}px,0)`;
-      raf = requestAnimationFrame(tick);
-    };
-
-    window.addEventListener('mousemove', move, { passive: true });
-    raf = requestAnimationFrame(tick);
-
-    const els = document.querySelectorAll('.magnetic');
-    const ent = () => cursor.classList.add('cursor-hover');
-    const lv = () => cursor.classList.remove('cursor-hover');
-    els.forEach(e => { e.addEventListener('mouseenter', ent); e.addEventListener('mouseleave', lv); });
-
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener('mousemove', move);
-      els.forEach(e => { e.removeEventListener('mouseenter', ent); e.removeEventListener('mouseleave', lv); });
-    };
-  }, [preloaderVisible]);
+  }, [ready]);
 
   return (
     <>
-      {/* ═══ BACKGROUND — single canvas, always mounted ═══ */}
-      <canvas ref={canvasRef} className="bg-canvas" />
-      <div className="bg-overlay" />
+      {/* ═══ VIDEO BACKGROUND — autoplay, no scroll control ═══ */}
+      <video
+        ref={videoRef}
+        className="vid-bg"
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="auto"
+      >
+        <source src="/ship.webm" type="video/webm" />
+        <source src="/ship.mp4" type="video/mp4" />
+      </video>
+      <div className="vid-overlay" />
 
-      {/* ═══ PRELOADER ═══ */}
-      {preloaderVisible && (
-        <div className={`preloader ${preloaderFading ? 'preloader-fade' : ''}`}>
-          <div className="preloader-content">
-            <div className="preloader-logo">
-              <span className="pl-gold">Machine</span><span className="pl-white">Mind</span>
-            </div>
-            <div className="pl-bar-wrap">
-              <div className="pl-bar" style={{ transform: `scaleX(${progress / 100})` }} />
-            </div>
-            <div className="pl-meta">
-              <span className="pl-pct">{Math.round(progress)}%</span>
-              <span className="pl-status">LOADING {Math.round(progress) < 100 ? 'FRAMES' : 'COMPLETE'}</span>
-            </div>
+      {/* ═══ PRELOADER (simple fade) ═══ */}
+      <div className={`preloader ${ready ? 'preloader-gone' : ''}`}>
+        <div className="preloader-content">
+          <div className="preloader-logo">
+            <span className="pl-gold">Machine</span><span className="pl-white">Mind</span>
           </div>
+          <div className="pl-loading">LOADING</div>
         </div>
-      )}
-
-      {/* ═══ CURSOR ═══ */}
-      <div className="cursor" />
-      <div className="cursor-dot" />
+      </div>
 
       {/* ═══ SCROLL PROGRESS ═══ */}
       <div className="scroll-progress" />
 
       {/* ═══ NAVIGATION ═══ */}
       <nav className="nav">
-        <a href="/" className="nav-logo magnetic">
+        <a href="/" className="nav-logo">
           <span className="nav-logo-gold">MACHINE</span><span>MIND</span>
         </a>
         <div className="nav-links">
           {['Systems', 'Portfolio', 'Process', 'About', 'Contact'].map(item => (
-            <a key={item} href={`#${item.toLowerCase()}`} className="nav-link magnetic">{item}</a>
+            <a key={item} href={`#${item.toLowerCase()}`} className="nav-link">{item}</a>
           ))}
         </div>
-        <button className="nav-hamburger magnetic" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Menu">
+        <button className="nav-hamburger" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Menu">
           <span className={`hb-line ${mobileMenuOpen ? 'open' : ''}`} />
           <span className={`hb-line ${mobileMenuOpen ? 'open' : ''}`} />
         </button>
@@ -340,11 +222,11 @@ export default function Home() {
             <br />We don&apos;t build tools. We build unfair advantages.
           </p>
           <div className="hero-cta-wrap">
-            <a href="#contact" className="btn-primary magnetic">
+            <a href="#contact" className="btn-primary">
               <span>Start a Project</span>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
             </a>
-            <a href="#portfolio" className="btn-ghost magnetic">View Portfolio</a>
+            <a href="#portfolio" className="btn-ghost">View Portfolio</a>
           </div>
         </div>
         <div className="hero-scroll-indicator">
@@ -407,7 +289,7 @@ export default function Home() {
           </div>
           <div className="filter-bar reveal-up">
             {INDUSTRIES.slice(0, 12).map(ind => (
-              <button key={ind} className={`filter-btn magnetic ${activeFilter === ind ? 'active' : ''}`}
+              <button key={ind} className={`filter-btn ${activeFilter === ind ? 'active' : ''}`}
                 onClick={() => { setActiveFilter(ind); setVisibleProjects(12); }}>{ind}</button>
             ))}
           </div>
@@ -431,7 +313,7 @@ export default function Home() {
               );
               return p.url ? (
                 <a key={i} href={p.url} target="_blank" rel="noopener noreferrer"
-                  className="portfolio-card magnetic" style={{ '--ac': p.color } as React.CSSProperties}>{inner}</a>
+                  className="portfolio-card" style={{ '--ac': p.color } as React.CSSProperties}>{inner}</a>
               ) : (
                 <div key={i} className="portfolio-card" style={{ '--ac': p.color } as React.CSSProperties}>{inner}</div>
               );
@@ -439,7 +321,7 @@ export default function Home() {
           </div>
           {visibleProjects < filteredProjects.length && (
             <div className="load-more reveal-up">
-              <button className="btn-ghost magnetic" onClick={() => setVisibleProjects(v => v + 12)}>
+              <button className="btn-ghost" onClick={() => setVisibleProjects(v => v + 12)}>
                 Show More ({filteredProjects.length - visibleProjects} remaining)
               </button>
             </div>
@@ -505,7 +387,7 @@ export default function Home() {
           <p className="eyebrow">LET&apos;S BUILD</p>
           <h2>Ready to build something<br />that doesn&apos;t exist yet?</h2>
           <p className="contact-sub">We take on 3 new clients per quarter. Currently accepting projects for Q3 2026.</p>
-          <a href="https://cal.com/machinemind" className="btn-primary magnetic" target="_blank" rel="noopener noreferrer">
+          <a href="https://cal.com/machinemind" className="btn-primary" target="_blank" rel="noopener noreferrer">
             <span>Book a Discovery Call</span>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
           </a>
@@ -527,13 +409,6 @@ export default function Home() {
   );
 }
 
-function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, cw: number, ch: number) {
-  const scale = Math.max(cw / img.naturalWidth, ch / img.naturalHeight);
-  const w = img.naturalWidth * scale;
-  const h = img.naturalHeight * scale;
-  ctx.drawImage(img, (cw - w) / 2, (ch - h) / 2, w, h);
-}
-
 const STYLES = `
 @import url('https://api.fontshare.com/v2/css?f[]=clash-display@200,300,400,500,600,700&display=swap');
 @import url('https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700,900&display=swap');
@@ -543,42 +418,33 @@ const STYLES = `
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
   --bg:#06060a;--fg:#f0f0f3;--gold:#c9a96e;--cyan:#00e5ff;
-  --dim:rgba(240,240,243,0.35);--glass:rgba(6,6,10,0.85);
+  --dim:rgba(240,240,243,0.35);--glass:rgba(6,6,10,0.88);
   --gb:rgba(255,255,255,0.08);
   --fd:'Clash Display',sans-serif;--fb:'Satoshi',sans-serif;
   --fs:'Instrument Serif',serif;--fm:'JetBrains Mono',monospace;
 }
 html{background:var(--bg);color:var(--fg)}
-body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased;cursor:none}
+body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 ::selection{background:var(--gold);color:var(--bg)}
 
-/* ═══ BACKGROUND ═══ */
-.bg-canvas{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:0}
-.bg-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1;
-  background:radial-gradient(ellipse at 50% 40%,rgba(6,6,10,0.2) 0%,rgba(6,6,10,0.5) 100%);
+/* ═══ VIDEO BACKGROUND ═══ */
+.vid-bg{position:fixed;top:0;left:0;width:100vw;height:100vh;object-fit:cover;z-index:0}
+.vid-overlay{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1;
+  background:radial-gradient(ellipse at 50% 40%,rgba(6,6,10,0.15) 0%,rgba(6,6,10,0.5) 100%);
   pointer-events:none}
 
 /* ═══ PRELOADER ═══ */
-.preloader{position:fixed;inset:0;z-index:99999;background:#06060a;display:flex;align-items:center;justify-content:center;transition:opacity .6s ease,visibility .6s}
-.preloader-fade{opacity:0;visibility:hidden}
-.preloader-content{text-align:center;position:relative;z-index:2}
-.preloader-logo{font-family:var(--fd);font-size:clamp(36px,7vw,64px);font-weight:600;margin-bottom:56px;letter-spacing:-0.03em}
+.preloader{position:fixed;inset:0;z-index:99999;background:#06060a;display:flex;align-items:center;justify-content:center;
+  transition:opacity .8s ease,visibility .8s}
+.preloader-gone{opacity:0;visibility:hidden;pointer-events:none}
+.preloader-content{text-align:center}
+.preloader-logo{font-family:var(--fd);font-size:clamp(36px,7vw,64px);font-weight:600;margin-bottom:32px;letter-spacing:-0.03em}
 .pl-gold{color:var(--gold)}.pl-white{color:var(--fg)}
-.pl-bar-wrap{width:240px;height:1px;background:rgba(201,169,110,0.15);margin:0 auto 28px;overflow:hidden}
-.pl-bar{height:100%;width:100%;background:linear-gradient(90deg,var(--gold),var(--cyan));transform-origin:left;transition:transform .15s ease-out}
-.pl-meta{display:flex;flex-direction:column;gap:8px}
-.pl-pct{font-family:var(--fm);font-size:11px;color:var(--gold);letter-spacing:.25em}
-.pl-status{font-family:var(--fb);font-size:9px;color:rgba(240,240,243,0.25);letter-spacing:.5em;text-transform:uppercase}
-
-/* ═══ CURSOR ═══ */
-.cursor{position:fixed;top:0;left:0;width:36px;height:36px;border:1px solid var(--gold);border-radius:50%;pointer-events:none;z-index:99999;will-change:transform;transition:width .4s cubic-bezier(.23,1,.32,1),height .4s cubic-bezier(.23,1,.32,1),border-color .4s;mix-blend-mode:difference}
-.cursor-dot{position:fixed;top:0;left:0;width:5px;height:5px;background:var(--gold);border-radius:50%;pointer-events:none;z-index:99999;will-change:transform}
-.cursor.cursor-hover{width:56px;height:56px;border-color:var(--cyan)}
-@media(max-width:768px){.cursor,.cursor-dot{display:none}body{cursor:auto}}
-@media(pointer:coarse){.cursor,.cursor-dot{display:none}body{cursor:auto}}
+.pl-loading{font-family:var(--fm);font-size:10px;color:var(--dim);letter-spacing:.5em;animation:pulse-load 1.5s ease-in-out infinite}
+@keyframes pulse-load{0%,100%{opacity:.3}50%{opacity:1}}
 
 /* ═══ SCROLL PROGRESS ═══ */
-.scroll-progress{position:fixed;top:0;left:0;height:2px;width:100%;background:linear-gradient(90deg,var(--gold),var(--cyan));z-index:9999;transform:scaleX(0);transform-origin:left;will-change:transform}
+.scroll-progress{position:fixed;top:0;left:0;height:2px;width:100%;background:linear-gradient(90deg,var(--gold),var(--cyan));z-index:9999;transform:scaleX(0);transform-origin:left}
 
 /* ═══ NAV ═══ */
 .nav{position:fixed;top:0;left:0;right:0;z-index:1000;padding:20px clamp(24px,5vw,80px);display:flex;justify-content:space-between;align-items:center;transition:background .3s}
@@ -587,7 +453,7 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased;
 .nav-links{display:flex;gap:36px}
 .nav-link{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--fg);text-decoration:none;opacity:.4;transition:opacity .3s}
 .nav-link:hover{opacity:1}
-.nav-hamburger{display:none;background:none;border:none;cursor:none;width:28px;height:20px;position:relative;z-index:1001}
+.nav-hamburger{display:none;background:none;border:none;width:28px;height:20px;position:relative;z-index:1001;cursor:pointer}
 .hb-line{display:block;width:100%;height:1px;background:var(--fg);position:absolute;left:0;transition:all .3s}
 .hb-line:first-child{top:4px}.hb-line:last-child{bottom:4px}
 .hb-line.open:first-child{top:50%;transform:rotate(45deg)}.hb-line.open:last-child{bottom:50%;transform:rotate(-45deg)}
@@ -596,7 +462,7 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased;
 .mm-link{font-family:var(--fd);font-size:32px;font-weight:500;color:var(--fg);text-decoration:none;opacity:.6;transition:opacity .3s,color .3s}
 .mm-link:hover{opacity:1;color:var(--gold)}
 
-/* ═══ ALL CONTENT ═══ */
+/* ═══ CONTENT Z-INDEX ═══ */
 .hero,.metrics,.section-dark,.manifesto,.site-footer,.section-divider,.mobile-menu{position:relative;z-index:5}
 
 /* ═══ HERO ═══ */
@@ -614,9 +480,9 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased;
 @keyframes sp{0%,100%{opacity:.3;transform:scaleY(.7)}50%{opacity:1;transform:scaleY(1)}}
 
 /* ═══ BUTTONS ═══ */
-.btn-primary{display:inline-flex;align-items:center;gap:12px;padding:18px 36px;background:var(--gold);color:var(--bg);font-family:var(--fb);font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;text-decoration:none;transition:all .4s cubic-bezier(.4,0,.2,1)}
+.btn-primary{display:inline-flex;align-items:center;gap:12px;padding:18px 36px;background:var(--gold);color:var(--bg);font-family:var(--fb);font-size:11px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;text-decoration:none;cursor:pointer;transition:all .4s cubic-bezier(.4,0,.2,1)}
 .btn-primary:hover{background:var(--fg);transform:translateY(-2px)}
-.btn-ghost{display:inline-flex;align-items:center;padding:18px 36px;border:1px solid rgba(255,255,255,0.15);color:var(--fg);font-family:var(--fb);font-size:11px;font-weight:500;letter-spacing:.15em;text-transform:uppercase;text-decoration:none;background:none;cursor:none;transition:all .4s}
+.btn-ghost{display:inline-flex;align-items:center;padding:18px 36px;border:1px solid rgba(255,255,255,0.15);color:var(--fg);font-family:var(--fb);font-size:11px;font-weight:500;letter-spacing:.15em;text-transform:uppercase;text-decoration:none;background:none;cursor:pointer;transition:all .4s}
 .btn-ghost:hover{border-color:var(--gold);color:var(--gold)}
 
 /* ═══ SHARED ═══ */
@@ -630,7 +496,7 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased;
 .section-divider{height:1px;margin:0 clamp(24px,5vw,80px);background:linear-gradient(90deg,transparent,var(--gold),transparent);transform-origin:center;opacity:.3;position:relative;z-index:5}
 
 /* ═══ METRICS ═══ */
-.metrics{padding:0 clamp(24px,5vw,80px);border-top:1px solid var(--gb);border-bottom:1px solid var(--gb);background:rgba(6,6,10,0.9)}
+.metrics{padding:0 clamp(24px,5vw,80px);border-top:1px solid var(--gb);border-bottom:1px solid var(--gb);background:rgba(6,6,10,0.92)}
 .metrics-grid{display:grid;grid-template-columns:repeat(4,1fr)}
 @media(max-width:768px){.metrics-grid{grid-template-columns:repeat(2,1fr)}}
 .metric{padding:44px 24px;text-align:center;border-right:1px solid var(--gb)}
@@ -640,7 +506,7 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased;
 
 /* ═══ SYSTEMS ═══ */
 .systems-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:2px}
-.system-card{background:rgba(6,6,10,0.7);border:1px solid var(--gb);padding:48px 40px;position:relative;transition:border-color .4s,background .4s}
+.system-card{background:rgba(6,6,10,0.75);border:1px solid var(--gb);padding:48px 40px;position:relative;transition:border-color .4s,background .4s}
 .system-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--gold);transform:scaleX(0);transform-origin:left;transition:transform .6s cubic-bezier(.4,0,.2,1)}
 .system-card:hover::before{transform:scaleX(1)}
 .system-card:hover{border-color:rgba(201,169,110,0.3);background:rgba(255,255,255,0.04)}
@@ -655,13 +521,13 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased;
 
 /* ═══ PORTFOLIO ═══ */
 .filter-bar{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:48px}
-.filter-btn{font-family:var(--fb);font-size:10px;letter-spacing:.15em;text-transform:uppercase;padding:10px 18px;background:none;border:1px solid var(--gb);color:var(--dim);cursor:none;transition:all .3s}
+.filter-btn{font-family:var(--fb);font-size:10px;letter-spacing:.15em;text-transform:uppercase;padding:10px 18px;background:none;border:1px solid var(--gb);color:var(--dim);cursor:pointer;transition:all .3s}
 .filter-btn:hover,.filter-btn.active{border-color:var(--gold);color:var(--gold)}
 .filter-btn.active{background:rgba(201,169,110,0.1)}
 .portfolio-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px}
 @media(max-width:1024px){.portfolio-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:640px){.portfolio-grid{grid-template-columns:1fr}}
-.portfolio-card{aspect-ratio:16/10;background:rgba(6,6,10,0.7);border:1px solid var(--gb);position:relative;overflow:hidden;transition:all .5s cubic-bezier(.4,0,.2,1);text-decoration:none;display:block}
+.portfolio-card{aspect-ratio:16/10;background:rgba(6,6,10,0.75);border:1px solid var(--gb);position:relative;overflow:hidden;transition:all .5s cubic-bezier(.4,0,.2,1);text-decoration:none;display:block}
 .portfolio-card::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at top left,var(--ac,var(--gold)) 0%,transparent 70%);opacity:0;transition:opacity .5s}
 .portfolio-card:hover::before{opacity:.15}
 .portfolio-card:hover{border-color:var(--ac,var(--gold));transform:translateY(-4px)}
@@ -684,7 +550,7 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased;
 .process-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px}
 @media(max-width:1024px){.process-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:640px){.process-grid{grid-template-columns:1fr}}
-.process-card{background:rgba(6,6,10,0.7);border:1px solid var(--gb);padding:48px 36px;position:relative;transition:border-color .4s,background .4s}
+.process-card{background:rgba(6,6,10,0.75);border:1px solid var(--gb);padding:48px 36px;position:relative;transition:border-color .4s,background .4s}
 .process-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--gold);transform:scaleX(0);transform-origin:left;transition:transform .6s cubic-bezier(.4,0,.2,1)}
 .process-card:hover::before{transform:scaleX(1)}
 .process-card:hover{border-color:rgba(201,169,110,0.2);background:rgba(255,255,255,0.04)}
