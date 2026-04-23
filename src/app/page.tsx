@@ -9,7 +9,7 @@ interface Project {
 
 const PROJECTS: Project[] = [
   { name: 'AEGIS Shield', type: 'Defense & Access Control', industry: 'Defense', desc: 'USMC DBIDS overlay — biometric gate control, AI threat scoring, command mesh', color: '#1c4a5e', tag: 'CLASSIFIED' },
-  { name: 'VoxLink', type: 'Voice Intelligence Platform', industry: 'Enterprise', desc: 'Real-time voice AI with Daily.co, conversation analytics, Stripe billing', color: '#7c3aed', url: 'https://voxlink.vercel.app' },
+  { name: 'VoxLink', type: 'Voice Intelligence Platform', industry: 'Enterprise', desc: 'Real-time voice AI with Daily.co, conversation analytics, Stripe billing', color: '#7c3aed' },
   { name: 'MovVia', type: 'Logistics Command Center', industry: 'Operations', desc: 'Drag-and-drop fleet ops, route optimization, driver dispatch AI', color: '#00B4FF', url: 'https://movvia-pi.vercel.app' },
   { name: 'ReWired OS', type: 'Business Operating System', industry: 'Enterprise', desc: 'CRM + outreach pipeline + email drip + analytics dashboard', color: '#10b981' },
   { name: 'Four Seasons Bogota', type: 'AI Concierge', industry: 'Luxury Hotel', desc: 'Full-stack AI concierge with Claude SDK, booking automation, guest intel', color: '#d4af37', url: 'https://demo-fourseasons-bogota.vercel.app' },
@@ -42,6 +42,10 @@ const PROJECTS: Project[] = [
   { name: 'Ania Consular', type: 'Consular Services', industry: 'Government', desc: 'Document processing, appointment scheduling, status tracking AI', color: '#1d4ed8' },
   { name: 'El Salvador National', type: 'National Platform', industry: 'Government', desc: 'Government-scale digital platform, citizen services, data pipeline', color: '#0369a1' },
   { name: 'Simmer Down Pizza', type: 'Interactive Restaurant', industry: 'Restaurant', desc: 'Canvas-based interactive menu, Easter eggs, gamified ordering', color: '#f97316', url: 'https://simmer-down.vercel.app' },
+  { name: 'Simmer Down SV', type: 'Restaurant & Bar', industry: 'Restaurant', desc: 'Full-stack restaurant platform with online ordering, reservations, and brand experience', color: '#ea580c', url: 'https://simmerdownsv.com' },
+  { name: 'Casa Boheme', type: 'Boutique Hotel Experience', industry: 'Luxury Hotel', desc: 'Bohemian luxury hospitality — immersive booking, concierge AI, guest experience design', color: '#a16207', url: 'https://casa-boheme.vercel.app' },
+  { name: 'Frenessi', type: 'Brand & Pitch Platform', industry: 'Professional', desc: 'High-impact pitch deck platform with Cinema Engine animations, investor-ready storytelling', color: '#dc2626', url: 'https://frenessi-pitch.vercel.app' },
+  { name: 'Poseidon Beyond Luxury', type: 'Ultra-Luxury Experience', industry: 'Luxury Hotel', desc: 'Beyond-luxury yacht and villa platform — bespoke concierge, VIP booking, experience curation', color: '#0c4a6e', url: 'https://poseidon-beyond-luxury.vercel.app' },
 ];
 
 const INDUSTRIES = ['All', ...Array.from(new Set(PROJECTS.map(p => p.industry)))];
