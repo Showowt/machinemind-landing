@@ -86,6 +86,7 @@ export default function Home() {
   const [activeFilter, setActiveFilter] = useState('All');
   const [visibleProjects, setVisibleProjects] = useState(18);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [formState, setFormState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const videoRef = useRef<HTMLVideoElement>(null);
   const reelRef = useRef<HTMLVideoElement>(null);
   const gsapReady = useRef(false);
@@ -508,22 +509,49 @@ export default function Home() {
               </a>
               <p className="contact-email">or email <a href="mailto:Phil@machinemindconsulting.com">Phil@machinemindconsulting.com</a></p>
             </div>
-            <form className="contact-form" action="https://formsubmit.co/Phil@machinemindconsulting.com" method="POST">
-              <input type="hidden" name="_subject" value="New Project Inquiry — MachineMind" />
-              <input type="hidden" name="_template" value="table" />
-              <input type="hidden" name="_captcha" value="false" />
-              <input type="text" name="name" placeholder="Your name" required className="form-input" />
-              <input type="email" name="email" placeholder="Email address" required className="form-input" />
-              <select name="project_type" required className="form-input form-select">
-                <option value="" disabled selected>Project type</option>
-                <option value="WhatsApp AI Assistant">WhatsApp AI Assistant</option>
-                <option value="Cinema Engine Website">Cinema Engine Website</option>
-                <option value="Full Stack (AI + Website)">Full Stack (AI + Website)</option>
-                <option value="Enterprise / Custom">Enterprise / Custom</option>
-              </select>
-              <textarea name="message" placeholder="Tell us about your project..." rows={3} className="form-input form-textarea" />
-              <button type="submit" className="btn-ghost form-submit">Send Inquiry</button>
-            </form>
+            {formState === 'sent' ? (
+              <div className="form-success">
+                <div className="form-success-icon">&#10003;</div>
+                <h3>Inquiry Received</h3>
+                <p>We&apos;ll review your project and get back to you within 24 hours.</p>
+              </div>
+            ) : (
+              <form className="contact-form" onSubmit={async (e) => {
+                e.preventDefault();
+                setFormState('sending');
+                const form = e.currentTarget;
+                const data = {
+                  name: (form.elements.namedItem('name') as HTMLInputElement).value,
+                  email: (form.elements.namedItem('email') as HTMLInputElement).value,
+                  project_type: (form.elements.namedItem('project_type') as HTMLSelectElement).value,
+                  message: (form.elements.namedItem('message') as HTMLTextAreaElement).value,
+                };
+                try {
+                  const res = await fetch('/api/contact', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                  });
+                  if (res.ok) { setFormState('sent'); }
+                  else { setFormState('error'); }
+                } catch { setFormState('error'); }
+              }}>
+                <input type="text" name="name" placeholder="Your name" required className="form-input" />
+                <input type="email" name="email" placeholder="Email address" required className="form-input" />
+                <select name="project_type" required className="form-input form-select" defaultValue="">
+                  <option value="" disabled>Project type</option>
+                  <option value="WhatsApp AI Assistant">WhatsApp AI Assistant</option>
+                  <option value="Cinema Engine Website">Cinema Engine Website</option>
+                  <option value="Full Stack (AI + Website)">Full Stack (AI + Website)</option>
+                  <option value="Enterprise / Custom">Enterprise / Custom</option>
+                </select>
+                <textarea name="message" placeholder="Tell us about your project..." rows={3} className="form-input form-textarea" />
+                <button type="submit" className="btn-ghost form-submit" disabled={formState === 'sending'}>
+                  {formState === 'sending' ? 'Sending...' : formState === 'error' ? 'Try Again' : 'Send Inquiry'}
+                </button>
+                {formState === 'error' && <p className="form-error">Something went wrong. Please email Phil@machinemindconsulting.com directly.</p>}
+              </form>
+            )}
           </div>
         </div>
       </section>
@@ -759,6 +787,12 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .form-select option{background:var(--bg);color:var(--fg)}
 .form-textarea{resize:vertical;min-height:80px}
 .form-submit{width:100%;justify-content:center}
+.form-submit:disabled{opacity:.5;cursor:not-allowed}
+.form-error{font-size:13px;color:#ef4444;margin-top:4px;text-align:center}
+.form-success{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:40px 20px;text-align:center}
+.form-success-icon{width:48px;height:48px;border:2px solid var(--gold);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:24px}
+.form-success h3{font-family:var(--fd);font-size:22px;font-weight:500;color:var(--fg)}
+.form-success p{font-size:14px;color:var(--dim);line-height:1.6}
 
 /* ═══ FOOTER ═══ */
 .site-footer{padding:72px clamp(24px,5vw,80px) 40px;border-top:1px solid var(--gb);background:rgba(6,6,10,0.95)}
