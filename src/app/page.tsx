@@ -121,21 +121,35 @@ export default function Home() {
 
   // ── Force-show content fallback if GSAP fails ──
   const forceShowAll = useCallback(() => {
-    document.querySelectorAll('.hero-eyebrow,.hero-title-line,.hero-subtitle,.hero-cta-wrap,.hero-scroll-indicator,.reveal-up,.scale-in').forEach(el => {
+    document.querySelectorAll('.hero-eyebrow,.hero-title-line,.hero-subtitle,.hero-subtitle-2,.hero-cta-wrap,.hero-scroll-indicator,.reveal-up,.scale-in,.card-animate').forEach(el => {
       const h = el as HTMLElement;
       h.style.opacity = '1';
       h.style.transform = 'none';
-    });
-    document.querySelectorAll('.stagger-children').forEach(c => {
-      Array.from(c.children).forEach(el => {
-        const h = el as HTMLElement;
-        h.style.opacity = '1';
-        h.style.transform = 'none';
-      });
+      h.classList.add('card-vis');
     });
   }, []);
 
-  // ── GSAP ANIMATIONS (robust with error handling + fallback) ──
+  // ── CARD ENTRANCE — CSS-driven IntersectionObserver (GSAP-independent, can't fail) ──
+  useEffect(() => {
+    if (!ready) return;
+    const cards = document.querySelectorAll('.card-animate');
+    if (!cards.length) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            (entry.target as HTMLElement).classList.add('card-vis');
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.05, rootMargin: '0px 0px -40px 0px' }
+    );
+    cards.forEach(c => observer.observe(c));
+    return () => observer.disconnect();
+  }, [ready, activeFilter, visibleProjects]);
+
+  // ── GSAP ANIMATIONS (hero + sections only — no card visibility dependency) ──
   useEffect(() => {
     if (!ready) return;
     let destroyed = false;
@@ -163,7 +177,7 @@ export default function Home() {
         const tl = gsap.timeline({ delay: 0.2 });
         tl.from('.hero-eyebrow', { y: 30, opacity: 0, duration: 0.8, ease: 'power4.out' })
           .from('.hero-title-line', { y: 80, opacity: 0, duration: 1, stagger: 0.12, ease: 'power4.out' }, '-=0.5')
-          .from('.hero-subtitle', { y: 25, opacity: 0, duration: 0.7, ease: 'power3.out' }, '-=0.4')
+          .from('.hero-subtitle, .hero-subtitle-2', { y: 25, opacity: 0, duration: 0.7, ease: 'power3.out' }, '-=0.4')
           .from('.hero-cta-wrap', { y: 15, opacity: 0, duration: 0.5, ease: 'power3.out' }, '-=0.3')
           .from('.hero-scroll-indicator', { opacity: 0, duration: 0.8 }, '-=0.2');
 
@@ -177,18 +191,11 @@ export default function Home() {
           scrollTrigger: { trigger: '.hero', start: '15% top', end: '35% top', scrub: true },
         });
 
-        // ── REVEAL ANIMATIONS ──
+        // ── REVEAL ANIMATIONS (fromTo — never leaves elements stuck at opacity:0) ──
         gsap.utils.toArray<HTMLElement>('.reveal-up').forEach((el) => {
-          gsap.from(el, {
-            y: 40, opacity: 0, duration: 0.7, ease: 'power3.out',
+          gsap.fromTo(el, { y: 40, opacity: 0 }, {
+            y: 0, opacity: 1, duration: 0.7, ease: 'power3.out',
             scrollTrigger: { trigger: el, start: 'top 88%', toggleActions: 'play none none none' },
-          });
-        });
-
-        gsap.utils.toArray<HTMLElement>('.stagger-children').forEach((container) => {
-          gsap.from(container.children, {
-            y: 25, opacity: 0, duration: 0.5, stagger: 0.06, ease: 'power3.out',
-            scrollTrigger: { trigger: container, start: 'top 85%', toggleActions: 'play none none none' },
           });
         });
 
@@ -211,10 +218,10 @@ export default function Home() {
           });
         });
 
-        // ── SCALE-IN ──
+        // ── SCALE-IN (fromTo — safe) ──
         gsap.utils.toArray<HTMLElement>('.scale-in').forEach((el) => {
-          gsap.from(el, {
-            scale: 0.97, opacity: 0, duration: 0.6, ease: 'power2.out',
+          gsap.fromTo(el, { scale: 0.97, opacity: 0 }, {
+            scale: 1, opacity: 1, duration: 0.6, ease: 'power2.out',
             scrollTrigger: { trigger: el, start: 'top 88%', toggleActions: 'play none none none' },
           });
         });
@@ -226,7 +233,7 @@ export default function Home() {
 
     init();
 
-    // Watchdog: if GSAP hasn't finished in 4s, force everything visible
+    // Watchdog: force everything visible if GSAP fails
     const watchdog = setTimeout(() => {
       if (!gsapReady.current) forceShowAll();
     }, 4000);
@@ -314,14 +321,14 @@ export default function Home() {
 
       {/* ═══ METRICS ═══ */}
       <section className="metrics">
-        <div className="metrics-grid stagger-children">
+        <div className="metrics-grid">
           {[
             { value: '111', suffix: '+', label: 'Systems Deployed' },
             { value: '38', suffix: '', label: 'Custom Builds' },
             { value: '98', suffix: '%', label: 'Client Retention' },
             { value: '4', suffix: 'wk', label: 'Avg Delivery' },
           ].map((s, i) => (
-            <div key={i} className="metric">
+            <div key={i} className="metric card-animate" style={{ '--delay': `${i * 0.1}s` } as React.CSSProperties}>
               <span className="metric-value counter" data-target={s.value} data-suffix={s.suffix}>0</span>
               <span className="metric-label">{s.label}</span>
             </div>
@@ -337,13 +344,13 @@ export default function Home() {
             <h2>Three Engines. <em>Infinite Leverage.</em></h2>
             <p className="section-desc">Each system compounds. Together they create an autonomous revenue machine.</p>
           </div>
-          <div className="systems-grid stagger-children">
+          <div className="systems-grid">
             {[
               { num: '01', title: 'Sofia AI', icon: '////', desc: 'WhatsApp AI that qualifies leads, handles bookings, detects psychology, and closes deals 24/7. Six mental models. Escalation intelligence. Revenue generation on autopilot.', features: ['WhatsApp API', 'Psych Sales', 'Lead Scoring', 'Auto-Escalation', 'CRM Sync', 'Multi-Language'], metric: '24/7 Revenue Generation' },
               { num: '02', title: 'Cinema Engine', icon: '[][]', desc: 'Websites that feel like films. 25 layers of scroll-driven animation, Three.js environments, GSAP choreography. Every pixel is engineered to convert visitors into clients.', features: ['GSAP ScrollTrigger', 'Three.js', 'Scroll Video', 'Physics', 'Perf A+', 'Mobile-First'], metric: '25-Layer Cinematic System' },
               { num: '03', title: 'Viceroy', icon: '><><', desc: 'AI-powered investor qualification. Detects intent, scores across 8 dimensions, routes to humans when stakes are high. Autonomous deal flow at scale.', features: ['Psychology AI', '8-Axis Score', 'Email Drip', 'Smart Route', 'Deal Intel', 'Pipeline'], metric: 'Autonomous Deal Flow' },
             ].map(sys => (
-              <div key={sys.num} className="system-card scale-in">
+              <div key={sys.num} className="system-card card-animate" style={{ '--delay': `${(parseInt(sys.num) - 1) * 0.12}s` } as React.CSSProperties}>
                 <div className="sys-head"><span className="sys-num">{sys.num}</span><span className="sys-icon">{sys.icon}</span></div>
                 <h3 className="sys-title">{sys.title}</h3>
                 <p className="sys-metric">{sys.metric}</p>
@@ -385,8 +392,9 @@ export default function Home() {
                 onClick={() => { setActiveFilter(cat); setVisibleProjects(18); }}>{cat}</button>
             ))}
           </div>
-          <div className="portfolio-grid stagger-children">
+          <div className="portfolio-grid">
             {filteredProjects.slice(0, visibleProjects).map((p, i) => {
+              const delay = `${(i % 3) * 0.08}s`;
               const inner = (
                 <div className="card-inner">
                   <div className="card-top">
@@ -405,9 +413,9 @@ export default function Home() {
               );
               return p.url ? (
                 <a key={i} href={p.url} target="_blank" rel="noopener noreferrer"
-                  className="portfolio-card" style={{ '--ac': p.color } as React.CSSProperties}>{inner}</a>
+                  className="portfolio-card card-animate" style={{ '--ac': p.color, '--delay': delay } as React.CSSProperties}>{inner}</a>
               ) : (
-                <div key={i} className="portfolio-card" style={{ '--ac': p.color } as React.CSSProperties}>{inner}</div>
+                <div key={i} className="portfolio-card card-animate" style={{ '--ac': p.color, '--delay': delay } as React.CSSProperties}>{inner}</div>
               );
             })}
           </div>
@@ -431,14 +439,14 @@ export default function Home() {
             <h2>Four Phases. <em>Zero Waste.</em></h2>
             <p className="section-desc">From first call to production deployment in weeks, not months.</p>
           </div>
-          <div className="process-grid stagger-children">
+          <div className="process-grid">
             {[
               { n: '01', t: 'Discovery', d: 'We decode your revenue leaks, map automation opportunities, and identify the highest-ROI AI deployment. You get a full diagnostic with a prioritized roadmap.', detail: 'Week 1 — Diagnostic & Strategy' },
               { n: '02', t: 'Architecture', d: 'Custom system design — database schemas, AI pipelines, integration maps, security policies. Every component is purpose-built for your specific business logic.', detail: 'Week 2 — Technical Blueprint' },
               { n: '03', t: 'Build & Ship', d: 'Rapid deployment with Cinema Engine aesthetics. TypeScript strict, Supabase RLS, Vercel edge. You see a working demo within days, not months.', detail: 'Weeks 2-4 — Live Deployment' },
               { n: '04', t: 'Scale & Learn', d: 'Continuous optimization as your AI learns your business. Performance monitoring, A/B testing, and system expansion. Your competitors wonder what happened.', detail: 'Ongoing — Compound Growth' },
-            ].map(p => (
-              <div key={p.n} className="process-card scale-in">
+            ].map((p, i) => (
+              <div key={p.n} className="process-card card-animate" style={{ '--delay': `${i * 0.1}s` } as React.CSSProperties}>
                 <span className="proc-num">{p.n}</span>
                 <h3 className="proc-title">{p.t}</h3>
                 <span className="proc-detail">{p.detail}</span>
@@ -624,6 +632,14 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .btn-primary:hover{background:var(--fg);transform:translateY(-2px)}
 .btn-ghost{display:inline-flex;align-items:center;padding:18px 36px;border:1px solid rgba(255,255,255,0.15);color:var(--fg);font-family:var(--fb);font-size:11px;font-weight:500;letter-spacing:.15em;text-transform:uppercase;text-decoration:none;background:none;cursor:pointer;transition:all .4s}
 .btn-ghost:hover{border-color:var(--gold);color:var(--gold)}
+
+/* ═══ CARD ENTRANCE — CSS-driven, GSAP-independent ═══ */
+.card-animate{opacity:0;transform:translateY(24px);transition:opacity 0.5s ease,transform 0.5s ease;transition-delay:var(--delay,0s)}
+.card-animate.card-vis{opacity:1;transform:translateY(0)}
+/* Fallback: if IntersectionObserver never fires, auto-show after 3s */
+@keyframes card-fallback{to{opacity:1;transform:translateY(0)}}
+.card-animate{animation:card-fallback 0.01s 3.5s both}
+.card-animate.card-vis{animation:none}
 
 /* ═══ SHARED ═══ */
 .eyebrow{font-size:10px;letter-spacing:.5em;text-transform:uppercase;color:var(--gold);margin-bottom:16px}
