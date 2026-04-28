@@ -25,7 +25,7 @@ const RECIPIENTS = [
   { name: "Sergio", phone: process.env.NOTIFY_PHONE || "+17024092818" },
 ];
 
-const TWILIO_FROM = process.env.TWILIO_WHATSAPP_FROM || "whatsapp:+19542790889";
+const TWILIO_FROM = process.env.TWILIO_WHATSAPP_FROM || "whatsapp:+17543183430";
 
 /**
  * Send WhatsApp notification to team
