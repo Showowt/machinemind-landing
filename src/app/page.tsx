@@ -38,9 +38,8 @@ const PROJECTS: Project[] = [
   { name: 'Four Seasons Bogota', type: 'AI Concierge', industry: 'Luxury Hotel', desc: 'Full-stack AI concierge with Claude SDK, booking automation, guest intel', color: '#d4af37', url: 'https://demo-fourseasons-bogota.vercel.app' },
   { name: 'Casa Boheme', type: 'Boutique Hotel Experience', industry: 'Luxury Hotel', desc: 'Bohemian luxury hospitality — immersive booking, concierge AI, guest experience design', color: '#a16207', url: 'https://casa-boheme.vercel.app' },
   { name: 'Dharma Beach Club', type: 'Luxury Beach Experience', industry: 'Hospitality', desc: 'VIP booking, Stripe payments, table reservations, event calendar', color: '#d4af37', url: 'https://dharma-topaz.vercel.app' },
-  { name: 'Osaka Nikkei', type: 'Restaurant Experience', industry: 'Fine Dining', desc: 'Nikkei cuisine showcase with reservation AI, menu intelligence', color: '#ef4444', url: 'https://demo-osaka-nikkei.vercel.app' },
+  { name: 'Frenessi', type: 'Fine Dining Experience', industry: 'Fine Dining', desc: 'High-end restaurant concept — Cinema Engine animations, immersive brand storytelling, reservation pipeline', color: '#dc2626', url: 'https://frenessi-pitch.vercel.app' },
   { name: 'Simmer Down SV', type: 'Restaurant & Bar', industry: 'Restaurant', desc: 'Full-stack restaurant platform with online ordering, reservations, and brand experience', color: '#ea580c', url: 'https://simmerdownsv.com' },
-  { name: 'Fundación Natucorú', type: 'Conservation Platform', industry: 'NGO', desc: 'Cinematic bilingual site for Amazon conservation — interactive territory map, project galleries, editorial design that transmits the jungle', color: '#1B4332', url: 'https://natucoru.vercel.app' },
   // ── TIER 2: Defense & Enterprise (locked) ──
   { name: 'AEGIS Shield', type: 'Defense & Access Control', industry: 'Defense', desc: 'USMC DBIDS overlay — biometric gate control, AI threat scoring, command mesh', color: '#1c4a5e', tag: 'CLASSIFIED' },
   { name: 'VoxLink', type: 'Voice Intelligence Platform', industry: 'Enterprise', desc: 'Real-time voice AI with Daily.co, conversation analytics, Stripe billing', color: '#7c3aed', tag: 'ENTERPRISE' },
@@ -49,7 +48,7 @@ const PROJECTS: Project[] = [
   { name: 'El Salvador National', type: 'National Platform', industry: 'Government', desc: 'Government-scale digital platform, citizen services, data pipeline', color: '#0369a1', tag: 'ENTERPRISE' },
   { name: 'Ania Consular', type: 'Consular Services', industry: 'Government', desc: 'Document processing, appointment scheduling, status tracking AI', color: '#1d4ed8', tag: 'ENTERPRISE' },
   // ── TIER 3: Hospitality & Dining ──
-  { name: 'Frenessi', type: 'Brand & Pitch Platform', industry: 'Professional', desc: 'High-impact pitch deck platform with Cinema Engine animations, investor-ready storytelling', color: '#dc2626', url: 'https://frenessi-pitch.vercel.app' },
+  { name: 'Fundación Natucorú', type: 'Conservation Platform', industry: 'NGO', desc: 'Cinematic bilingual site for Amazon conservation — interactive territory map, project galleries, editorial design that transmits the jungle', color: '#1B4332', url: 'https://natucoru.vercel.app' },
   { name: 'Cafe Noir', type: 'Premium Cafe', industry: 'Restaurant', desc: 'Dark luxury cafe branding, online ordering, loyalty system', color: '#92400e', url: 'https://demo-cafenoir.vercel.app' },
   { name: 'La Kasta', type: 'Nightlife & Dining', industry: 'Nightlife', desc: 'VIP table booking, event management, bottle service automation', color: '#a855f7', url: 'https://demo-lakasta.vercel.app' },
   { name: 'Chef Jose', type: 'Personal Chef Brand', industry: 'Culinary', desc: 'Private dining experience site, booking pipeline, menu showcase', color: '#f97316', url: 'https://demo-chefjose.vercel.app' },
