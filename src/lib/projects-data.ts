@@ -143,6 +143,30 @@ export const projects: Project[] = [
     isFeatured: true,
   },
 
+  {
+    slug: "natucoru",
+    nameEs: "Fundación Natucorú",
+    nameEn: "Fundación Natucorú",
+    taglineEs: "Conservación amazónica con comunidades indígenas",
+    taglineEn: "Amazon conservation with indigenous communities",
+    descriptionEs:
+      "Plataforma cinematográfica bilingüe para fundación de conservación — mapa interactivo de 6 departamentos, portafolio de proyectos con galerías, diseño editorial que transmite la selva.",
+    descriptionEn:
+      "Cinematic bilingual platform for conservation foundation — interactive map of 6 departments, project portfolio with galleries, editorial design that transmits the jungle.",
+    category: "flagship",
+    subcategory: "conservation",
+    techStack: [
+      "Next.js 14",
+      "Tailwind CSS",
+      "Framer Motion",
+      "Bilingual ES/EN",
+    ],
+    liveUrl: "https://natucoru.vercel.app",
+    colorAccent: "#1B4332",
+    isActive: true,
+    isFeatured: true,
+  },
+
   // ============================================
   // TIER 2: HIGH-END - AI + Premium Features
   // ============================================

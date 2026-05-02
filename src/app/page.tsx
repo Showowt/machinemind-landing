@@ -28,6 +28,7 @@ const CATEGORY_MAP: Record<string, string> = {
   'Professional': 'Professional & Brands',
   'Retail': 'Professional & Brands',
   'Beauty': 'Professional & Brands',
+  'NGO': 'Impact & Conservation',
 };
 const getCategory = (industry: string) => CATEGORY_MAP[industry] || industry;
 
@@ -39,6 +40,7 @@ const PROJECTS: Project[] = [
   { name: 'Dharma Beach Club', type: 'Luxury Beach Experience', industry: 'Hospitality', desc: 'VIP booking, Stripe payments, table reservations, event calendar', color: '#d4af37', url: 'https://dharma-topaz.vercel.app' },
   { name: 'Osaka Nikkei', type: 'Restaurant Experience', industry: 'Fine Dining', desc: 'Nikkei cuisine showcase with reservation AI, menu intelligence', color: '#ef4444', url: 'https://demo-osaka-nikkei.vercel.app' },
   { name: 'Simmer Down SV', type: 'Restaurant & Bar', industry: 'Restaurant', desc: 'Full-stack restaurant platform with online ordering, reservations, and brand experience', color: '#ea580c', url: 'https://simmerdownsv.com' },
+  { name: 'Fundación Natucorú', type: 'Conservation Platform', industry: 'NGO', desc: 'Cinematic bilingual site for Amazon conservation — interactive territory map, project galleries, editorial design that transmits the jungle', color: '#1B4332', url: 'https://natucoru.vercel.app' },
   // ── TIER 2: Defense & Enterprise (locked) ──
   { name: 'AEGIS Shield', type: 'Defense & Access Control', industry: 'Defense', desc: 'USMC DBIDS overlay — biometric gate control, AI threat scoring, command mesh', color: '#1c4a5e', tag: 'CLASSIFIED' },
   { name: 'VoxLink', type: 'Voice Intelligence Platform', industry: 'Enterprise', desc: 'Real-time voice AI with Daily.co, conversation analytics, Stripe billing', color: '#7c3aed', tag: 'ENTERPRISE' },
