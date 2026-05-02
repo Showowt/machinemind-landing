@@ -171,20 +171,20 @@ export const projects: Project[] = [
   // TIER 2: HIGH-END - AI + Premium Features
   // ============================================
   {
-    slug: "demo-fourseasons-bogota",
-    nameEs: "Four Seasons Bogotá",
-    nameEn: "Four Seasons Bogotá",
-    taglineEs: "Concierge AI para hotel 5 estrellas",
-    taglineEn: "AI concierge for 5-star hotel",
+    slug: "umari-fourseasons",
+    nameEs: "Umari · Four Seasons",
+    nameEn: "Umari · Four Seasons",
+    taglineEs: "Concierge AI ultra-lujo para el resort más exclusivo de Colombia",
+    taglineEn: "Ultra-luxury AI concierge for Colombia's most exclusive resort",
     descriptionEs:
-      "Demo de hotel de lujo con Claude AI SDK, reservaciones inteligentes y experiencias personalizadas.",
+      "Concierge de IA white-glove con Claude SDK — inteligencia de huéspedes en tiempo real, orquestación autónoma de reservas, experiencias personalizadas de nivel élite.",
     descriptionEn:
-      "Luxury hotel demo with Claude AI SDK, intelligent reservations, and personalized experiences.",
-    category: "demo",
+      "White-glove AI concierge with Claude SDK — real-time guest intelligence, autonomous booking orchestration, elite-tier personalized experiences.",
+    category: "flagship",
     subcategory: "hospitality",
-    techStack: ["Next.js 16", "Claude AI SDK", "Tailwind", "Framer Motion"],
-    liveUrl: "https://demo-fourseasons-bogota.vercel.app",
-    colorAccent: "#00B4FF",
+    techStack: ["Next.js 16", "Claude AI SDK", "Supabase", "Cinema Engine", "Framer Motion"],
+    liveUrl: null,
+    colorAccent: "#d4af37",
     isActive: true,
     isFeatured: true,
   },

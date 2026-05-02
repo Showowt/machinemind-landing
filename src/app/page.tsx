@@ -35,7 +35,7 @@ const getCategory = (industry: string) => CATEGORY_MAP[industry] || industry;
 const PROJECTS: Project[] = [
   // ── TIER 1: Flagship Luxury Hospitality (top of portfolio) ──
   { name: 'Poseidon Beyond Luxury', type: 'Ultra-Luxury Experience', industry: 'Luxury Hotel', desc: 'Beyond-luxury yacht and villa platform — bespoke concierge, VIP booking, experience curation', color: '#0c4a6e', url: 'https://poseidon-beyond-luxury.vercel.app' },
-  { name: 'Four Seasons Bogota', type: 'AI Concierge', industry: 'Luxury Hotel', desc: 'Full-stack AI concierge with Claude SDK, booking automation, guest intel', color: '#d4af37', url: 'https://demo-fourseasons-bogota.vercel.app' },
+  { name: 'Umari · Four Seasons', type: 'Ultra-Luxury AI Concierge', industry: 'Luxury Hotel', desc: 'White-glove AI concierge for Colombia\'s most exclusive resort — Claude SDK, real-time guest intelligence, autonomous booking orchestration', color: '#d4af37', tag: 'PRIVATE' },
   { name: 'Casa Boheme', type: 'Boutique Hotel Experience', industry: 'Luxury Hotel', desc: 'Bohemian luxury hospitality — immersive booking, concierge AI, guest experience design', color: '#a16207', url: 'https://casa-boheme.vercel.app' },
   { name: 'Dharma Beach Club', type: 'Luxury Beach Experience', industry: 'Hospitality', desc: 'VIP booking, Stripe payments, table reservations, event calendar', color: '#d4af37', url: 'https://dharma-topaz.vercel.app' },
   { name: 'Frenessi', type: 'Fine Dining Experience', industry: 'Fine Dining', desc: 'High-end restaurant concept — Cinema Engine animations, immersive brand storytelling, reservation pipeline', color: '#dc2626', url: 'https://frenessi-pitch.vercel.app' },
