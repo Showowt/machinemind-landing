@@ -1,6 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { captureUTMParams } from '@/lib/utm';
+import LeadCaptureForm from '@/components/lead-capture/LeadCaptureForm';
+import StickyBar from '@/components/lead-capture/StickyBar';
+import ExitIntent from '@/components/lead-capture/ExitIntent';
 
 interface Project {
   name: string; type: string; industry: string;
@@ -87,13 +91,15 @@ export default function Home() {
   const [activeFilter, setActiveFilter] = useState('All');
   const [visibleProjects, setVisibleProjects] = useState(18);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [formState, setFormState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const videoRef = useRef<HTMLVideoElement>(null);
   const reelRef = useRef<HTMLVideoElement>(null);
   const gsapReady = useRef(false);
 
   const filteredProjects = activeFilter === 'All'
     ? PROJECTS : PROJECTS.filter(p => getCategory(p.industry) === activeFilter);
+
+  // ── UTM CAPTURE ON LOAD ──
+  useEffect(() => { captureUTMParams(); }, []);
 
   // ── VIDEO READY → fade in site (1.5s max wait) ──
   useEffect(() => {
@@ -496,63 +502,28 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ═══ CONTACT ═══ */}
+      {/* ═══ CONTACT — Lead Capture Engine ═══ */}
       <section id="contact" className="section-dark contact-section">
         <div className="section-inner contact-inner reveal-up">
           <p className="eyebrow">LET&apos;S BUILD</p>
           <h2>Ready to build something<br />that doesn&apos;t exist yet?</h2>
-          <p className="contact-sub">We take on 3 new clients per quarter. Currently accepting projects for Q3 2026.</p>
+          <p className="contact-sub">We take on 3 new clients per quarter. Tell us about your project and get a free strategy session.</p>
           <div className="contact-grid">
-            <div className="contact-cta">
-              <a href="https://cal.com/machinemind" className="btn-primary" target="_blank" rel="noopener noreferrer">
-                <span>Book a Discovery Call</span>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
-              </a>
-              <p className="contact-email">or email <a href="mailto:Phil@machinemindconsulting.com">Phil@machinemindconsulting.com</a></p>
-            </div>
-            {formState === 'sent' ? (
-              <div className="form-success">
-                <div className="form-success-icon">&#10003;</div>
-                <h3>Inquiry Received</h3>
-                <p>We&apos;ll review your project and get back to you within 24 hours.</p>
+            <LeadCaptureForm />
+            <div className="contact-sidebar">
+              <h3 className="cs-title">In your free session:</h3>
+              <ul className="cs-benefits">
+                <li><span className="cs-check">&#10003;</span>Revenue leak analysis</li>
+                <li><span className="cs-check">&#10003;</span>Live Sofia AI demo on your business</li>
+                <li><span className="cs-check">&#10003;</span>Custom automation roadmap</li>
+                <li><span className="cs-check">&#10003;</span>ROI projection with real numbers</li>
+              </ul>
+              <div className="cs-alt">
+                <a href="https://cal.com/machine-mind/machinemind-strategy-session" className="btn-ghost cs-alt-btn" target="_blank" rel="noopener noreferrer">Book a Call</a>
+                <a href="https://wa.me/19544451638?text=Hi%2C%20I%27m%20interested%20in%20MachineMind" className="btn-ghost cs-alt-btn cs-wa" target="_blank" rel="noopener noreferrer">WhatsApp</a>
               </div>
-            ) : (
-              <form className="contact-form" onSubmit={async (e) => {
-                e.preventDefault();
-                setFormState('sending');
-                const form = e.currentTarget;
-                const data = {
-                  name: (form.elements.namedItem('name') as HTMLInputElement).value,
-                  email: (form.elements.namedItem('email') as HTMLInputElement).value,
-                  project_type: (form.elements.namedItem('project_type') as HTMLSelectElement).value,
-                  message: (form.elements.namedItem('message') as HTMLTextAreaElement).value,
-                };
-                try {
-                  const res = await fetch('/api/contact', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data),
-                  });
-                  if (res.ok) { setFormState('sent'); }
-                  else { setFormState('error'); }
-                } catch { setFormState('error'); }
-              }}>
-                <input type="text" name="name" placeholder="Your name" required className="form-input" />
-                <input type="email" name="email" placeholder="Email address" required className="form-input" />
-                <select name="project_type" required className="form-input form-select" defaultValue="">
-                  <option value="" disabled>Project type</option>
-                  <option value="WhatsApp AI Assistant">WhatsApp AI Assistant</option>
-                  <option value="Cinema Engine Website">Cinema Engine Website</option>
-                  <option value="Full Stack (AI + Website)">Full Stack (AI + Website)</option>
-                  <option value="Enterprise / Custom">Enterprise / Custom</option>
-                </select>
-                <textarea name="message" placeholder="Tell us about your project..." rows={3} className="form-input form-textarea" />
-                <button type="submit" className="btn-ghost form-submit" disabled={formState === 'sending'}>
-                  {formState === 'sending' ? 'Sending...' : formState === 'error' ? 'Try Again' : 'Send Inquiry'}
-                </button>
-                {formState === 'error' && <p className="form-error">Something went wrong. Please email Phil@machinemindconsulting.com directly.</p>}
-              </form>
-            )}
+              <a href="mailto:Phil@machinemindconsulting.com" className="cs-email">Phil@machinemindconsulting.com</a>
+            </div>
           </div>
         </div>
       </section>
@@ -583,6 +554,10 @@ export default function Home() {
           <p className="footer-copy">&copy; 2026 MachineMind Consulting &middot; Cartagena, Colombia</p>
         </div>
       </footer>
+
+      {/* Lead Capture Overlays */}
+      <StickyBar />
+      <ExitIntent />
 
       <style>{STYLES}</style>
     </>
@@ -810,4 +785,65 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .footer-social a:hover{color:var(--gold)}
 .footer-copy{font-size:11px;color:rgba(240,240,243,0.15);width:100%;text-align:center;margin-top:24px}
 @media(max-width:768px){.footer-inner{flex-direction:column;text-align:center}.footer-links{justify-content:center;flex-wrap:wrap}.footer-social{justify-content:center}}
+
+/* ═══ LEAD CAPTURE FORM ═══ */
+.lc-form{display:flex;flex-direction:column;gap:12px;text-align:left}
+.lc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:640px){.lc-grid{grid-template-columns:1fr}}
+.lc-submit{width:100%;justify-content:center;margin-top:4px}
+.lc-success{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px;padding:40px 20px}
+.lc-success-icon{width:48px;height:48px;border:2px solid var(--gold);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:24px}
+.lc-success h3{font-family:var(--fd);font-size:28px;font-weight:500}
+.lc-success p{font-size:14px;color:var(--dim)}
+.lc-success-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-top:8px}
+.lc-wa-btn{display:inline-flex;align-items:center;gap:8px;padding:14px 24px;background:#25D366;color:#fff;font-family:var(--fb);font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;text-decoration:none;transition:all .3s}
+.lc-wa-btn:hover{background:#20bd5a;transform:translateY(-2px)}
+
+/* Contact Sidebar */
+.contact-sidebar{display:flex;flex-direction:column;justify-content:space-between;text-align:left}
+.cs-title{font-family:var(--fd);font-size:18px;font-weight:500;margin-bottom:20px}
+.cs-benefits{list-style:none;display:flex;flex-direction:column;gap:14px;margin-bottom:28px}
+.cs-benefits li{display:flex;align-items:flex-start;gap:10px;font-size:14px;color:rgba(240,240,243,0.7);line-height:1.5}
+.cs-check{flex-shrink:0;width:20px;height:20px;display:flex;align-items:center;justify-content:center;background:rgba(201,169,110,0.15);color:var(--gold);font-size:11px}
+.cs-alt{display:flex;gap:8px;margin-bottom:16px}
+.cs-alt-btn{padding:10px 20px;font-size:11px}
+.cs-wa:hover{border-color:#25D366;color:#25D366}
+.cs-email{font-size:13px;color:var(--gold);text-decoration:none;transition:opacity .3s}
+.cs-email:hover{opacity:.7}
+
+/* ═══ STICKY BAR ═══ */
+.sticky-bar{position:fixed;bottom:0;left:0;right:0;z-index:9000;background:rgba(6,6,10,0.95);border-top:1px solid var(--gb);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);animation:slideUp .4s cubic-bezier(.4,0,.2,1)}
+@keyframes slideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
+.sticky-bar-inner{max-width:1200px;margin:0 auto;padding:14px clamp(16px,3vw,40px)}
+.sb-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.sb-text{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--fg)}
+.sb-pulse{width:8px;height:8px;background:var(--gold);border-radius:50%;animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.4;transform:scale(.9)}50%{opacity:1;transform:scale(1.1)}}
+.sb-btn{padding:10px 24px;white-space:nowrap}
+.sb-close{background:none;border:none;color:var(--dim);cursor:pointer;padding:6px;font-size:20px;line-height:1;transition:color .3s}
+.sb-close:hover{color:var(--fg)}
+.sb-input,.sb-select{min-height:40px;padding:8px 14px;background:rgba(6,6,10,0.8);border:1px solid var(--gb);color:var(--fg);font-family:var(--fb);font-size:13px;outline:none;flex:1;min-width:0;-webkit-appearance:none}
+.sb-input::placeholder{color:var(--dim)}
+.sb-input:focus,.sb-select:focus{border-color:var(--gold)}
+.sb-select{color:var(--dim);cursor:pointer;max-width:180px}
+.sb-select option{background:var(--bg);color:var(--fg)}
+.sb-ok{color:var(--gold);font-size:14px}
+@media(max-width:640px){.sb-text{font-size:12px}.sb-select{display:none}}
+
+/* ═══ EXIT INTENT ═══ */
+.exit-overlay{position:fixed;inset:0;z-index:99990;background:rgba(0,0,0,0.85);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:24px;animation:fadeIn .3s ease-out}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.exit-modal{background:#0a0a0f;border:1px solid var(--gb);max-width:480px;width:100%;padding:56px 48px;position:relative;animation:scaleIn .3s cubic-bezier(.4,0,.2,1)}
+@keyframes scaleIn{from{transform:scale(.95);opacity:0}to{transform:scale(1);opacity:1}}
+.exit-close{position:absolute;top:16px;right:16px;background:none;border:none;color:var(--dim);cursor:pointer;font-size:24px;line-height:1;transition:color .3s}
+.exit-close:hover{color:var(--fg)}
+.exit-header{text-align:center;margin-bottom:28px}
+.exit-header h3{font-family:var(--fd);font-size:clamp(26px,4vw,34px);font-weight:500;letter-spacing:-.02em;line-height:1.2;margin:12px 0}
+.exit-header p{font-size:14px;color:var(--dim);line-height:1.6}
+.exit-form{display:flex;flex-direction:column;gap:12px}
+.exit-footer{text-align:center;font-size:12px;color:var(--dim);margin-top:20px}
+.exit-ok{display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px;padding:24px 0}
+.exit-ok-icon{width:48px;height:48px;border:2px solid var(--gold);color:var(--gold);display:flex;align-items:center;justify-content:center;font-size:24px}
+.exit-ok h3{font-family:var(--fd);font-size:24px;font-weight:500}
+.exit-ok p{font-size:14px;color:var(--dim)}
 `;
