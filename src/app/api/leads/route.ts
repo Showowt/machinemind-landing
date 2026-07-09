@@ -91,36 +91,51 @@ async function sendEmailNotification(lead: LeadData) {
   const time = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
 
   try {
-    await resend.emails.send({
+    const { error } = await resend.emails.send({
       from: "MachineMind Leads <leads@machinemindconsulting.com>",
       to: "machinemindconsulting@gmail.com",
-      subject: `New Lead: ${lead.name}${lead.interest ? ` — ${interestLabel}` : ""}`,
+      replyTo: lead.email,
+      subject: `🔔 New Lead: ${lead.name}${lead.interest ? ` — ${interestLabel}` : ""}`,
+      headers: {
+        "X-Priority": "1",
+        "X-MSMail-Priority": "High",
+        "Importance": "high",
+      },
       html: `
         <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;background:#0a0a0f;color:#f0f0f3;padding:40px;border:1px solid rgba(255,255,255,0.08)">
           <div style="border-bottom:2px solid #c9a96e;padding-bottom:20px;margin-bottom:24px">
-            <h1 style="margin:0;font-size:20px;color:#c9a96e;letter-spacing:0.1em">NEW LEAD</h1>
+            <h1 style="margin:0;font-size:20px;color:#c9a96e;letter-spacing:0.1em">🔔 NEW LEAD — RESPOND NOW</h1>
+            <p style="margin:8px 0 0;font-size:12px;color:rgba(240,240,243,0.5)">This person just filled out your form. Speed to response = close rate.</p>
           </div>
 
           <table style="width:100%;border-collapse:collapse;font-size:15px">
-            <tr><td style="padding:8px 12px;color:#c9a96e;width:100px;vertical-align:top">Name</td><td style="padding:8px 12px;color:#f0f0f3"><strong>${lead.name}</strong></td></tr>
-            <tr><td style="padding:8px 12px;color:#c9a96e;vertical-align:top">Email</td><td style="padding:8px 12px"><a href="mailto:${lead.email}" style="color:#00e5ff;text-decoration:none">${lead.email}</a></td></tr>
-            ${lead.phone ? `<tr><td style="padding:8px 12px;color:#c9a96e;vertical-align:top">Phone</td><td style="padding:8px 12px;color:#f0f0f3"><a href="tel:${lead.phone}" style="color:#00e5ff;text-decoration:none">${lead.phone}</a></td></tr>` : ""}
-            ${lead.company ? `<tr><td style="padding:8px 12px;color:#c9a96e;vertical-align:top">Company</td><td style="padding:8px 12px;color:#f0f0f3">${lead.company}</td></tr>` : ""}
-            <tr><td style="padding:8px 12px;color:#c9a96e;vertical-align:top">Interest</td><td style="padding:8px 12px;color:#f0f0f3"><strong>${interestLabel}</strong></td></tr>
-            ${lead.message ? `<tr><td style="padding:8px 12px;color:#c9a96e;vertical-align:top">Message</td><td style="padding:8px 12px;color:#f0f0f3">${lead.message}</td></tr>` : ""}
+            <tr style="background:rgba(201,169,110,0.08)"><td style="padding:12px;color:#c9a96e;width:110px;vertical-align:top;font-weight:600">Name</td><td style="padding:12px;color:#f0f0f3;font-size:18px"><strong>${lead.name}</strong></td></tr>
+            <tr><td style="padding:12px;color:#c9a96e;vertical-align:top;font-weight:600">Email</td><td style="padding:12px"><a href="mailto:${lead.email}" style="color:#00e5ff;text-decoration:none;font-size:16px">${lead.email}</a></td></tr>
+            ${lead.phone ? `<tr style="background:rgba(201,169,110,0.08)"><td style="padding:12px;color:#c9a96e;vertical-align:top;font-weight:600">Phone</td><td style="padding:12px;color:#f0f0f3"><a href="tel:${lead.phone}" style="color:#00e5ff;text-decoration:none;font-size:16px">${lead.phone}</a></td></tr>` : ""}
+            ${lead.company ? `<tr><td style="padding:12px;color:#c9a96e;vertical-align:top;font-weight:600">Company</td><td style="padding:12px;color:#f0f0f3;font-size:16px">${lead.company}</td></tr>` : ""}
+            <tr style="background:rgba(201,169,110,0.08)"><td style="padding:12px;color:#c9a96e;vertical-align:top;font-weight:600">Interest</td><td style="padding:12px;color:#f0f0f3;font-size:16px"><strong>${interestLabel}</strong></td></tr>
+            ${lead.message ? `<tr><td style="padding:12px;color:#c9a96e;vertical-align:top;font-weight:600">Message</td><td style="padding:12px;color:#f0f0f3">${lead.message}</td></tr>` : ""}
+            <tr style="background:rgba(201,169,110,0.08)"><td style="padding:12px;color:#c9a96e;vertical-align:top;font-weight:600">Language</td><td style="padding:12px;color:#f0f0f3">${lead.language === "es" ? "Spanish" : "English"}</td></tr>
           </table>
 
-          <div style="margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.08);font-size:12px;color:rgba(240,240,243,0.4)">
-            <strong style="color:#c9a96e">Attribution:</strong> ${source} &middot; ${lead.device || "unknown"} &middot; ${lead.landing_page || "/"}<br/>
-            ${time} ET
+          <div style="margin-top:28px;display:flex;gap:12px">
+            <a href="mailto:${lead.email}" style="display:inline-block;padding:14px 32px;background:#c9a96e;color:#0a0a0f;font-weight:700;font-size:13px;letter-spacing:0.1em;text-transform:uppercase;text-decoration:none">Reply to Lead</a>
+            ${lead.phone ? `<a href="https://wa.me/${lead.phone.replace(/[^0-9]/g, "")}" style="display:inline-block;padding:14px 32px;background:#25D366;color:#fff;font-weight:700;font-size:13px;letter-spacing:0.1em;text-transform:uppercase;text-decoration:none">WhatsApp</a>` : ""}
           </div>
 
-          <div style="margin-top:24px">
-            <a href="mailto:${lead.email}" style="display:inline-block;padding:12px 28px;background:#c9a96e;color:#0a0a0f;font-weight:600;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;text-decoration:none">Reply to Lead</a>
+          <div style="margin-top:28px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.08);font-size:12px;color:rgba(240,240,243,0.35)">
+            <strong style="color:#c9a96e">Source:</strong> ${source}<br/>
+            <strong style="color:#c9a96e">Device:</strong> ${lead.device || "unknown"} &middot; <strong style="color:#c9a96e">Page:</strong> ${lead.landing_page || "/"}<br/>
+            ${lead.referrer ? `<strong style="color:#c9a96e">Referrer:</strong> ${lead.referrer}<br/>` : ""}
+            <strong style="color:#c9a96e">Time:</strong> ${time} ET
           </div>
         </div>
       `,
     });
+
+    if (error) {
+      console.error("[Leads] Resend API error:", error);
+    }
   } catch (error) {
     console.error("[Leads] Email notification failed:", error);
   }
@@ -168,10 +183,8 @@ export async function POST(request: Request) {
       }
     }
 
-    // Send notifications (non-blocking)
-    sendEmailNotification(body).catch((err) =>
-      console.error("[Leads] Email error:", err),
-    );
+    // Send notifications — email is critical, telegram is best-effort
+    await sendEmailNotification(body);
     sendTelegramNotification(body).catch((err) =>
       console.error("[Leads] Telegram error:", err),
     );
