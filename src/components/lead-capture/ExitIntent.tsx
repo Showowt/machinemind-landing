@@ -3,8 +3,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getStoredUTM } from '@/lib/utm';
 import { trackLeadEvent } from '@/lib/tracking-pixels';
+import { TRANSLATIONS, Lang } from '@/lib/i18n-content';
 
-export default function ExitIntent() {
+interface ExitIntentProps {
+  lang?: Lang;
+}
+
+export default function ExitIntent({ lang = 'es' }: ExitIntentProps) {
+  const t = TRANSLATIONS[lang].exitIntent;
+  const tLc = TRANSLATIONS[lang].leadCapture;
   const [show, setShow] = useState(false);
   const [email, setEmail] = useState('');
   const [interest, setInterest] = useState('');
@@ -43,7 +50,7 @@ export default function ExitIntent() {
       await fetch('/api/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: email.split('@')[0], email, interest: interest || 'exit_intent', ...utm }),
+        body: JSON.stringify({ name: email.split('@')[0], email, interest: interest || 'exit_intent', language: lang, ...utm }),
       });
       trackLeadEvent({ email, interest: interest || 'exit_intent' });
       setStatus('success');
@@ -62,30 +69,30 @@ export default function ExitIntent() {
         {status === 'success' ? (
           <div className="exit-ok">
             <div className="exit-ok-icon">&#10003;</div>
-            <h3>You&apos;re in.</h3>
-            <p>We&apos;ll reach out within 2 hours with your custom strategy.</p>
+            <h3>{t.successTitle}</h3>
+            <p>{t.successText}</p>
           </div>
         ) : (
           <>
             <div className="exit-header">
-              <span className="eyebrow">BEFORE YOU GO</span>
-              <h3>Don&apos;t leave money<br />on the table.</h3>
-              <p>Get a free revenue leak analysis — discover how much you&apos;re losing from missed inquiries.</p>
+              <span className="eyebrow">{t.eyebrow}</span>
+              <h3>{t.title}</h3>
+              <p>{t.subtitle}</p>
             </div>
             <form onSubmit={handleSubmit} className="exit-form">
-              <input type="email" required placeholder="Your email" value={email} onChange={(e) => setEmail(e.target.value)} className="form-input" autoFocus />
+              <input type="email" required placeholder={t.emailPlaceholder} value={email} onChange={(e) => setEmail(e.target.value)} className="form-input" autoFocus />
               <select value={interest} onChange={(e) => setInterest(e.target.value)} className="form-input form-select">
-                <option value="">What interests you?</option>
-                <option value="sofia_ai">Sofia AI — WhatsApp Automation</option>
-                <option value="cinema_engine">Cinema Engine — Website</option>
-                <option value="full_automation">Full Automation Suite</option>
-                <option value="custom">Custom AI Project</option>
+                <option value="">{t.interest}</option>
+                <option value="sofia_ai">{tLc.interestSofia}</option>
+                <option value="cinema_engine">{tLc.interestCinema}</option>
+                <option value="full_automation">{tLc.interestSuite}</option>
+                <option value="custom">{tLc.interestCustom}</option>
               </select>
               <button type="submit" disabled={status === 'loading'} className="btn-primary lc-submit">
-                {status === 'loading' ? 'Sending...' : 'Get My Free Analysis'}
+                {status === 'loading' ? tLc.sending : t.submit}
               </button>
             </form>
-            <p className="exit-footer">100% free. No spam. Just your personalized revenue opportunity.</p>
+            <p className="exit-footer">{t.footer}</p>
           </>
         )}
       </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { captureUTMParams } from '@/lib/utm';
+import { TRANSLATIONS, Lang } from '@/lib/i18n-content';
 import LeadCaptureForm from '@/components/lead-capture/LeadCaptureForm';
 import StickyBar from '@/components/lead-capture/StickyBar';
 import ExitIntent from '@/components/lead-capture/ExitIntent';
@@ -91,9 +92,12 @@ export default function Home() {
   const [activeFilter, setActiveFilter] = useState('All');
   const [visibleProjects, setVisibleProjects] = useState(18);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [lang, setLang] = useState<Lang>('es');
   const videoRef = useRef<HTMLVideoElement>(null);
   const reelRef = useRef<HTMLVideoElement>(null);
   const gsapReady = useRef(false);
+
+  const t = TRANSLATIONS[lang];
 
   const filteredProjects = activeFilter === 'All'
     ? PROJECTS : PROJECTS.filter(p => getCategory(p.industry) === activeFilter);
@@ -249,6 +253,14 @@ export default function Home() {
     return () => { destroyed = true; clearTimeout(watchdog); };
   }, [ready, forceShowAll]);
 
+  const navItems = [
+    { label: t.nav.systems, id: 'systems' },
+    { label: t.nav.portfolio, id: 'portfolio' },
+    { label: t.nav.process, id: 'process' },
+    { label: t.nav.about, id: 'about' },
+    { label: t.nav.contact, id: 'contact' },
+  ];
+
   return (
     <>
       {/* ═══ VIDEO BACKGROUND ═══ */}
@@ -282,10 +294,13 @@ export default function Home() {
           <span className="nav-logo-gold">MACHINE</span><span>MIND</span>
         </a>
         <div className="nav-links">
-          {['Systems', 'Portfolio', 'Process', 'About', 'Contact'].map(item => (
-            <a key={item} href={`#${item.toLowerCase()}`} className="nav-link">{item}</a>
+          {navItems.map(item => (
+            <a key={item.id} href={`#${item.id}`} className="nav-link">{item.label}</a>
           ))}
         </div>
+        <button className="lang-toggle" onClick={() => setLang(l => l === 'en' ? 'es' : 'en')} aria-label="Toggle language">
+          {lang === 'en' ? 'ES' : 'EN'}
+        </button>
         <button className="nav-hamburger" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Menu">
           <span className={`hb-line ${mobileMenuOpen ? 'open' : ''}`} />
           <span className={`hb-line ${mobileMenuOpen ? 'open' : ''}`} />
@@ -294,36 +309,39 @@ export default function Home() {
 
       {mobileMenuOpen && (
         <div className="mobile-menu">
-          {['Systems', 'Portfolio', 'Process', 'About', 'Contact'].map(item => (
-            <a key={item} href={`#${item.toLowerCase()}`} className="mm-link" onClick={() => setMobileMenuOpen(false)}>{item}</a>
+          {navItems.map(item => (
+            <a key={item.id} href={`#${item.id}`} className="mm-link" onClick={() => setMobileMenuOpen(false)}>{item.label}</a>
           ))}
+          <button className="lang-toggle" onClick={() => setLang(l => l === 'en' ? 'es' : 'en')} aria-label="Toggle language">
+            {lang === 'en' ? 'ES' : 'EN'}
+          </button>
         </div>
       )}
 
       {/* ═══ HERO ═══ */}
       <section className="hero">
         <div className="hero-content">
-          <p className="hero-eyebrow">AI AUTOMATION CONSULTANCY</p>
+          <p className="hero-eyebrow">{t.hero.eyebrow}</p>
           <h1 className="hero-title">
-            <span className="hero-title-line">We Engineer</span>
-            <span className="hero-title-line">Autonomous <em>Intelligence</em></span>
+            <span className="hero-title-line">{t.hero.titleLine1}</span>
+            <span className="hero-title-line">{t.hero.titleLine2} <em>Intelligence</em></span>
           </h1>
           <p className="hero-subtitle">
-            AI that sells, books, qualifies, and operates 24/7 — deployed across {PROJECTS.length} custom systems and counting.
+            {t.hero.subtitle.replace('{count}', String(PROJECTS.length))}
           </p>
           <p className="hero-subtitle-2">
-            We don&apos;t build tools. We build unfair advantages.
+            {t.hero.subtitle2}
           </p>
           <div className="hero-cta-wrap">
             <a href="#contact" className="btn-primary">
-              <span>Start a Project</span>
+              <span>{t.hero.ctaPrimary}</span>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
             </a>
-            <a href="#portfolio" className="btn-ghost">View Portfolio</a>
+            <a href="#portfolio" className="btn-ghost">{t.hero.ctaSecondary}</a>
           </div>
         </div>
         <div className="hero-scroll-indicator">
-          <div className="scroll-line" /><span>Scroll to explore</span>
+          <div className="scroll-line" /><span>{t.hero.scroll}</span>
         </div>
       </section>
 
@@ -331,10 +349,10 @@ export default function Home() {
       <section className="metrics">
         <div className="metrics-grid">
           {[
-            { value: '111', suffix: '+', label: 'Systems Deployed' },
-            { value: '38', suffix: '', label: 'Custom Builds' },
-            { value: '98', suffix: '%', label: 'Client Retention' },
-            { value: '4', suffix: 'wk', label: 'Avg Delivery' },
+            { value: '111', suffix: '+', label: t.metrics.systemsDeployed },
+            { value: '38', suffix: '', label: t.metrics.customBuilds },
+            { value: '98', suffix: '%', label: t.metrics.clientRetention },
+            { value: '4', suffix: 'wk', label: t.metrics.avgDelivery },
           ].map((s, i) => (
             <div key={i} className="metric card-animate" style={{ '--delay': `${i * 0.1}s` } as React.CSSProperties}>
               <span className="metric-value counter" data-target={s.value} data-suffix={s.suffix}>0</span>
@@ -348,15 +366,15 @@ export default function Home() {
       <section id="systems" className="section-dark">
         <div className="section-inner">
           <div className="section-header reveal-up">
-            <p className="eyebrow">WHAT WE BUILD</p>
-            <h2>Three Engines. <em>Infinite Leverage.</em></h2>
-            <p className="section-desc">Each system compounds. Together they create an autonomous revenue machine.</p>
+            <p className="eyebrow">{t.systems.eyebrow}</p>
+            <h2>{t.systems.headingPrefix} <em>{t.systems.headingItalic}</em></h2>
+            <p className="section-desc">{t.systems.desc}</p>
           </div>
           <div className="systems-grid">
             {[
-              { num: '01', title: 'Sofia AI', icon: '////', desc: 'WhatsApp AI that qualifies leads, handles bookings, detects psychology, and closes deals 24/7. Six mental models. Escalation intelligence. Revenue generation on autopilot.', features: ['WhatsApp API', 'Psych Sales', 'Lead Scoring', 'Auto-Escalation', 'CRM Sync', 'Multi-Language'], metric: '24/7 Revenue Generation' },
-              { num: '02', title: 'Cinema Engine', icon: '[][]', desc: 'Websites that feel like films. 25 layers of scroll-driven animation, Three.js environments, GSAP choreography. Every pixel is engineered to convert visitors into clients.', features: ['GSAP ScrollTrigger', 'Three.js', 'Scroll Video', 'Physics', 'Perf A+', 'Mobile-First'], metric: '25-Layer Cinematic System' },
-              { num: '03', title: 'Viceroy', icon: '><><', desc: 'AI-powered investor qualification. Detects intent, scores across 8 dimensions, routes to humans when stakes are high. Autonomous deal flow at scale.', features: ['Psychology AI', '8-Axis Score', 'Email Drip', 'Smart Route', 'Deal Intel', 'Pipeline'], metric: 'Autonomous Deal Flow' },
+              { num: '01', title: 'Sofia AI', icon: '////', desc: t.systems.sofia.desc, features: ['WhatsApp API', 'Psych Sales', 'Lead Scoring', 'Auto-Escalation', 'CRM Sync', 'Multi-Language'], metric: t.systems.sofia.metric },
+              { num: '02', title: 'Cinema Engine', icon: '[][]', desc: t.systems.cinema.desc, features: ['GSAP ScrollTrigger', 'Three.js', 'Scroll Video', 'Physics', 'Perf A+', 'Mobile-First'], metric: t.systems.cinema.metric },
+              { num: '03', title: 'Viceroy', icon: '><><', desc: t.systems.viceroy.desc, features: ['Psychology AI', '8-Axis Score', 'Email Drip', 'Smart Route', 'Deal Intel', 'Pipeline'], metric: t.systems.viceroy.metric },
             ].map(sys => (
               <div key={sys.num} className="system-card card-animate" style={{ '--delay': `${(parseInt(sys.num) - 1) * 0.12}s` } as React.CSSProperties}>
                 <div className="sys-head"><span className="sys-num">{sys.num}</span><span className="sys-icon">{sys.icon}</span></div>
@@ -390,14 +408,16 @@ export default function Home() {
       <section id="portfolio" className="section-dark">
         <div className="section-inner">
           <div className="section-header reveal-up">
-            <p className="eyebrow">PORTFOLIO</p>
-            <h2>{PROJECTS.length} Systems. <em>Zero Templates.</em></h2>
-            <p className="section-desc">Every build is custom-engineered. Every deployment is production-grade.</p>
+            <p className="eyebrow">{t.portfolio.eyebrow}</p>
+            <h2>{t.portfolio.headingPrefix.replace('{count}', String(PROJECTS.length))}{t.portfolio.headingMiddle} <em>{t.portfolio.headingItalic}</em></h2>
+            <p className="section-desc">{t.portfolio.desc}</p>
           </div>
           <div className="filter-bar reveal-up">
             {CATEGORIES.map(cat => (
               <button key={cat} className={`filter-btn ${activeFilter === cat ? 'active' : ''}`}
-                onClick={() => { setActiveFilter(cat); setVisibleProjects(18); }}>{cat}</button>
+                onClick={() => { setActiveFilter(cat); setVisibleProjects(18); }}>
+                {cat === 'All' ? t.portfolio.filterAll : cat}
+              </button>
             ))}
           </div>
           <div className="portfolio-grid">
@@ -414,7 +434,7 @@ export default function Home() {
                     <h3 className="card-name">{p.name}</h3>
                     <p className="card-desc">{p.desc}</p>
                     <span className={`card-link ${!p.url ? 'card-link-priv' : ''}`}>
-                      {p.url ? <>View Live <span className="arr" /></> : 'Private Access'}
+                      {p.url ? <>{t.portfolio.viewLive} <span className="arr" /></> : t.portfolio.privateAccess}
                     </span>
                   </div>
                 </div>
@@ -430,7 +450,7 @@ export default function Home() {
           {visibleProjects < filteredProjects.length && (
             <div className="load-more reveal-up">
               <button className="btn-ghost" onClick={() => setVisibleProjects(v => v + 18)}>
-                Show More ({filteredProjects.length - visibleProjects} remaining)
+                {t.portfolio.showMore.replace('{n}', String(filteredProjects.length - visibleProjects))}
               </button>
             </div>
           )}
@@ -443,22 +463,17 @@ export default function Home() {
       <section id="process" className="section-dark">
         <div className="section-inner">
           <div className="section-header reveal-up">
-            <p className="eyebrow">THE PROCESS</p>
-            <h2>Four Phases. <em>Zero Waste.</em></h2>
-            <p className="section-desc">From first call to production deployment in weeks, not months.</p>
+            <p className="eyebrow">{t.process.eyebrow}</p>
+            <h2>{t.process.headingPrefix} <em>{t.process.headingItalic}</em></h2>
+            <p className="section-desc">{t.process.desc}</p>
           </div>
           <div className="process-grid">
-            {[
-              { n: '01', t: 'Discovery', d: 'We decode your revenue leaks, map automation opportunities, and identify the highest-ROI AI deployment. You get a full diagnostic with a prioritized roadmap.', detail: 'Week 1 — Diagnostic & Strategy' },
-              { n: '02', t: 'Architecture', d: 'Custom system design — database schemas, AI pipelines, integration maps, security policies. Every component is purpose-built for your specific business logic.', detail: 'Week 2 — Technical Blueprint' },
-              { n: '03', t: 'Build & Ship', d: 'Rapid deployment with Cinema Engine aesthetics. TypeScript strict, Supabase RLS, Vercel edge. You see a working demo within days, not months.', detail: 'Weeks 2-4 — Live Deployment' },
-              { n: '04', t: 'Scale & Learn', d: 'Continuous optimization as your AI learns your business. Performance monitoring, A/B testing, and system expansion. Your competitors wonder what happened.', detail: 'Ongoing — Compound Growth' },
-            ].map((p, i) => (
-              <div key={p.n} className="process-card card-animate" style={{ '--delay': `${i * 0.1}s` } as React.CSSProperties}>
-                <span className="proc-num">{p.n}</span>
-                <h3 className="proc-title">{p.t}</h3>
+            {[t.process.phase1, t.process.phase2, t.process.phase3, t.process.phase4].map((p, i) => (
+              <div key={i} className="process-card card-animate" style={{ '--delay': `${i * 0.1}s` } as React.CSSProperties}>
+                <span className="proc-num">{String(i + 1).padStart(2, '0')}</span>
+                <h3 className="proc-title">{p.title}</h3>
                 <span className="proc-detail">{p.detail}</span>
-                <p className="proc-desc">{p.d}</p>
+                <p className="proc-desc">{p.desc}</p>
               </div>
             ))}
           </div>
@@ -470,12 +485,12 @@ export default function Home() {
         <div className="manifesto-inner">
           <div className="manifesto-line" />
           <div className="manifesto-content reveal-up">
-            <p>We don&apos;t build websites.</p>
-            <p>We build systems that <em>breathe</em>,</p>
-            <p>that <em>learn</em>, that <em>compound</em>.</p>
-            <p>Every deployment is a moat.</p>
-            <p>Every pixel is choreographed.</p>
-            <p className="manifesto-strong">We create what doesn&apos;t exist yet.</p>
+            <p>{t.manifesto.line1}</p>
+            <p>{t.manifesto.line2Prefix} <em>{t.manifesto.line2Italic}</em>,</p>
+            <p>{t.manifesto.line3Prefix} <em>{t.manifesto.line3Italic1}</em>{t.manifesto.line3Middle} <em>{t.manifesto.line3Italic2}</em>.</p>
+            <p>{t.manifesto.line4}</p>
+            <p>{t.manifesto.line5}</p>
+            <p className="manifesto-strong">{t.manifesto.line6Bold}</p>
           </div>
           <div className="manifesto-line" />
         </div>
@@ -485,17 +500,17 @@ export default function Home() {
       <section id="about" className="section-dark">
         <div className="section-inner about-grid">
           <div className="about-left reveal-up">
-            <p className="eyebrow">ABOUT</p>
-            <h2>Built in <em>Cartagena</em>.<br />Deployed <em>Everywhere</em>.</h2>
+            <p className="eyebrow">{t.about.eyebrow}</p>
+            <h2>{t.about.headingPrefix} <em>{t.about.headingItalic1}</em>{t.about.headingMiddle} <em>{t.about.headingItalic2}</em>.</h2>
           </div>
           <div className="about-right reveal-up">
-            <p className="about-founder">Founded by Phil McGill</p>
-            <p>MachineMind is an AI automation consultancy that builds autonomous intelligence infrastructure for businesses that refuse to operate manually.</p>
-            <p>We specialize in hospitality, real estate, private capital, and high-touch service industries where every missed message is lost revenue.</p>
-            <p className="about-location">Based in Cartagena, Colombia — deploying worldwide for clients across the Americas, Europe, and the Middle East.</p>
+            <p className="about-founder">{t.about.founder}</p>
+            <p>{t.about.p1}</p>
+            <p>{t.about.p2}</p>
+            <p className="about-location">{t.about.location}</p>
             <div className="stack-tags">
-              {['Next.js 16', 'TypeScript', 'Supabase', 'Claude AI', 'Twilio', 'Vercel', 'GSAP', 'Three.js'].map(t => (
-                <span key={t} className="stack-tag">{t}</span>
+              {['Next.js 16', 'TypeScript', 'Supabase', 'Claude AI', 'Twilio', 'Vercel', 'GSAP', 'Three.js'].map(tag => (
+                <span key={tag} className="stack-tag">{tag}</span>
               ))}
             </div>
           </div>
@@ -505,22 +520,21 @@ export default function Home() {
       {/* ═══ CONTACT — Lead Capture Engine ═══ */}
       <section id="contact" className="section-dark contact-section">
         <div className="section-inner contact-inner reveal-up">
-          <p className="eyebrow">LET&apos;S BUILD</p>
-          <h2>Ready to build something<br />that doesn&apos;t exist yet?</h2>
-          <p className="contact-sub">We take on 3 new clients per quarter. Tell us about your project and get a free strategy session.</p>
+          <p className="eyebrow">{t.contact.eyebrow}</p>
+          <h2>{t.contact.heading}</h2>
+          <p className="contact-sub">{t.contact.sub}</p>
           <div className="contact-grid">
-            <LeadCaptureForm />
+            <LeadCaptureForm lang={lang} />
             <div className="contact-sidebar">
-              <h3 className="cs-title">In your free session:</h3>
+              <h3 className="cs-title">{t.contact.sidebarTitle}</h3>
               <ul className="cs-benefits">
-                <li><span className="cs-check">&#10003;</span>Revenue leak analysis</li>
-                <li><span className="cs-check">&#10003;</span>Live Sofia AI demo on your business</li>
-                <li><span className="cs-check">&#10003;</span>Custom automation roadmap</li>
-                <li><span className="cs-check">&#10003;</span>ROI projection with real numbers</li>
+                {t.contact.benefits.map((benefit, i) => (
+                  <li key={i}><span className="cs-check">&#10003;</span>{benefit}</li>
+                ))}
               </ul>
               <div className="cs-alt">
-                <a href="https://cal.com/machine-mind/machinemind-strategy-session" className="btn-ghost cs-alt-btn" target="_blank" rel="noopener noreferrer">Book a Call</a>
-                <a href="https://wa.me/19544451638?text=Hi%2C%20I%27m%20interested%20in%20MachineMind" className="btn-ghost cs-alt-btn cs-wa" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+                <a href="https://cal.com/machine-mind/machinemind-strategy-session" className="btn-ghost cs-alt-btn" target="_blank" rel="noopener noreferrer">{t.contact.bookCall}</a>
+                <a href="https://wa.me/19544451638?text=Hi%2C%20I%27m%20interested%20in%20MachineMind" className="btn-ghost cs-alt-btn cs-wa" target="_blank" rel="noopener noreferrer">{t.contact.whatsapp}</a>
               </div>
               <a href="mailto:Phil@machinemindconsulting.com" className="cs-email">Phil@machinemindconsulting.com</a>
             </div>
@@ -533,11 +547,11 @@ export default function Home() {
         <div className="footer-inner">
           <div className="footer-brand">
             <span className="footer-logo"><span className="fl-gold">MACHINE</span>MIND</span>
-            <p className="footer-tag">Autonomous Intelligence Infrastructure</p>
+            <p className="footer-tag">{t.footer.tagline}</p>
           </div>
           <div className="footer-links">
-            {['Systems','Portfolio','Process','About','Contact'].map(l => (
-              <a key={l} href={`#${l.toLowerCase()}`}>{l}</a>
+            {navItems.map(item => (
+              <a key={item.id} href={`#${item.id}`}>{item.label}</a>
             ))}
           </div>
           <div className="footer-social">
@@ -556,8 +570,8 @@ export default function Home() {
       </footer>
 
       {/* Lead Capture Overlays */}
-      <StickyBar />
-      <ExitIntent />
+      <StickyBar lang={lang} />
+      <ExitIntent lang={lang} />
 
       <style>{STYLES}</style>
     </>
@@ -612,6 +626,10 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .mobile-menu{position:fixed;inset:0;background:rgba(6,6,10,0.97);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px}
 .mm-link{font-family:var(--fd);font-size:32px;font-weight:500;color:var(--fg);text-decoration:none;opacity:.6;transition:opacity .3s,color .3s}
 .mm-link:hover{opacity:1;color:var(--gold)}
+.lang-toggle{background:none;border:1px solid var(--gb);color:var(--gold);font-family:var(--fm);font-size:10px;font-weight:500;letter-spacing:.2em;padding:6px 14px;cursor:pointer;transition:all .3s;margin-left:16px}
+.lang-toggle:hover{border-color:var(--gold);background:rgba(201,169,110,0.1)}
+@media(max-width:768px){.lang-toggle{position:absolute;top:24px;right:72px}}
+.mobile-menu .lang-toggle{margin:16px auto 0;border-color:var(--gold)}
 
 /* ═══ CONTENT Z-INDEX ═══ */
 .hero,.metrics,.section-dark,.manifesto,.site-footer,.section-divider,.mobile-menu{position:relative;z-index:5}

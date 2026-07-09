@@ -3,8 +3,15 @@
 import { useState, useEffect } from 'react';
 import { getStoredUTM } from '@/lib/utm';
 import { trackLeadEvent } from '@/lib/tracking-pixels';
+import { TRANSLATIONS, Lang } from '@/lib/i18n-content';
 
-export default function StickyBar() {
+interface StickyBarProps {
+  lang?: Lang;
+}
+
+export default function StickyBar({ lang = 'es' }: StickyBarProps) {
+  const t = TRANSLATIONS[lang].stickyBar;
+  const tLc = TRANSLATIONS[lang].leadCapture;
   const [visible, setVisible] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [email, setEmail] = useState('');
@@ -29,7 +36,7 @@ export default function StickyBar() {
       const res = await fetch('/api/leads', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: email.split('@')[0], email, interest: interest || 'general', ...utm }),
+        body: JSON.stringify({ name: email.split('@')[0], email, interest: interest || 'general', language: lang, ...utm }),
       });
       if (!res.ok && res.status !== 409) throw new Error('Failed');
       trackLeadEvent({ email, interest });
@@ -46,26 +53,26 @@ export default function StickyBar() {
       <div className="sticky-bar-inner">
         {status === 'success' ? (
           <div className="sb-row">
-            <span className="sb-ok">&#10003; Got it! We&apos;ll be in touch within 2 hours.</span>
+            <span className="sb-ok">&#10003; {t.success}</span>
             <button onClick={() => setDismissed(true)} className="sb-close" aria-label="Close">&times;</button>
           </div>
         ) : !expanded ? (
           <div className="sb-row">
-            <div className="sb-text"><span className="sb-pulse" />Losing revenue to missed inquiries?</div>
-            <button onClick={() => setExpanded(true)} className="btn-primary sb-btn">Get a Free Quote</button>
+            <div className="sb-text"><span className="sb-pulse" />{t.text}</div>
+            <button onClick={() => setExpanded(true)} className="btn-primary sb-btn">{t.button}</button>
             <button onClick={() => setDismissed(true)} className="sb-close" aria-label="Close">&times;</button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="sb-row">
-            <input type="email" required placeholder="Your email" value={email} onChange={(e) => setEmail(e.target.value)} className="sb-input" />
+            <input type="email" required placeholder={t.emailPlaceholder} value={email} onChange={(e) => setEmail(e.target.value)} className="sb-input" />
             <select value={interest} onChange={(e) => setInterest(e.target.value)} className="sb-select">
-              <option value="">Interest?</option>
-              <option value="sofia_ai">Sofia AI</option>
-              <option value="cinema_engine">Cinema Engine</option>
-              <option value="full_automation">Full Automation</option>
-              <option value="custom">Custom Project</option>
+              <option value="">{t.interestPlaceholder}</option>
+              <option value="sofia_ai">{tLc.interestSofia}</option>
+              <option value="cinema_engine">{tLc.interestCinema}</option>
+              <option value="full_automation">{tLc.interestSuite}</option>
+              <option value="custom">{tLc.interestCustom}</option>
             </select>
-            <button type="submit" disabled={status === 'loading'} className="btn-primary sb-btn">{status === 'loading' ? '...' : 'Send'}</button>
+            <button type="submit" disabled={status === 'loading'} className="btn-primary sb-btn">{status === 'loading' ? '...' : t.send}</button>
             <button type="button" onClick={() => setExpanded(false)} className="sb-close" aria-label="Collapse">&darr;</button>
           </form>
         )}
