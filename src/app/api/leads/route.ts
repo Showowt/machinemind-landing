@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { Resend } from "resend";
 
 let supabase: SupabaseClient | null = null;
 
@@ -66,6 +67,65 @@ ${lead.message ? `*Message:* ${lead.message.slice(0, 200)}` : ""}
   }
 }
 
+const INTEREST_LABELS: Record<string, string> = {
+  sofia_ai: "Sofia AI — WhatsApp Automation",
+  cinema_engine: "Cinema Engine — Website",
+  full_automation: "Full Automation Suite",
+  custom: "Custom AI Project",
+  exit_intent: "Exit Intent Capture",
+  general: "General Interest",
+};
+
+async function sendEmailNotification(lead: LeadData) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.error("[Leads] RESEND_API_KEY not configured");
+    return;
+  }
+
+  const resend = new Resend(apiKey);
+  const source = lead.utm_source
+    ? `${lead.utm_source}${lead.utm_campaign ? ` / ${lead.utm_campaign}` : ""}`
+    : "Direct";
+  const interestLabel = lead.interest ? (INTEREST_LABELS[lead.interest] || lead.interest) : "Not specified";
+  const time = new Date().toLocaleString("en-US", { timeZone: "America/New_York" });
+
+  try {
+    await resend.emails.send({
+      from: "MachineMind Leads <leads@machinemindconsulting.com>",
+      to: "machinemindconsulting@gmail.com",
+      subject: `New Lead: ${lead.name}${lead.interest ? ` — ${interestLabel}` : ""}`,
+      html: `
+        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;background:#0a0a0f;color:#f0f0f3;padding:40px;border:1px solid rgba(255,255,255,0.08)">
+          <div style="border-bottom:2px solid #c9a96e;padding-bottom:20px;margin-bottom:24px">
+            <h1 style="margin:0;font-size:20px;color:#c9a96e;letter-spacing:0.1em">NEW LEAD</h1>
+          </div>
+
+          <table style="width:100%;border-collapse:collapse;font-size:15px">
+            <tr><td style="padding:8px 12px;color:#c9a96e;width:100px;vertical-align:top">Name</td><td style="padding:8px 12px;color:#f0f0f3"><strong>${lead.name}</strong></td></tr>
+            <tr><td style="padding:8px 12px;color:#c9a96e;vertical-align:top">Email</td><td style="padding:8px 12px"><a href="mailto:${lead.email}" style="color:#00e5ff;text-decoration:none">${lead.email}</a></td></tr>
+            ${lead.phone ? `<tr><td style="padding:8px 12px;color:#c9a96e;vertical-align:top">Phone</td><td style="padding:8px 12px;color:#f0f0f3"><a href="tel:${lead.phone}" style="color:#00e5ff;text-decoration:none">${lead.phone}</a></td></tr>` : ""}
+            ${lead.company ? `<tr><td style="padding:8px 12px;color:#c9a96e;vertical-align:top">Company</td><td style="padding:8px 12px;color:#f0f0f3">${lead.company}</td></tr>` : ""}
+            <tr><td style="padding:8px 12px;color:#c9a96e;vertical-align:top">Interest</td><td style="padding:8px 12px;color:#f0f0f3"><strong>${interestLabel}</strong></td></tr>
+            ${lead.message ? `<tr><td style="padding:8px 12px;color:#c9a96e;vertical-align:top">Message</td><td style="padding:8px 12px;color:#f0f0f3">${lead.message}</td></tr>` : ""}
+          </table>
+
+          <div style="margin-top:24px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.08);font-size:12px;color:rgba(240,240,243,0.4)">
+            <strong style="color:#c9a96e">Attribution:</strong> ${source} &middot; ${lead.device || "unknown"} &middot; ${lead.landing_page || "/"}<br/>
+            ${time} ET
+          </div>
+
+          <div style="margin-top:24px">
+            <a href="mailto:${lead.email}" style="display:inline-block;padding:12px 28px;background:#c9a96e;color:#0a0a0f;font-weight:600;font-size:12px;letter-spacing:0.1em;text-transform:uppercase;text-decoration:none">Reply to Lead</a>
+          </div>
+        </div>
+      `,
+    });
+  } catch (error) {
+    console.error("[Leads] Email notification failed:", error);
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body: LeadData = await request.json();
@@ -108,8 +168,12 @@ export async function POST(request: Request) {
       }
     }
 
+    // Send notifications (non-blocking)
+    sendEmailNotification(body).catch((err) =>
+      console.error("[Leads] Email error:", err),
+    );
     sendTelegramNotification(body).catch((err) =>
-      console.error("[Leads] Notification error:", err),
+      console.error("[Leads] Telegram error:", err),
     );
 
     return NextResponse.json({ success: true });
