@@ -37,6 +37,17 @@ const CATEGORY_MAP: Record<string, string> = {
 };
 const getCategory = (industry: string) => CATEGORY_MAP[industry] || industry;
 
+const CATEGORY_ES: Record<string, string> = {
+  'All': 'Todos',
+  'Hospitality': 'Hospitalidad',
+  'Dining & Nightlife': 'Gastronomía y Vida Nocturna',
+  'Defense & Enterprise': 'Defensa y Empresa',
+  'Travel & Logistics': 'Viajes y Logística',
+  'Events & Media': 'Eventos y Medios',
+  'Professional & Brands': 'Profesional y Marcas',
+  'Impact & Conservation': 'Impacto y Conservación',
+};
+
 const PROJECTS: Project[] = [
   // ── TIER 1: Flagship Luxury Hospitality (top of portfolio) ──
   { name: 'Poseidon Beyond Luxury', type: 'Ultra-Luxury Experience', industry: 'Luxury Hotel', desc: 'Beyond-luxury yacht and villa platform — bespoke concierge, VIP booking, experience curation', color: '#0c4a6e', url: 'https://poseidon-beyond-luxury.vercel.app' },
@@ -101,6 +112,11 @@ export default function Home() {
 
   const filteredProjects = activeFilter === 'All'
     ? PROJECTS : PROJECTS.filter(p => getCategory(p.industry) === activeFilter);
+
+  // ── SET HTML LANG ATTRIBUTE ──
+  useEffect(() => {
+    document.documentElement.lang = lang;
+  }, [lang]);
 
   // ── UTM CAPTURE ON LOAD ──
   useEffect(() => { captureUTMParams(); }, []);
@@ -416,7 +432,7 @@ export default function Home() {
             {CATEGORIES.map(cat => (
               <button key={cat} className={`filter-btn ${activeFilter === cat ? 'active' : ''}`}
                 onClick={() => { setActiveFilter(cat); setVisibleProjects(18); }}>
-                {cat === 'All' ? t.portfolio.filterAll : cat}
+                {lang === 'es' ? (CATEGORY_ES[cat] || cat) : cat}
               </button>
             ))}
           </div>
@@ -534,7 +550,7 @@ export default function Home() {
               </ul>
               <div className="cs-alt">
                 <a href="https://cal.com/machine-mind/machinemind-strategy-session" className="btn-ghost cs-alt-btn" target="_blank" rel="noopener noreferrer">{t.contact.bookCall}</a>
-                <a href="https://wa.me/19544451638?text=Hi%2C%20I%27m%20interested%20in%20MachineMind" className="btn-ghost cs-alt-btn cs-wa" target="_blank" rel="noopener noreferrer">{t.contact.whatsapp}</a>
+                <a href={`https://wa.me/19544451638?text=${lang === 'es' ? 'Hola%2C%20me%20interesa%20saber%20m%C3%A1s%20sobre%20MachineMind' : 'Hi%2C%20I%27m%20interested%20in%20MachineMind'}`} className="btn-ghost cs-alt-btn cs-wa" target="_blank" rel="noopener noreferrer">{t.contact.whatsapp}</a>
               </div>
               <a href="mailto:Phil@machinemindconsulting.com" className="cs-email">Phil@machinemindconsulting.com</a>
             </div>
