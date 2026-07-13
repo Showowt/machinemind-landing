@@ -85,10 +85,9 @@ export async function POST(request: Request) {
         amount_usd: 150,
         monthly_amount_usd: 150,
         currency_local: "USD",
-        status: "claimed_paid",
+        status: "pending",
         payment_method: method,
         payment_reference: paymentReference,
-        claimed_paid_at: new Date().toISOString(),
         notes: `Universal activate (machinemindconsulting.com) | $150/mo x2 then $179/mo${reference ? ` | Ref: ${reference}` : ""}`,
       });
 
@@ -119,7 +118,7 @@ export async function POST(request: Request) {
     );
 
     return NextResponse.json({
-      data: { success: true, paymentReference },
+      data: { success: true, paymentReference, code },
     });
   } catch (error) {
     console.error("[Activate] Error:", error);
