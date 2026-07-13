@@ -104,17 +104,15 @@ export async function POST(request: Request) {
       method === "bank_transfer" ? "Wire Transfer" : "Other";
 
     await sendTelegram(
-      `<b>NEW ACTIVATION</b>\n` +
+      `<b>PAYMENT STARTED</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `<b>${businessName}</b>\n` +
       `${phone}\n` +
-      `$150/mo (intro) then $179/mo\n` +
-      `Method: ${methodLabel}\n` +
-      `${reference ? `Ref: ${reference}\n` : ""}` +
-      `Ref code: ${paymentReference}\n\n` +
+      `$150 USD via ${methodLabel}\n` +
+      `Code: ${paymentReference}\n\n` +
       `wa.me/${phoneDigits}\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `Check ${methodLabel} and verify.`,
+      `${method === "paypal" ? "PayPal opened — waiting for confirmation + screenshot." : `Showed ${methodLabel} details — waiting for confirmation + screenshot.`}`,
     );
 
     return NextResponse.json({

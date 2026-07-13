@@ -103,14 +103,12 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     };
 
-    if (reference) {
-      updateData.payment_reference = reference;
-    }
-
-    if (screenshot) {
-      const existingNotes = (link.notes as string) || "";
-      updateData.notes = existingNotes + ` | Screenshot uploaded at ${new Date().toISOString()}`;
-    }
+    const existingNotes = (link.notes as string) || "";
+    const parts: string[] = [];
+    if (reference) parts.push(`Client ref: ${reference}`);
+    if (screenshot) parts.push(`Screenshot uploaded`);
+    parts.push(new Date().toISOString());
+    updateData.notes = existingNotes + ` | ` + parts.join(" | ");
 
     const { error: updateError } = await db
       .from("payment_links")
