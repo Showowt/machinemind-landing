@@ -2,7 +2,7 @@
 
 import { useState, useRef } from "react";
 
-type PaymentMethod = "paypal" | "zelle" | "bank_transfer" | "venmo" | "cashapp" | "other";
+type PaymentMethod = "paypal" | "zelle" | "bank_transfer" | "other";
 
 export default function ActivatePage() {
   const [step, setStep] = useState<"info" | "payment" | "confirm" | "done">("info");
@@ -222,8 +222,6 @@ export default function ActivatePage() {
             <div className="space-y-2">
               {([
                 { id: "zelle" as const, label: "Zelle", sub: "Instantaneo, sin comisiones" },
-                { id: "venmo" as const, label: "Venmo", sub: "@MachineMind" },
-                { id: "cashapp" as const, label: "CashApp", sub: "$MachineMindAI" },
                 { id: "bank_transfer" as const, label: "Transferencia Bancaria", sub: "Wire transfer en USD" },
                 { id: "other" as const, label: "Otro metodo", sub: "Contacta para coordinar" },
               ]).map((m) => (
@@ -268,28 +266,6 @@ export default function ActivatePage() {
                 <p className="font-medium" style={{ color: "rgba(240,240,243,0.8)" }}>Enviar Zelle a:</p>
                 <div className="p-3 space-y-2" style={{ backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid var(--glass-border)" }}>
                   <Row label="Email" value="machinemindconsulting@gmail.com" mono />
-                  <Row label="Nombre" value="Philip McGill" />
-                  <Row label="Monto" value="$150 USD" bold />
-                </div>
-              </div>
-            )}
-
-            {selectedMethod === "venmo" && (
-              <div className="p-4 text-sm space-y-2" style={{ backgroundColor: "var(--glass)", border: "1px solid var(--glass-border)" }}>
-                <p className="font-medium" style={{ color: "rgba(240,240,243,0.8)" }}>Enviar Venmo a:</p>
-                <div className="p-3 space-y-2" style={{ backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid var(--glass-border)" }}>
-                  <Row label="Usuario" value="@MachineMind" mono />
-                  <Row label="Nombre" value="Philip McGill" />
-                  <Row label="Monto" value="$150 USD" bold />
-                </div>
-              </div>
-            )}
-
-            {selectedMethod === "cashapp" && (
-              <div className="p-4 text-sm space-y-2" style={{ backgroundColor: "var(--glass)", border: "1px solid var(--glass-border)" }}>
-                <p className="font-medium" style={{ color: "rgba(240,240,243,0.8)" }}>Enviar CashApp a:</p>
-                <div className="p-3 space-y-2" style={{ backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid var(--glass-border)" }}>
-                  <Row label="Cashtag" value="$MachineMindAI" mono />
                   <Row label="Nombre" value="Philip McGill" />
                   <Row label="Monto" value="$150 USD" bold />
                 </div>

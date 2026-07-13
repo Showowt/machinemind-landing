@@ -20,7 +20,7 @@ const OUTREACH_URL =
 const OUTREACH_KEY =
   process.env.OUTREACH_SUPABASE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const VALID_METHODS = ["zelle", "bank_transfer", "paypal", "venmo", "cashapp", "other"];
+const VALID_METHODS = ["zelle", "bank_transfer", "paypal", "other"];
 
 function generateCode(length: number = 12): string {
   return randomBytes(Math.ceil(length * 0.75))
@@ -89,8 +89,6 @@ const METHOD_LABELS: Record<string, string> = {
   zelle: "Zelle",
   paypal: "PayPal",
   bank_transfer: "Wire Transfer",
-  venmo: "Venmo",
-  cashapp: "CashApp",
   other: "Other",
 };
 
