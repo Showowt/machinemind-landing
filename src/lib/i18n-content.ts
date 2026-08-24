@@ -10,6 +10,7 @@ export type Lang = "en" | "es";
 
 export type NavTranslations = {
   systems: string;
+  software: string;
   portfolio: string;
   process: string;
   about: string;
@@ -63,6 +64,16 @@ export type PortfolioTranslations = {
   privateAccess: string;
   /** Contains {n} placeholder */
   showMore: string;
+};
+
+export type PlatformsTranslations = {
+  eyebrow: string;
+  headingPrefix: string;
+  headingItalic: string;
+  desc: string;
+  badge: string;
+  live: string;
+  enter: string;
 };
 
 export type ProcessPhaseTranslations = {
@@ -167,6 +178,7 @@ export type SiteTranslations = {
   hero: HeroTranslations;
   metrics: MetricsTranslations;
   systems: SystemsTranslations;
+  platforms: PlatformsTranslations;
   portfolio: PortfolioTranslations;
   process: ProcessTranslations;
   manifesto: ManifestoTranslations;
@@ -189,6 +201,7 @@ export const TRANSLATIONS: Record<Lang, SiteTranslations> = {
   en: {
     nav: {
       systems: "Systems",
+      software: "Software",
       portfolio: "Portfolio",
       process: "Process",
       about: "About",
@@ -231,6 +244,16 @@ export const TRANSLATIONS: Record<Lang, SiteTranslations> = {
         desc: "AI-powered investor qualification. Detects intent, scores across 8 dimensions, routes to humans when stakes are high. Autonomous deal flow at scale.",
         metric: "Autonomous Deal Flow",
       },
+    },
+
+    platforms: {
+      eyebrow: "ELITE SOFTWARE",
+      headingPrefix: "Real Platforms.",
+      headingItalic: "In Production.",
+      desc: "Not demos. Full-stack software products engineered, shipped, and operating live — the tier of work reserved for flagship engagements.",
+      badge: "ELITE",
+      live: "Live in Production",
+      enter: "Enter Platform",
     },
 
     portfolio: {
@@ -369,6 +392,7 @@ export const TRANSLATIONS: Record<Lang, SiteTranslations> = {
   es: {
     nav: {
       systems: "Sistemas",
+      software: "Software",
       portfolio: "Portafolio",
       process: "Proceso",
       about: "Nosotros",
@@ -411,6 +435,16 @@ export const TRANSLATIONS: Record<Lang, SiteTranslations> = {
         desc: "Calificación de inversionistas potenciada por IA. Detecta intención, puntúa en 8 dimensiones y escala a humanos cuando las apuestas son altas. Flujo de negocios autónomo a escala.",
         metric: "Flujo de Negocios Autónomo",
       },
+    },
+
+    platforms: {
+      eyebrow: "SOFTWARE ÉLITE",
+      headingPrefix: "Plataformas Reales.",
+      headingItalic: "En Producción.",
+      desc: "No son demos. Productos de software full-stack diseñados, lanzados y operando en vivo — el nivel de trabajo reservado para proyectos insignia.",
+      badge: "ÉLITE",
+      live: "En Producción",
+      enter: "Entrar a la Plataforma",
     },
 
     portfolio: {

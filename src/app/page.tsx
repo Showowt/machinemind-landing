@@ -12,6 +12,60 @@ interface Project {
   desc: string; color: string; tag?: string; url?: string;
 }
 
+interface ElitePlatform {
+  name: string;
+  categoryEn: string; categoryEs: string;
+  descEn: string; descEs: string;
+  statEn: string; statEs: string;
+  stack: string[];
+  url: string;
+  color: string;
+}
+
+/* ── ELITE SOFTWARE: production platforms only — no demos ── */
+const ELITE_PLATFORMS: ElitePlatform[] = [
+  {
+    name: 'Ballantir',
+    categoryEn: 'Sports Intelligence', categoryEs: 'Inteligencia Deportiva',
+    descEn: 'Five-sport athlete intelligence platform — scouting analytics, player development tracking, club operations, and family-facing governance in one command center.',
+    descEs: 'Plataforma de inteligencia deportiva de cinco disciplinas — analítica de scouting, desarrollo de jugadores, operaciones de club y gobernanza para familias en un solo centro de comando.',
+    statEn: '5 SPORTS · FULL CLUB STACK', statEs: '5 DEPORTES · STACK COMPLETO DE CLUB',
+    stack: ['Next.js', 'Supabase', 'Claude AI', 'Analytics', 'RLS'],
+    url: 'https://ballantir.com',
+    color: '#10b981',
+  },
+  {
+    name: 'Street Legal AI',
+    categoryEn: 'Legal Intelligence', categoryEs: 'Inteligencia Legal',
+    descEn: 'Consumer legal intelligence platform — plain-language rights navigation, AI-guided case pathways, and a self-serve legal knowledge engine built for real people, not lawyers.',
+    descEs: 'Plataforma de inteligencia legal para el consumidor — navegación de derechos en lenguaje claro, rutas de caso guiadas por IA y un motor de conocimiento legal hecho para personas reales, no abogados.',
+    statEn: 'AI LEGAL NAVIGATION · 24/7', statEs: 'NAVEGACIÓN LEGAL CON IA · 24/7',
+    stack: ['Next.js', 'Claude AI', 'Supabase', 'RLS', 'Vercel Edge'],
+    url: 'https://streetlegalai.vercel.app',
+    color: '#0ea5e9',
+  },
+  {
+    name: 'AMO Cartagena',
+    categoryEn: 'City & Travel Platform', categoryEs: 'Plataforma de Ciudad y Viajes',
+    descEn: 'The living platform for Cartagena — curated experiences, intelligent city guidance, and a travel layer built on the ground in the walled city.',
+    descEs: 'La plataforma viva de Cartagena — experiencias curadas, guía inteligente de ciudad y una capa de viaje construida a pie de calle en la ciudad amurallada.',
+    statEn: 'CITY-SCALE TRAVEL LAYER', statEs: 'CAPA DE VIAJE A ESCALA DE CIUDAD',
+    stack: ['Next.js', 'AI Concierge', 'Supabase', 'Mobile-First'],
+    url: 'https://www.amocartagena.co',
+    color: '#e11d48',
+  },
+  {
+    name: 'EDIFICAR AI',
+    categoryEn: 'Construction Intelligence', categoryEs: 'Inteligencia de Construcción',
+    descEn: 'AI construction estimation for El Salvador — instant material takeoffs, cost intelligence, and quote generation that turns days of estimating into minutes.',
+    descEs: 'Estimación de construcción con IA para El Salvador — despieces de materiales instantáneos, inteligencia de costos y cotizaciones que convierten días de cálculo en minutos.',
+    statEn: 'ESTIMATES IN MINUTES, NOT DAYS', statEs: 'COTIZACIONES EN MINUTOS, NO DÍAS',
+    stack: ['Next.js', 'Claude AI', 'Supabase', 'Cost Engine'],
+    url: 'https://edificar-ai.vercel.app',
+    color: '#f59e0b',
+  },
+];
+
 /* ── Category consolidation: 19 industries → 6 filter groups ── */
 const CATEGORY_MAP: Record<string, string> = {
   'Luxury Hotel': 'Hospitality',
@@ -271,6 +325,7 @@ export default function Home() {
 
   const navItems = [
     { label: t.nav.systems, id: 'systems' },
+    { label: t.nav.software, id: 'software' },
     { label: t.nav.portfolio, id: 'portfolio' },
     { label: t.nav.process, id: 'process' },
     { label: t.nav.about, id: 'about' },
@@ -415,6 +470,47 @@ export default function Home() {
           >
             <source src="/mm-commercial.mp4" type="video/mp4" />
           </video>
+        </div>
+      </section>
+
+      <div className="section-divider" />
+
+      {/* ═══ ELITE SOFTWARE — production platforms, no demos ═══ */}
+      <section id="software" className="section-dark">
+        <div className="section-inner">
+          <div className="section-header reveal-up">
+            <p className="eyebrow">{t.platforms.eyebrow}</p>
+            <h2>{t.platforms.headingPrefix} <em>{t.platforms.headingItalic}</em></h2>
+            <p className="section-desc">{t.platforms.desc}</p>
+          </div>
+          <div className="elite-list">
+            {ELITE_PLATFORMS.map((p, i) => (
+              <a
+                key={p.name}
+                href={p.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="elite-row card-animate"
+                style={{ '--ac': p.color, '--delay': `${i * 0.08}s` } as React.CSSProperties}
+              >
+                <div className="elite-index">
+                  <span className="elite-num">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="elite-badge">{t.platforms.badge}</span>
+                </div>
+                <div className="elite-main">
+                  <span className="elite-cat">{lang === 'es' ? p.categoryEs : p.categoryEn}</span>
+                  <h3 className="elite-name">{p.name}</h3>
+                  <p className="elite-desc">{lang === 'es' ? p.descEs : p.descEn}</p>
+                </div>
+                <div className="elite-side">
+                  <span className="elite-live"><span className="elite-dot" />{t.platforms.live}</span>
+                  <span className="elite-stat">{lang === 'es' ? p.statEs : p.statEn}</span>
+                  <ul className="elite-stack">{p.stack.map(s => <li key={s}>{s}</li>)}</ul>
+                  <span className="elite-enter">{t.platforms.enter} <span className="arr" /></span>
+                </div>
+              </a>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -739,6 +835,31 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .arr{display:inline-block;width:12px;height:1px;background:var(--ac,var(--gold));position:relative;vertical-align:middle;margin-left:8px}
 .arr::after{content:'';position:absolute;right:0;top:-3px;width:6px;height:6px;border-right:1px solid var(--ac,var(--gold));border-top:1px solid var(--ac,var(--gold));transform:rotate(45deg)}
 .load-more{text-align:center;margin-top:48px}
+
+/* ═══ ELITE SOFTWARE ═══ */
+.elite-list{display:flex;flex-direction:column;gap:2px}
+.elite-row{display:grid;grid-template-columns:120px 1fr 280px;gap:40px;padding:56px 48px;background:rgba(6,6,10,0.75);border:1px solid var(--gb);position:relative;text-decoration:none;transition:border-color .5s,background .5s;overflow:hidden}
+.elite-row::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--gold),var(--ac,var(--gold)));transform:scaleX(0);transform-origin:left;transition:transform .7s cubic-bezier(.4,0,.2,1);z-index:1}
+.elite-row:hover::before{transform:scaleX(1)}
+.elite-row::after{content:'';position:absolute;inset:0;background:linear-gradient(120deg,var(--ac,var(--gold)) 0%,transparent 55%);opacity:0;transition:opacity .5s;pointer-events:none}
+.elite-row:hover::after{opacity:.07}
+.elite-row:hover{border-color:rgba(201,169,110,0.35);background:rgba(255,255,255,0.03)}
+.elite-index{display:flex;flex-direction:column;gap:16px;align-items:flex-start}
+.elite-num{font-family:var(--fm);font-size:12px;color:var(--gold);letter-spacing:.3em}
+.elite-badge{font-size:8px;letter-spacing:.25em;text-transform:uppercase;color:var(--bg);background:var(--gold);padding:5px 10px;font-weight:600}
+.elite-cat{font-size:10px;letter-spacing:.25em;text-transform:uppercase;color:var(--ac,var(--gold));display:block;margin-bottom:10px}
+.elite-name{font-family:var(--fd);font-size:clamp(30px,3.6vw,52px);font-weight:500;letter-spacing:-.03em;color:var(--fg);line-height:1.05;margin-bottom:16px}
+.elite-desc{font-size:15px;color:var(--dim);line-height:1.75;max-width:560px}
+.elite-side{display:flex;flex-direction:column;align-items:flex-start;gap:16px}
+.elite-live{display:inline-flex;align-items:center;gap:8px;font-size:9px;letter-spacing:.25em;text-transform:uppercase;color:var(--fg)}
+.elite-dot{width:7px;height:7px;background:var(--gold);border-radius:50%;animation:pulse 2s ease-in-out infinite}
+.elite-stat{font-family:var(--fm);font-size:10px;letter-spacing:.15em;color:var(--gold)}
+.elite-stack{list-style:none;display:flex;flex-wrap:wrap;gap:6px}
+.elite-stack li{font-size:8px;letter-spacing:.12em;text-transform:uppercase;padding:6px 10px;border:1px solid var(--gb);color:var(--dim)}
+.elite-enter{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin-top:auto;opacity:.5;transform:translateY(4px);transition:all .35s}
+.elite-row:hover .elite-enter{opacity:1;transform:translateY(0);color:var(--ac,var(--gold))}
+@media(max-width:1024px){.elite-row{grid-template-columns:80px 1fr;gap:28px;padding:44px 32px}.elite-side{grid-column:2;gap:14px}.elite-enter{margin-top:4px}}
+@media(max-width:640px){.elite-row{grid-template-columns:1fr;gap:20px;padding:36px 24px}.elite-index{flex-direction:row;align-items:center}.elite-side{grid-column:auto}}
 
 /* ═══ PROCESS ═══ */
 .process-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px}
