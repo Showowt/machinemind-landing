@@ -55,6 +55,16 @@ const ELITE_PLATFORMS: ElitePlatform[] = [
     color: '#e11d48',
   },
   {
+    name: 'Movvia',
+    categoryEn: 'Luxury Travel Concierge', categoryEs: 'Concierge de Viajes de Lujo',
+    descEn: 'Full-stack luxury travel concierge for Cartagena — curated experiences, AI trip design, vendor operations, and end-to-end bookings with payments on a production-grade core.',
+    descEs: 'Concierge de viajes de lujo full-stack para Cartagena — experiencias curadas, diseño de viajes con IA, operaciones de proveedores y reservas de extremo a extremo con pagos sobre un núcleo de nivel productivo.',
+    statEn: 'AI CONCIERGE · FULL BOOKING ENGINE', statEs: 'CONCIERGE IA · MOTOR COMPLETO DE RESERVAS',
+    stack: ['Next.js', 'Supabase', 'Claude AI', 'RLS', 'Payments'],
+    url: 'https://movvia-pi.vercel.app',
+    color: '#00B4FF',
+  },
+  {
     name: 'EDIFICAR AI',
     categoryEn: 'Construction Intelligence', categoryEs: 'Inteligencia de Construcción',
     descEn: 'AI construction estimation for El Salvador — instant material takeoffs, cost intelligence, and quote generation that turns days of estimating into minutes.',
@@ -114,7 +124,7 @@ const PROJECTS: Project[] = [
   { name: 'AEGIS Shield', type: 'Defense & Access Control', industry: 'Defense', desc: 'USMC DBIDS overlay — biometric gate control, AI threat scoring, command mesh', color: '#1c4a5e', tag: 'CLASSIFIED' },
   { name: 'VoxLink', type: 'Voice Intelligence Platform', industry: 'Enterprise', desc: 'Real-time voice AI with Daily.co, conversation analytics, Stripe billing', color: '#7c3aed', tag: 'ENTERPRISE' },
   { name: 'ReWired OS', type: 'Business Operating System', industry: 'Enterprise', desc: 'CRM + outreach pipeline + email drip + analytics dashboard', color: '#10b981', tag: 'ENTERPRISE' },
-  { name: 'MovVia', type: 'Logistics Command Center', industry: 'Enterprise', desc: 'Drag-and-drop fleet ops, route optimization, driver dispatch AI', color: '#00B4FF', tag: 'ENTERPRISE' },
+  { name: 'Movvia', type: 'Luxury Travel Concierge', industry: 'Concierge', desc: 'Full-stack luxury travel platform for Cartagena — curated experiences, AI trip design, vendor operations, end-to-end bookings with payments', color: '#00B4FF', url: 'https://movvia-pi.vercel.app' },
   { name: 'El Salvador National', type: 'National Platform', industry: 'Government', desc: 'Government-scale digital platform, citizen services, data pipeline', color: '#0369a1', tag: 'ENTERPRISE' },
   { name: 'Ania Consular', type: 'Consular Services', industry: 'Government', desc: 'Document processing, appointment scheduling, status tracking AI', color: '#1d4ed8', tag: 'ENTERPRISE' },
   // ── TIER 3: Hospitality & Dining ──
