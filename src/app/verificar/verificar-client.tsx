@@ -71,40 +71,40 @@ export default function VerificarClient() {
         .mmv-wrap { max-width: 880px; margin: 0 auto; }
         .mmv-nav { display: flex; justify-content: space-between; align-items: center; padding: 32px 0; }
         .mmv-logo { font-family: var(--font-clash, 'Clash Display', sans-serif); font-weight: 600; letter-spacing: 0.18em; font-size: 14px; color: #f0f0f3; text-decoration: none; }
-        .mmv-logo span { color: #c9a96e; }
-        .mmv-eyebrow { font-size: 11px; letter-spacing: 0.32em; color: #c9a96e; text-transform: uppercase; margin: 72px 0 20px; }
+        .mmv-logo span { color: #1e9bf0; }
+        .mmv-eyebrow { font-size: 11px; letter-spacing: 0.32em; color: #1e9bf0; text-transform: uppercase; margin: 72px 0 20px; }
         .mmv-h1 { font-family: var(--font-clash, 'Clash Display', sans-serif); font-size: clamp(34px, 6vw, 58px); line-height: 1.05; font-weight: 600; margin: 0 0 24px; }
-        .mmv-h1 em { font-family: var(--font-instrument, 'Instrument Serif', serif); font-style: italic; font-weight: 400; color: #c9a96e; }
+        .mmv-h1 em { font-family: var(--font-instrument, 'Instrument Serif', serif); font-style: italic; font-weight: 400; color: #1e9bf0; }
         .mmv-lede { font-size: 17px; line-height: 1.7; color: rgba(240,240,243,0.55); max-width: 620px; margin-bottom: 8px; }
         .mmv-sec { margin-top: 88px; }
-        .mmv-sec-title { font-family: var(--font-clash, 'Clash Display', sans-serif); font-size: 13px; letter-spacing: 0.28em; text-transform: uppercase; color: #c9a96e; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 14px; margin-bottom: 28px; }
+        .mmv-sec-title { font-family: var(--font-clash, 'Clash Display', sans-serif); font-size: 13px; letter-spacing: 0.28em; text-transform: uppercase; color: #1e9bf0; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 14px; margin-bottom: 28px; }
         .mmv-numbers { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.06); }
         .mmv-num { background: #08080d; padding: 20px 22px; transition: background 0.3s; }
-        .mmv-num:hover { background: rgba(201,169,110,0.05); }
+        .mmv-num:hover { background: rgba(30,155,240,0.06); }
         .mmv-num-tel { font-family: var(--font-clash, 'Clash Display', sans-serif); font-size: 18px; letter-spacing: 0.02em; color: #f0f0f3; }
         .mmv-num-label { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgba(240,240,243,0.3); margin-top: 6px; }
         .mmv-note { font-size: 14px; line-height: 1.7; color: rgba(240,240,243,0.45); margin-top: 22px; max-width: 640px; }
         .mmv-note strong { color: #f0f0f3; font-weight: 500; }
         .mmv-pledge { display: flex; flex-direction: column; gap: 1px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.06); }
         .mmv-pledge-item { background: #08080d; padding: 26px 28px; border-left: 2px solid transparent; transition: border-color 0.3s; }
-        .mmv-pledge-item:hover { border-left-color: #c9a96e; }
+        .mmv-pledge-item:hover { border-left-color: #1e9bf0; }
         .mmv-pledge-title { font-family: var(--font-clash, 'Clash Display', sans-serif); font-size: 17px; font-weight: 600; margin-bottom: 8px; }
         .mmv-pledge-body { font-size: 14.5px; line-height: 1.7; color: rgba(240,240,243,0.5); max-width: 680px; }
         .mmv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
         .mmv-card { display: block; background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.06); border-top: 2px solid transparent; padding: 22px; text-decoration: none; color: #f0f0f3; transition: border-color 0.3s, background 0.3s; }
-        .mmv-card:hover { border-top-color: #c9a96e; background: rgba(201,169,110,0.04); }
+        .mmv-card:hover { border-top-color: #1e9bf0; background: rgba(30,155,240,0.05); }
         .mmv-card-name { font-family: var(--font-clash, 'Clash Display', sans-serif); font-size: 17px; font-weight: 600; }
         .mmv-card-where { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(240,240,243,0.3); margin-top: 6px; }
-        .mmv-card-url { font-size: 12.5px; color: #c9a96e; margin-top: 12px; }
+        .mmv-card-url { font-size: 12.5px; color: #1e9bf0; margin-top: 12px; }
         .mmv-who { font-size: 15px; line-height: 1.85; color: rgba(240,240,243,0.55); max-width: 680px; }
         .mmv-who strong { color: #f0f0f3; font-weight: 500; }
-        .mmv-who a { color: #c9a96e; text-decoration: none; }
+        .mmv-who a { color: #1e9bf0; text-decoration: none; }
         .mmv-contact { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 26px; }
-        .mmv-btn { display: inline-block; border: 1px solid #c9a96e; color: #c9a96e; padding: 13px 26px; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; text-decoration: none; position: relative; overflow: hidden; transition: color 0.35s; }
-        .mmv-btn::before { content: ''; position: absolute; inset: 0; background: #c9a96e; transform: translateY(101%); transition: transform 0.35s; z-index: -1; }
+        .mmv-btn { display: inline-block; border: 1px solid #1e9bf0; color: #1e9bf0; padding: 13px 26px; font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; text-decoration: none; position: relative; overflow: hidden; transition: color 0.35s; }
+        .mmv-btn::before { content: ''; position: absolute; inset: 0; background: #1e9bf0; transform: translateY(101%); transition: transform 0.35s; z-index: -1; }
         .mmv-btn:hover { color: #06060a; }
         .mmv-btn:hover::before { transform: translateY(0); }
-        .mmv-report { border: 1px solid rgba(201,169,110,0.35); background: rgba(201,169,110,0.05); padding: 26px 28px; margin-top: 88px; }
+        .mmv-report { border: 1px solid rgba(30,155,240,0.35); background: rgba(30,155,240,0.06); padding: 26px 28px; margin-top: 88px; }
         .mmv-report-title { font-family: var(--font-clash, 'Clash Display', sans-serif); font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; }
         .mmv-report-body { font-size: 14.5px; line-height: 1.7; color: rgba(240,240,243,0.55); }
         .mmv-footer { margin-top: 100px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 12px; letter-spacing: 0.08em; color: rgba(240,240,243,0.3); display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
