@@ -8,6 +8,10 @@
 - Background: #06060a ALWAYS. No white anywhere.
 - Fonts: Clash Display (headings), Satoshi (body), Instrument Serif (italic accents)
 - Colors: gold #c9a96e, cyan #00e5ff, dim rgba(240,240,243,0.3)
+- BRAND IDENTITY pages (logo contexts, /verificar, official/trust materials): the
+  MachineMind brand is BLUE #1e9bf0 / black / white (per Phil 2026-08-25 — matches
+  the logo). Use blue as the accent there, NOT gold. Gold stays for the editorial
+  landing aesthetic only.
 - Cards: glass bg, glass border, gold top-border on hover. NO rounded corners. NO shadows.
 - Buttons: 1px gold border, fill slides up on hover, text inverts.
 - Animations: GSAP ScrollTrigger, opacity 0→1, y 40→0, stagger 0.1
