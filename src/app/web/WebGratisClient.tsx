@@ -44,6 +44,7 @@ interface Fields {
   facebook: string;
   style: string;
   siteGoal: SiteGoal;
+  referredBy: string;
 }
 
 type FieldKey = keyof Fields;
@@ -132,6 +133,7 @@ const EMPTY_FIELDS: Fields = {
   facebook: "",
   style: "",
   siteGoal: "",
+  referredBy: "",
 };
 
 const EXTENSION_TYPES: Record<string, string> = {
@@ -773,6 +775,7 @@ export default function WebGratisClient() {
       facebook: fields.facebook,
       style: fields.style,
       siteGoal: fields.siteGoal || null,
+      referredBy: fields.referredBy,
     };
   }
 
@@ -1279,8 +1282,21 @@ export default function WebGratisClient() {
                         value={fields.style}
                         onChange={(v) => setField("style", v)}
                         maxLength={500}
-                        enterKeyHint="go"
+                        enterKeyHint={referrerName ? "go" : "next"}
                       />
+                      {referrerName ? null : (
+                        <TextField
+                          id="wg-referredBy"
+                          label={t.fields.referredBy.label}
+                          hint={t.fields.referredBy.hint}
+                          placeholder={t.fields.referredBy.placeholder}
+                          optionalLabel={t.optional}
+                          value={fields.referredBy}
+                          onChange={(v) => setField("referredBy", v)}
+                          maxLength={120}
+                          enterKeyHint="go"
+                        />
+                      )}
                     </>
                   ) : null}
 

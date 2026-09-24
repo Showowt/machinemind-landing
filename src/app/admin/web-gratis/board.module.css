@@ -25,7 +25,8 @@
 .page a.waBtn,
 .page a.waBtnDone,
 .page a.waGhost,
-.page a.waDue {
+.page a.waDue,
+.page span.waOff {
   font: inherit;
 }
 
@@ -520,4 +521,229 @@ button:disabled {
 .login button {
   min-height: 48px;
   cursor: pointer;
+}
+
+/* ─── WhatsApp automation, badges, credits ───────────────────────────────── */
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+}
+
+.badge {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border: 1px solid var(--b-line);
+  color: var(--b-dim);
+}
+
+.badgeRed {
+  border-color: var(--b-red);
+  color: var(--b-red);
+}
+
+.badgeAmber {
+  border-color: var(--b-amber);
+  color: var(--b-amber);
+}
+
+.badgeGreen {
+  border-color: var(--b-wa);
+  color: var(--b-wa);
+}
+
+.badgeDim {
+  border-style: dashed;
+}
+
+.good {
+  color: var(--b-wa);
+  font-weight: 700;
+}
+
+.waAuto {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--b-line);
+}
+
+.tplRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 6px 0 4px;
+}
+
+.tplBtn,
+.tplDone,
+.tplFailed,
+.tplQueued {
+  min-height: 36px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  border: 1px solid rgba(30, 155, 240, 0.5);
+  background: transparent;
+  color: var(--b-fg);
+  cursor: pointer;
+}
+
+.tplBtn:hover:not(:disabled) {
+  border-color: var(--b-blue);
+  background: rgba(30, 155, 240, 0.1);
+}
+
+.tplDone {
+  border-color: rgba(37, 211, 102, 0.5);
+  color: var(--b-wa);
+}
+
+.tplFailed {
+  border-color: var(--b-red);
+  color: var(--b-red);
+}
+
+.tplQueued {
+  border-color: var(--b-amber);
+  color: var(--b-amber);
+}
+
+.log {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.logIn,
+.logOut {
+  padding: 8px 10px;
+  border: 1px solid var(--b-line);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.logIn {
+  border-left: 3px solid var(--b-wa);
+  background: rgba(37, 211, 102, 0.04);
+}
+
+.logOut {
+  border-left: 3px solid var(--b-blue);
+}
+
+.logHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.logStatus {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border: 1px solid var(--b-line);
+  color: var(--b-dim);
+}
+
+.msg_read,
+.msg_delivered {
+  border-color: var(--b-wa);
+  color: var(--b-wa);
+}
+
+.msg_sent {
+  border-color: var(--b-blue);
+  color: var(--b-blue);
+}
+
+.msg_queued {
+  border-color: var(--b-amber);
+  color: var(--b-amber);
+}
+
+.msg_failed {
+  border-color: var(--b-red);
+  color: var(--b-red);
+}
+
+.logBody {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--b-fg);
+}
+
+.logErr {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--b-amber);
+  overflow-wrap: anywhere;
+}
+
+/* A WhatsApp script that must not be sent (opted out, said no, no WhatsApp). */
+.waOff {
+  min-height: 40px;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  color: var(--b-dim);
+  border: 1px dashed var(--b-line);
+  cursor: not-allowed;
+  text-decoration: line-through;
+}
+
+/* Small "field + button" forms on a card (fix number, assign referrer). */
+.inlineForm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: start;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.inlineForm label {
+  justify-self: stretch;
+}
+
+@media (min-width: 560px) {
+  .inlineForm {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
+}
+
+.inlineForm label {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--b-dim);
+  min-width: 0;
+}
+
+.inlineForm button {
+  min-height: 44px;
+}
+
+.credits ul {
+  margin: 6px 0;
+  padding-left: 18px;
+  font-size: 13.5px;
+}
+
+.credits li {
+  margin: 2px 0;
+  overflow-wrap: anywhere;
 }

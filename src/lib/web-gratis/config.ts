@@ -10,8 +10,13 @@ export const SITE_ORIGIN = "https://machinemindconsulting.com";
 export const MONTHLY_PRICE_USD = 20;
 export const FREE_DAYS = 30;
 
-/** MachineMind WhatsApp that businesses message to confirm (Phil). */
-export const MM_WHATSAPP = "19544451638";
+/**
+ * The dedicated free-website funnel line (+1 786-257-0284, Meta Cloud API on
+ * WABA 760506473408925). Every "Confirmar por WhatsApp" / help link opens a chat
+ * here, so the business's first message opens the 24-hour window on the same
+ * number the automatic reminders come from — and the Rewired responder answers.
+ */
+export const MM_WHATSAPP = "17862570284";
 
 /** Handle businesses tag when they share their new site. */
 export const MM_INSTAGRAM = "machinemindconsulting";
@@ -85,4 +90,32 @@ export function splitServices(raw: string): string[] {
 
 export function referralLink(code: string): string {
   return `${SITE_ORIGIN}${WEB_GRATIS_PATH}?ref=${code}`;
+}
+
+/** Wording version of the WhatsApp consent line shown at step 1 of /web. */
+export const WHATSAPP_CONSENT_VERSION_STEP1 = "v1-step1-2026-09-24";
+/** Consent recorded at submit when no step-1 draft ever reached the server. */
+export const WHATSAPP_CONSENT_VERSION_SUBMIT = "v1-submit-2026-09-24";
+
+/** PayPal fallback when the board has no PayPal link saved. */
+export const DEFAULT_PAYPAL_LINK = "https://paypal.me/MachineMind/20USD";
+
+/** Payment page for one signup (the day-28/30 templates link here). */
+export function payUrl(code: string): string {
+  return `${SITE_ORIGIN}/pagar/${code}`;
+}
+
+/** Short link to the client's live site (the "site ready" template button). */
+export function siteShortUrl(code: string): string {
+  return `${SITE_ORIGIN}/s/${code}`;
+}
+
+/** Booking-demo link used by the rescue template. */
+export function demoUrl(code: string): string {
+  return `${SITE_ORIGIN}/citas/${code}`;
+}
+
+/** Footer line every delivered site carries — new leads land in the same funnel. */
+export function footerSnippet(code: string): string {
+  return `Hecho por MachineMind · ¿Quiere su web gratis? machinemindconsulting.com${WEB_GRATIS_PATH}?ref=${code}`;
 }

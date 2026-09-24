@@ -28,6 +28,7 @@ const COLUMNS: [string, (r: WebGratisSignup & Record<string, unknown>) => unknow
   ["codigo_referido", (r) => r.referral_code],
   ["enlace_referido", (r) => referralLink(r.referral_code)],
   ["referido_por_id", (r) => r.referred_by_id],
+  ["quien_lo_recomendo", (r) => r.referred_by_text],
   ["utm_source", (r) => r.utm_source],
   ["utm_campaign", (r) => r.utm_campaign],
   ["creado", (r) => r.created_at],
@@ -38,6 +39,14 @@ const COLUMNS: [string, (r: WebGratisSignup & Record<string, unknown>) => unknow
   ["web", (r) => r.site_url],
   ["compartida", (r) => r.shared_at],
   ["activada", (r) => r.activated_at],
+  ["pago_por", (r) => r.paid_via],
+  ["pagado_hasta", (r) => r.paid_through],
+  ["pausada", (r) => r.paused_at],
+  ["recontactar_desde", (r) => r.recontact_after],
+  ["dijo_que_no", (r) => r.declined_at],
+  ["baja_whatsapp", (r) => r.opted_out_at],
+  ["sin_whatsapp", (r) => r.no_whatsapp_at],
+  ["consentimiento_whatsapp", (r) => r.whatsapp_consent_at],
   ["notas", (r) => r.notes],
 ];
 

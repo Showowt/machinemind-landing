@@ -3,13 +3,15 @@
  *
  * Step 1 creates the row as 'borrador' — name + WhatsApp are enough for the team
  * to rescue an abandoned form (the 1-minute cron queues an "abandoned" digest
- * for drafts idle 20+ min). Later steps update the same row. A row that was
- * already submitted is never modified here. If the database write fails on the
- * client's final attempt, the raw data goes straight to Telegram.
+ * for drafts idle 20+ min). The step-1 screen shows the WhatsApp consent line,
+ * so the first insert records when (and which wording) the person agreed to.
+ * Later steps update the same row. A row that was already submitted is never
+ * modified here. If the database write fails on the client's final attempt,
+ * the raw data goes straight to Telegram.
  */
 import { after } from "next/server";
 import { sendCapiEvent } from "@/lib/web-gratis/capi";
-import { splitServices, toE164 } from "@/lib/web-gratis/config";
+import { splitServices, toE164, WHATSAPP_CONSENT_VERSION_STEP1 } from "@/lib/web-gratis/config";
 import { fail, ok } from "@/lib/web-gratis/http";
 import { notifySaveFailed } from "@/lib/web-gratis/notify";
 import { enqueueSystem } from "@/lib/web-gratis/outbox";
@@ -73,6 +75,7 @@ export async function POST(request: Request) {
           facebook: req.fields.facebook ?? null,
           style: req.fields.style ?? null,
           site_goal: req.fields.siteGoal ?? null,
+          referred_by_text: req.fields.referredBy ?? null,
         }
       : {};
 
@@ -119,6 +122,7 @@ export async function POST(request: Request) {
     const a = req.attribution ?? {};
 
     let inserted: WebGratisSignup | null = null;
+    const consentAt = new Date().toISOString();
     for (let attempt = 0; attempt < 4 && !inserted; attempt++) {
       const { data, error } = await db
         .from(SIGNUPS_TABLE)
@@ -127,6 +131,9 @@ export async function POST(request: Request) {
           ...step1,
           ...step2,
           step: req.step,
+          // The consent line is on screen at step 1 ("Al continuar, acepta que le escribamos por WhatsApp…").
+          whatsapp_consent_at: consentAt,
+          whatsapp_consent_version: WHATSAPP_CONSENT_VERSION_STEP1,
           referral_code: newReferralCode(),
           referred_by_id: validReferrer?.id ?? null,
           ref_raw: a.ref ?? null,

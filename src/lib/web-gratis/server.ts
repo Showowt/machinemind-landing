@@ -49,8 +49,76 @@ export interface WebGratisSignup {
   share_commitment_at: string | null;
   whatsapp_consent_at: string | null;
   submitted_at: string | null;
+  // Ops lifecycle (filled by the team / board)
+  delivered_at: string | null;
+  site_url: string | null;
+  shared_at: string | null;
+  free_until: string | null;
+  activated_at: string | null;
+  notes: string | null;
+  confirmed_at: string | null;
+  last_touch_at: string | null;
+  last_touch_kind: string | null;
+  // WhatsApp automation, payments, referral (20260925 migration)
+  whatsapp_consent_version: string | null;
+  last_inbound_at: string | null;
+  opted_out_at: string | null;
+  opt_out_reason: string | null;
+  no_whatsapp_at: string | null;
+  paused_at: string | null;
+  recontact_after: string | null;
+  paid_via: "stripe" | "paypal" | "manual" | null;
+  stripe_customer_id: string | null;
+  stripe_subscription_id: string | null;
+  referred_by_text: string | null;
+  rung2_interest_at: string | null;
+  share_confirmed_at: string | null;
+  handoff_at: string | null;
+  handoff_kind: "handoff_hot" | "handoff_help" | "call_request" | null;
+  wants_changes_at: string | null;
+  declined_at: string | null;
+  /** PayPal / manual payers: the month is paid up to this SV date (Stripe renews on its own). */
+  paid_through: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export type SignupStatus = WebGratisSignup["status"];
+
+/** Single-row operational settings (web_gratis_settings). */
+export interface WebGratisSettings {
+  delivery_days: number | null;
+  high_demand: boolean;
+  pay_link: string | null;
+  demo_link: string | null;
+  paypal_link: string | null;
+}
+
+export const SETTINGS_TABLE = "web_gratis_settings";
+
+export async function loadSettings(): Promise<WebGratisSettings> {
+  const { data, error } = await getDb()
+    .from(SETTINGS_TABLE)
+    .select("delivery_days, high_demand, pay_link, demo_link, paypal_link")
+    .eq("id", 1)
+    .single();
+  if (error) throw error;
+  return data as WebGratisSettings;
+}
+
+/** El Salvador is UTC-6 all year (no DST). */
+export const SV_OFFSET_MS = 6 * 60 * 60 * 1000;
+
+/** Statuses of a request whose site is still being built. */
+export const BUILDING_STATUSES: readonly SignupStatus[] = ["nuevo", "en_construccion"];
+/** Statuses of a site that is live and still in its free month. */
+export const LIVE_FREE_STATUSES: readonly SignupStatus[] = ["entregada", "compartida"];
+
+/** YYYY-MM-DD of `date` in El Salvador, shifted by `days`. */
+export function svDate(date: Date, days = 0): string {
+  const sv = new Date(date.getTime() - SV_OFFSET_MS);
+  sv.setUTCDate(sv.getUTCDate() + days);
+  return sv.toISOString().slice(0, 10);
 }
 
 export const SIGNUPS_TABLE = "web_gratis_signups";
@@ -62,7 +130,13 @@ export function getDb(): SupabaseClient {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("[WebGratis] Supabase service credentials missing");
-  client = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+  // Every read must hit the live DB: Next's Data Cache would otherwise keep
+  // serving a stale answer for a constant PostgREST URL (e.g. /pagar after a payment).
+  const noStoreFetch: typeof fetch = (input, init) => fetch(input, { ...init, cache: "no-store" });
+  client = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { fetch: noStoreFetch },
+  });
   return client;
 }
 
@@ -94,6 +168,20 @@ export function isReferralCodeCollision(error: { code?: string; message?: string
 /** Unique-violation on the one-live-request-per-business index. */
 export function isDuplicateBusiness(error: { code?: string; message?: string } | null): boolean {
   return !!error && error.code === "23505" && /web_gratis_one_live_per_business/.test(error.message ?? "");
+}
+
+/** The signup behind a public code (/pagar, /s, /citas). Null for a malformed or unknown code. */
+export async function findSignupByCode(raw: string): Promise<WebGratisSignup | null> {
+  let code: string;
+  try {
+    code = decodeURIComponent(raw).trim().toUpperCase();
+  } catch {
+    return null;
+  }
+  if (!REFERRAL_CODE_RE.test(code)) return null;
+  const { data, error } = await getDb().from(SIGNUPS_TABLE).select("*").eq("referral_code", code).maybeSingle();
+  if (error) throw error;
+  return (data as WebGratisSignup | null) ?? null;
 }
 
 export interface Referrer {

@@ -32,6 +32,7 @@ export interface Copy {
     facebook: { label: string; placeholder: string };
     siteGoal: { label: string; options: { value: "whatsapp" | "citas" | "mostrar"; label: string }[] };
     style: { label: string; hint: string; placeholder: string };
+    referredBy: { label: string; hint: string; placeholder: string };
     logo: { label: string; hint: string; button: string; replace: string };
     photos: { label: string; hint: string; button: string; count: (n: number, max: number) => string };
   };
@@ -151,6 +152,11 @@ const es: Copy = {
       label: "Colores o estilo que le gustan",
       hint: "O el nombre de una web que le guste",
       placeholder: "Ej: elegante, negro con dorado",
+    },
+    referredBy: {
+      label: "¿Quién le recomendó?",
+      hint: "Si un negocio amigo le pasó el dato, a él le regalamos un mes.",
+      placeholder: "Nombre del negocio o su código",
     },
     logo: { label: "Logo", hint: "Si no tiene, se lo diseñamos sin costo.", button: "Subir logo", replace: "Cambiar logo" },
     photos: {
@@ -314,6 +320,11 @@ const en: Copy = {
       label: "Colors or style you like",
       hint: "Or the name of a website you like",
       placeholder: "e.g. elegant, black and gold",
+    },
+    referredBy: {
+      label: "Who referred you?",
+      hint: "If a business friend told you about us, they get a free month.",
+      placeholder: "Business name or their code",
     },
     logo: { label: "Logo", hint: "No logo? We'll design one at no cost.", button: "Upload logo", replace: "Change logo" },
     photos: {

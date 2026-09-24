@@ -45,6 +45,8 @@ export const step2Schema = z.object({
   facebook: optionalText(300),
   style: optionalText(500),
   siteGoal: z.enum(SITE_GOALS).optional().nullable(),
+  /** "¿Quién le recomendó?" — free text, for referrals that didn't come through a ?ref= link. */
+  referredBy: optionalText(120),
 });
 
 /** Client retry counter (0-based); the server alerts the team only on the final try. */
@@ -95,3 +97,15 @@ export type WebGratisErrorCode =
   | "too_many_files"
   | "save_failed"
   | "server_error";
+
+/** Error codes only server-to-server callers see (bridge, webhooks, admin). */
+export type ServerErrorCode =
+  | "unauthorized"
+  | "not_configured"
+  | "unknown_client"
+  | "not_found"
+  | "already_sent"
+  | "window_closed"
+  | "not_eligible"
+  | "send_failed"
+  | "needs_confirm";

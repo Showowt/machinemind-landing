@@ -3,14 +3,19 @@
  *
  * 1. Queues "abandoned form" alerts for drafts idle 20+ minutes.
  * 2. Health checks (stuck/failed alerts, storage) → system alerts.
- * 3. Drains the outbox until it's empty or the time budget runs out.
+ * 3. Automatic WhatsApp scheduler (confirm / ready / day 28 / day 30 / pause
+ *    notice / rescue + auto-pause), max 25 sends, inside the send windows.
+ * 4. Referral credits a failed write left behind are granted (idempotent).
+ * 5. Drains the outbox until it's empty or the time budget runs out.
  * Vercel sends `Authorization: Bearer $CRON_SECRET`; without CRON_SECRET set
  * the route refuses everything (fail closed).
  */
 import { timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { sendTelegram, systemHtml, telegramChats } from "@/lib/web-gratis/notify";
-import { drainOutbox, runMaintenance, type DrainReport } from "@/lib/web-gratis/outbox";
+import { drainOutbox, enqueueSystem, runMaintenance, type DrainReport } from "@/lib/web-gratis/outbox";
+import { reconcileReferralCredits } from "@/lib/web-gratis/payments";
+import { defaultWaDeps, runWhatsAppScheduler, type SchedulerReport } from "@/lib/web-gratis/whatsapp";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";
@@ -31,6 +36,21 @@ export async function GET(request: Request) {
   const started = Date.now();
   try {
     const maintenance = await runMaintenance();
+    // The scheduler never throws past here: a WhatsApp problem must not stop team alerts.
+    let whatsapp: SchedulerReport | { error: string };
+    try {
+      whatsapp = await runWhatsAppScheduler(defaultWaDeps(), { maxSends: 25, spacingMs: 300, deadline: started + 25_000 });
+      if (whatsapp.errors.length) console.error("[WebGratis:cron] scheduler errors", whatsapp.errors);
+    } catch (error) {
+      console.error("[WebGratis:cron] scheduler", error);
+      whatsapp = { error: error instanceof Error ? error.message : String(error) };
+    }
+    let creditsGranted = 0;
+    try {
+      creditsGranted = await reconcileReferralCredits((key, text) => enqueueSystem(key, text));
+    } catch (error) {
+      console.error("[WebGratis:cron] referral credit reconcile", error);
+    }
     const drains: DrainReport[] = [];
     // Keep draining while there's a full batch and time left (45s of the 60s budget).
     while (Date.now() - started < 40_000) {
@@ -38,7 +58,7 @@ export async function GET(request: Request) {
       drains.push(report);
       if (report.claimed < 80) break;
     }
-    return NextResponse.json({ data: { maintenance, drains, ms: Date.now() - started }, error: null, message: null });
+    return NextResponse.json({ data: { maintenance, whatsapp, creditsGranted, drains, ms: Date.now() - started }, error: null, message: null });
   } catch (error) {
     console.error("[WebGratis:cron]", error);
     // The database may be the problem, so alert directly — at most every 10 minutes.

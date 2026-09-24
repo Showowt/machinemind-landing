@@ -16,6 +16,7 @@ const OFFICIAL_NUMBERS: { number: string; display: string; label: string }[] = [
   { number: '15559243163', display: '+1 (555) 924-3163', label: 'El Salvador' },
   { number: '15559232954', display: '+1 (555) 923-2954', label: 'El Salvador' },
   { number: '17866500003', display: '+1 (786) 650-0003', label: 'El Salvador' },
+  { number: '17862570284', display: '+1 (786) 257-0284', label: 'El Salvador · web gratis' },
   { number: '19543889003', display: '+1 (954) 388-9003', label: 'Panamá · principal' },
   { number: '17724096432', display: '+1 (772) 409-6432', label: 'Panamá' },
   { number: '15612904501', display: '+1 (561) 290-4501', label: 'Colombia' },

@@ -329,6 +329,18 @@ interface BoardStats {
   outbox_pending: number;
   outbox_failed: number;
   top_referrers: { business_name: string; referral_code: string; n: number }[];
+  // WhatsApp automation (20260925 migration)
+  wa_queued?: number;
+  wa_sent_today?: number;
+  wa_failed_24h?: number;
+  wa_inbound_today?: number;
+  opted_out?: number;
+  no_whatsapp?: number;
+  credits_pending?: number;
+  // 20260926 migration
+  renewals_due?: number;
+  recontact_due?: number;
+  paid_unbuilt?: number;
 }
 
 export async function boardStats(): Promise<BoardStats> {
@@ -397,6 +409,8 @@ export async function runMaintenance(): Promise<MaintenanceReport> {
       `Ahora: nuevas ${s.nuevo ?? 0} · en construcción ${s.en_construccion ?? 0} · entregadas ${s.entregada ?? 0} · compartidas ${s.compartida ?? 0} · activas ${s.activa ?? 0}.`,
       `Nuevas sin confirmar: ${stats.unconfirmed_nuevo} · con más de 24 h: ${stats.stale_nuevo}.`,
       `Top referidores: ${top}.`,
+      `WhatsApp automático: en cola ${stats.wa_queued ?? 0} · fallidos 24 h ${stats.wa_failed_24h ?? 0} · bajas ${stats.opted_out ?? 0} · créditos de referido por aplicar ${stats.credits_pending ?? 0}.`,
+      `Cobros a mano (PayPal/efectivo) por renovar o vencidos: ${stats.renewals_due ?? 0} · pausadas para recontactar hoy: ${stats.recontact_due ?? 0} · pagaron y aún no se entregan: ${stats.paid_unbuilt ?? 0}.`,
     ].join("\n");
     await enqueueSystem(`daily:${day}`, text);
   }

@@ -11,7 +11,14 @@
  */
 import { after } from "next/server";
 import { sendCapiEvent } from "@/lib/web-gratis/capi";
-import { MAX_LOGOS, MAX_PHOTOS, splitServices, toE164 } from "@/lib/web-gratis/config";
+import {
+  MAX_LOGOS,
+  MAX_PHOTOS,
+  REFERRAL_CODE_RE,
+  splitServices,
+  toE164,
+  WHATSAPP_CONSENT_VERSION_SUBMIT,
+} from "@/lib/web-gratis/config";
 import { fail, ok } from "@/lib/web-gratis/http";
 import { notifySaveFailed } from "@/lib/web-gratis/notify";
 import { drainIfQuiet, enqueue } from "@/lib/web-gratis/outbox";
@@ -33,6 +40,16 @@ export const maxDuration = 60;
 
 /** Obvious-bot ceiling only (shared carrier IPs) — see draft route. */
 const HARD_PER_IP_PER_HOUR = 1000;
+
+/** "¿Quién le recomendó?" answered with a referral code (e.g. "K7M2QX") → a real referral. */
+function codeInText(text: string | null): string | null {
+  if (!text) return null;
+  const token = text
+    .toUpperCase()
+    .split(/[^A-Z0-9]+/)
+    .find((t) => REFERRAL_CODE_RE.test(t));
+  return token ?? null;
+}
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -67,6 +84,7 @@ export async function POST(request: Request) {
     facebook: req.fields.facebook ?? null,
     style: req.fields.style ?? null,
     site_goal: req.fields.siteGoal ?? null,
+    referred_by_text: req.fields.referredBy ?? null,
   };
 
   try {
@@ -87,15 +105,25 @@ export async function POST(request: Request) {
       submitted_at: now,
       terms_accepted_at: now,
       share_commitment_at: now,
-      whatsapp_consent_at: now,
     };
+    // First consent wins: the step-1 timestamp/wording is kept; submit records one only if none exists.
+    const firstConsent = { whatsapp_consent_at: now, whatsapp_consent_version: WHATSAPP_CONSENT_VERSION_SUBMIT };
 
     const { data: existing, error: readError } = await db
       .from(SIGNUPS_TABLE)
-      .select("id, status, referral_code, business_name")
+      .select("id, status, referral_code, business_name, whatsapp_consent_at, referred_by_id")
       .eq("id", req.draftId)
       .maybeSingle();
     if (readError) throw readError;
+
+    // A referral code typed into "¿Quién le recomendó?" counts when no ?ref= link did.
+    const typedCode = codeInText(content.referred_by_text);
+    const typedReferrer =
+      typedCode && !(existing?.referred_by_id as string | null | undefined) ? await findReferrer(typedCode) : null;
+    const typedReferral =
+      typedReferrer && typedReferrer.whatsapp !== whatsapp && typedReferrer.id !== req.draftId
+        ? { referred_by_id: typedReferrer.id }
+        : {};
 
     let row: WebGratisSignup | null = null;
 
@@ -105,7 +133,7 @@ export async function POST(request: Request) {
       }
       const { data, error } = await db
         .from(SIGNUPS_TABLE)
-        .update(submission)
+        .update({ ...submission, ...(existing.whatsapp_consent_at ? {} : firstConsent), ...typedReferral })
         .eq("id", req.draftId)
         .eq("status", "borrador")
         .select("*")
@@ -134,8 +162,9 @@ export async function POST(request: Request) {
           .insert({
             id: req.draftId,
             ...submission,
+            ...firstConsent,
             referral_code: newReferralCode(),
-            referred_by_id: referrer?.id ?? null,
+            referred_by_id: referrer?.id ?? (typedReferral.referred_by_id ?? null),
             ref_raw: a.ref ?? null,
             utm_source: a.utm_source ?? null,
             utm_medium: a.utm_medium ?? null,

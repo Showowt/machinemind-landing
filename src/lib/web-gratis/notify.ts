@@ -13,6 +13,14 @@ import { scripts, waLink } from "./scripts";
 import type { Referrer, WebGratisSignup } from "./server";
 
 export const BOARD_URL = `${SITE_ORIGIN}/admin/web-gratis`;
+
+/**
+ * The confirmation goes out automatically from the funnel line; a manual wa.me
+ * link here would make the client get the same "¡Recibido!" twice, from two numbers.
+ */
+const AUTO_CONFIRM_TEXT =
+  "La confirmación por WhatsApp sale sola desde la línea del embudo (+1 786-257-0284) ~15 min después de enviar el formulario (7:00–20:59). No hace falta escribirle a mano.";
+const AUTO_CONFIRM_NOTE = `🤖 ${AUTO_CONFIRM_TEXT}`;
 const TEAM_EMAIL = "machinemindconsulting@gmail.com";
 const FROM_EMAIL = "MachineMind Web Gratis <leads@machinemindconsulting.com>";
 
@@ -168,11 +176,14 @@ export function submittedHtml(row: WebGratisSignup, ctx: LeadContext): string {
     ctx.referrer
       ? `🤝 Referido por <b>${esc(ctx.referrer.business_name)}</b> (${esc(ctx.referrer.referral_code)}) — 1 mes gratis al activar`
       : null,
+    row.referred_by_text
+      ? `🤝 Dice que lo recomendó: «${esc(clip(row.referred_by_text, 120))}»${ctx.referrer ? "" : " — asigne el código en su tarjeta del tablero para darle el mes gratis"}`
+      : null,
     `🔗 Su código: <b>${esc(row.referral_code)}</b>`,
     ctx.otherRequestsSameWhatsapp > 0 ? `⚠️ Este WhatsApp ya tiene ${ctx.otherRequestsSameWhatsapp} otra(s) solicitud(es).` : null,
     `📊 ${esc(sourceLabel(row))}`,
     ``,
-    `👉 <a href="${esc(waLink(row.whatsapp, scripts.confirm(row.business_name)))}">Confirmarle por WhatsApp (mensaje listo)</a>`,
+    AUTO_CONFIRM_NOTE,
     `📋 <a href="${BOARD_URL}">Tablero</a>   🕐 ${esc(svTime(new Date(row.submitted_at ?? row.created_at)))}`,
   ].filter((l): l is string => l !== null);
   const html = lines.join("\n");
@@ -184,7 +195,7 @@ export function submittedHtml(row: WebGratisSignup, ctx: LeadContext): string {
 export function submittedLine(row: WebGratisSignup, ref: Referrer | undefined): string {
   return [
     `• <b>${esc(clip(row.business_name, 60))}</b> — ${esc(clip(row.business_type, 60))} · ${esc(clip(row.city, 40))}`,
-    `   📱 ${esc(row.whatsapp)} · fotos ${row.photo_paths.length}${row.site_goal === "citas" ? " · 🔥citas" : ""}${ref ? ` · 🤝 ${esc(clip(ref.business_name, 30))}` : ""} · <a href="${esc(waLink(row.whatsapp, scripts.confirm(row.business_name)))}">confirmar</a>`,
+    `   📱 ${esc(row.whatsapp)} · fotos ${row.photo_paths.length}${row.site_goal === "citas" ? " · 🔥citas" : ""}${ref ? ` · 🤝 ${esc(clip(ref.business_name, 30))}` : row.referred_by_text ? ` · 🤝 «${esc(clip(row.referred_by_text, 30))}»` : ""}`,
   ].join("\n");
 }
 
@@ -196,7 +207,7 @@ export function submittedDigests<T>(items: { ref: T; row: WebGratisSignup }[], r
       line: submittedLine(row, row.referred_by_id ? referrers.get(row.referred_by_id) : undefined),
     })),
     (n) => `🟢 <b>WEB GRATIS — ${n} solicitud${n === 1 ? "" : "es"} nueva${n === 1 ? "" : "s"}</b>`,
-    `📋 <a href="${BOARD_URL}">Abrir tablero</a>`,
+    `${AUTO_CONFIRM_NOTE}\n📋 <a href="${BOARD_URL}">Abrir tablero</a>`,
   );
 }
 
@@ -252,14 +263,15 @@ export async function sendSubmittedEmail(row: WebGratisSignup, ctx: LeadContext)
       ${rowHtml("Estilo", row.style)}
       ${rowHtml("Quiere", GOAL_LABELS[row.site_goal ?? ""] ?? null)}
       ${rowHtml("Referido por", ctx.referrer ? `${ctx.referrer.business_name} (${ctx.referrer.referral_code})` : null)}
+      ${rowHtml("Dice que lo recomendó", row.referred_by_text ? `${row.referred_by_text}${ctx.referrer ? "" : " — asigne el código en el tablero para darle el mes gratis"}` : null)}
       ${rowHtml("Su código", `${row.referral_code} — ${referralLink(row.referral_code)}`)}
       ${rowHtml("Fuente", sourceLabel(row))}
       ${rowHtml("Aceptó", `Gratis ${FREE_DAYS} días en línea, luego $${MONTHLY_PRICE_USD}/mes · compartir y etiquetar @${MM_INSTAGRAM}`)}
     </table>
     ${tiles ? `<h2 style="font-size:14px;margin:24px 0 10px;color:#1e9bf0">Logo y fotos (links válidos 7 días)</h2><div>${tiles}</div>` : `<p style="margin-top:20px;color:rgba(240,240,243,0.6)">Sin logo ni fotos — usar imágenes de su rubro y diseñar logo.</p>`}
-    <p style="margin:28px 0 0">
-      <a href="${esc(waLink(row.whatsapp, scripts.confirm(row.business_name)))}" style="display:inline-block;padding:14px 26px;background:#25D366;color:#06060a;font-weight:700;text-decoration:none">Confirmarle por WhatsApp</a>
-      <a href="${BOARD_URL}" style="display:inline-block;padding:14px 26px;margin-left:8px;border:1px solid #1e9bf0;color:#f0f0f3;text-decoration:none">Abrir tablero</a>
+    <p style="margin:24px 0 0;color:rgba(240,240,243,0.7);font-size:14px">${esc(AUTO_CONFIRM_TEXT)}</p>
+    <p style="margin:16px 0 0">
+      <a href="${BOARD_URL}" style="display:inline-block;padding:14px 26px;border:1px solid #1e9bf0;color:#f0f0f3;text-decoration:none">Abrir tablero</a>
     </p>
     <p style="margin:24px 0 0;font-size:12px;color:rgba(240,240,243,0.4)">${esc(svTime(new Date(row.submitted_at ?? row.created_at)))} (hora SV) · ID ${esc(row.id)}</p>
   </div>`;
@@ -325,8 +337,8 @@ export async function sendDigestEmail(
         ${field("Quiere", GOAL_LABELS[row.site_goal ?? ""] ?? null)}
         ${field("Archivos", `${row.logo_paths.length ? "logo + " : ""}${row.photo_paths.length} foto(s)`)}
         ${field("Referido por", ref ? `${ref.business_name} (${ref.referral_code})` : null)}
+        ${field("Dice que lo recomendó", row.referred_by_text)}
         ${field("Código", row.referral_code)}
-        <a href="${esc(waLink(row.whatsapp, scripts.confirm(row.business_name)))}" style="display:inline-block;margin-top:8px;padding:8px 14px;background:#25D366;color:#06060a;font-weight:700;text-decoration:none">Confirmarle por WhatsApp</a>
       </div>`;
     })
     .join("");
@@ -334,7 +346,8 @@ export async function sendDigestEmail(
   const html = `
   <div style="font-family:system-ui,-apple-system,sans-serif;max-width:680px;margin:0 auto;background:#06060a;color:#f0f0f3;padding:28px;border-top:3px solid #1e9bf0">
     <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.2em;color:#1e9bf0;text-transform:uppercase">Web gratis · El Salvador</p>
-    <h1 style="margin:0 0 16px;font-size:22px">${rows.length} solicitudes nuevas</h1>
+    <h1 style="margin:0 0 8px;font-size:22px">${rows.length} solicitudes nuevas</h1>
+    <p style="margin:0 0 16px;color:rgba(240,240,243,0.7);font-size:14px">${esc(AUTO_CONFIRM_TEXT)}</p>
     ${cards}
     <p style="margin:20px 0 0"><a href="${BOARD_URL}" style="color:#1e9bf0">Abrir tablero</a> · fotos completas y estados ahí</p>
   </div>`;
