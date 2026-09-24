@@ -1,5 +1,5 @@
 /**
- * POST /api/web-gratis/stripe-webhook — Stripe events for the $20/mes plan.
+ * POST /api/web-gratis/stripe-webhook — Stripe events for the $19/mes plan.
  *
  * Signature verified by hand (HMAC-SHA256 of `${t}.${rawBody}` with
  * STRIPE_WEBHOOK_SECRET_WEBGRATIS, 5-minute tolerance). Without the secret the

@@ -1,5 +1,5 @@
 /**
- * /pagar/gracias — Stripe's success URL for the $20/mes Payment Link.
+ * /pagar/gracias — Stripe's success URL for the $19/mes Payment Link.
  * Activation itself happens in the webhook; this page only thanks and points
  * to the funnel WhatsApp chat (where the next rung is offered).
  */

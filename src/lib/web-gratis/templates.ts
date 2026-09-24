@@ -136,11 +136,11 @@ export function templatePreview(name: TemplateName, s: TemplateSubject): string 
     case "cqv_web_ready":
       return `¡Su página web ya está lista! 🎉 ${a} — échele un ojo y dígame si quiere ajustar algo. [Botón: Ver mi web]`;
     case "cqv_web_day28":
-      return `Recordatorio amistoso, ${a}: su mes gratis termina en 2 días. Su web sigue en línea por solo $20/mes — soporte, actualizaciones y que nunca se caiga. ¿Se la dejo activa? ${b} (sin contrato). [Botón: Activar mi web]`;
+      return `Recordatorio amistoso, ${a}: su mes gratis termina en 2 días. Su web sigue en línea por solo $19/mes — soporte, actualizaciones y que nunca se caiga. ¿Se la dejo activa? ${b} (sin contrato). [Botón: Activar mi web]`;
     case "cqv_web_day30":
-      return `Hola ${a}, hoy se cumplen sus 30 días. Su web ya está trabajando para usted. Para mantenerla en línea con soporte es solo $20/mes, sin contrato. Actívela aquí 👉 ${b} — cancela cuando quiera. [Botón: Activar mi web]`;
+      return `Hola ${a}, hoy se cumplen sus 30 días. Su web ya está trabajando para usted. Para mantenerla en línea con soporte es solo $19/mes, sin contrato. Actívela aquí 👉 ${b} — cancela cuando quiera. [Botón: Activar mi web]`;
     case "cqv_web_pause_notice":
-      return `Aviso sobre su página web, ${a}: se pausará mañana porque no se activó el plan de $20/mes. Si quiere mantenerla en línea, actívela aquí: ${b} (sin contrato). [Botón: Activar mi web]`;
+      return `Aviso sobre su página web, ${a}: se pausará mañana porque no se activó el plan de $19/mes. Si quiere mantenerla en línea, actívela aquí: ${b} (sin contrato). [Botón: Activar mi web]`;
     case "cqv_web_rescue":
       return `Hola ${a}, ¿sabía que su web puede AGENDAR las citas sola por WhatsApp, 24/7? Le muestro cómo se vería con su negocio 👉 ${b}. Responda NO para no recibir más mensajes.`;
   }

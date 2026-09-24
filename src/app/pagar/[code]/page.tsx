@@ -1,5 +1,5 @@
 /**
- * /pagar/<code> — keep the free website online for $20/mes.
+ * /pagar/<code> — keep the free website online for $19/mes.
  *
  * The day-28 / day-30 / pause-notice WhatsApp templates link here. "Pagar con
  * tarjeta" opens the Stripe Payment Link from the ops board with
@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Mantenga su web en línea — MachineMind",
-  description: "Su página web en línea por $20 al mes, sin contrato.",
+  description: "Su página web en línea por $19 al mes, sin contrato.",
   robots: { index: false, follow: false },
 };
 

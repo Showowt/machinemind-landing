@@ -1233,7 +1233,7 @@ export default function BoardClient() {
               Alta demanda: /web avisa que hay fila (nunca deja de recibir)
             </label>
             <label>
-              Enlace de pago Stripe $20/mes (botón «Pagar con tarjeta» de /pagar; sin él no salen los recordatorios de día 28/30 ni se pausan solas las webs vencidas)
+              Enlace de pago Stripe $19/mes (botón «Pagar con tarjeta» de /pagar; sin él no salen los recordatorios de día 28/30 ni se pausan solas las webs vencidas)
               <input
                 value={settingsDraft.payLink}
                 placeholder="https://buy.stripe.com/…"

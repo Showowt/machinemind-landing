@@ -1,5 +1,5 @@
 /**
- * Free-website funnel — payments ($20/mes) and referral credits.
+ * Free-website funnel — payments ($19/mes) and referral credits.
  *
  * Stripe: the /pagar/<code> button opens the Payment Link with
  * client_reference_id = signup id. The webhook (verified by hand — no Stripe
@@ -8,7 +8,7 @@
  * first, so a Stripe retry never double-activates or double-alerts.
  *
  * The webhook endpoint receives these event types for the WHOLE Stripe account
- * (shared with Rewired's own checkouts), so only the $20/mes funnel's events
+ * (shared with Rewired's own checkouts), so only the $19/mes funnel's events
  * are acted on: the Payment Link and its subscriptions carry
  * metadata.program = "web_gratis"; anything else is ignored silently.
  *
@@ -30,8 +30,9 @@ export const CREDITS_TABLE = "web_gratis_referral_credits";
 
 /** metadata.program on the web-gratis Payment Link, its sessions and subscriptions. */
 export const STRIPE_PROGRAM = "web_gratis";
-/** $20.00 — the plan's price in cents (fallback check when metadata is missing). */
-const PLAN_CENTS = 2000;
+/** $19.00 — the plan's price in cents (fallback floor when metadata is missing; a $19 legacy
+ *  charge still clears since the check is "at least"). Phil 2026-09-24: $20 → $19. */
+const PLAN_CENTS = 1900;
 
 export const THANK_YOU_TEXT =
   "¡Listo! Su web queda activa 💛 ¿Le muestro cómo su WhatsApp puede agendar citas solo? Es el siguiente paso.";
@@ -86,9 +87,9 @@ function money(cents: number | null, currency: string | null): string {
 }
 
 /**
- * A Checkout Session of the $20/mes funnel: created by the web-gratis Payment
+ * A Checkout Session of the $19/mes funnel: created by the web-gratis Payment
  * Link (metadata copied from the link), or — if that metadata is ever missing —
- * a USD charge of at least $20 that names one of our signups.
+ * a USD charge of at least $19 that names one of our signups.
  */
 export function isFunnelCheckout(o: Record<string, unknown>): boolean {
   if (obj(o.metadata).program === STRIPE_PROGRAM) return true;
@@ -470,7 +471,7 @@ async function processEvent(event: StripeEvent, deps: PaymentDeps): Promise<Stri
       const who = s ? `${s.business_name} (${s.whatsapp})` : `cliente Stripe ${idOf(o.customer) ?? "?"}`;
       await deps.alert(
         `subdel:${event.id}`,
-        `⚠️ ${who} canceló su suscripción de $20/mes en Stripe. Su web sigue "activa" en el tablero: decidan si pausarla o contactarlo.`,
+        `⚠️ ${who} canceló su suscripción de $19/mes en Stripe. Su web sigue "activa" en el tablero: decidan si pausarla o contactarlo.`,
       );
       return { duplicate: false, handled: "subscription_deleted_alert", signupId: s?.id ?? null };
     }

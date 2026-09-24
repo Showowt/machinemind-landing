@@ -3,7 +3,7 @@ import WebGratisClient from "./WebGratisClient";
 
 const TITLE = "Su página web, gratis — MachineMind El Salvador";
 const DESCRIPTION =
-  "Le armamos la página web de su negocio gratis. Lista en pocos días, 30 días gratis en línea y después $20 al mes, sin contrato.";
+  "Le armamos la página web de su negocio gratis. Lista en pocos días, 30 días gratis en línea y después $19 al mes, sin contrato.";
 
 export const metadata: Metadata = {
   title: TITLE,

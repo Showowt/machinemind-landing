@@ -1026,7 +1026,7 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
       report.paused++;
       await deps.alert(
         `paused:${s.id}:${today}`,
-        `⏸ pausada — archivar su web: ${s.business_name} (${s.whatsapp}) no activó los $20/mes (${how}). ${s.site_url ? `Web: ${s.site_url}. ` : ""}Pásela a un estado archivado (no borrarla). Recontactar desde ${svDate(now, 60)}.`,
+        `⏸ pausada — archivar su web: ${s.business_name} (${s.whatsapp}) no activó los $19/mes (${how}). ${s.site_url ? `Web: ${s.site_url}. ` : ""}Pásela a un estado archivado (no borrarla). Recontactar desde ${svDate(now, 60)}.`,
       );
     }
     if (neverAsked.length && windowOpen("transactional", now)) {
