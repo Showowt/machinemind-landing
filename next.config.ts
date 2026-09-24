@@ -12,6 +12,22 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
+  // Free-website funnel aliases → /web. Redirect sources match case-insensitively,
+  // so "/gratis" also covers "/Gratis" and "/GRATIS". Never list a case variant of
+  // "/web" itself here — it would match "/web" and loop.
+  async redirects() {
+    return ["/gratis", "/web-gratis", "/webgratis"].map((source) => ({
+      source,
+      destination: "/web",
+      permanent: false,
+    }));
+  },
+  // Page routes ARE case-sensitive, so a phone-capitalized "/Web" would 404.
+  // This (case-insensitive) rewrite only runs after no page matched, so "/web"
+  // itself is untouched while "/Web" and "/WEB" serve the same page.
+  async rewrites() {
+    return [{ source: "/web", destination: "/web" }];
+  },
   // CORS headers for API routes
   async headers() {
     return [
