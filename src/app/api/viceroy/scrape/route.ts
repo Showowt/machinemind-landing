@@ -22,9 +22,9 @@ import {
  * Returns CSV or JSON based on Accept header
  */
 export async function POST(request: Request) {
-  // Auth
+  // Auth — fail closed: with no VICEROY_API_KEY configured, nobody gets in.
   const authKey = request.headers.get("x-viceroy-key");
-  if (process.env.VICEROY_API_KEY && authKey !== process.env.VICEROY_API_KEY) {
+  if (!process.env.VICEROY_API_KEY || authKey !== process.env.VICEROY_API_KEY) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

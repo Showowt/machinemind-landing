@@ -29,9 +29,9 @@ interface BulkSendRequest {
  * Body: { step: 1|2|3, limit: 50 } — pulls qualified leads from Supabase
  */
 export async function POST(request: Request) {
-  // Auth
+  // Auth — fail closed: with no VICEROY_API_KEY configured, nobody gets in.
   const authKey = request.headers.get('x-viceroy-key');
-  if (authKey !== process.env.VICEROY_API_KEY && process.env.VICEROY_API_KEY) {
+  if (!process.env.VICEROY_API_KEY || authKey !== process.env.VICEROY_API_KEY) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -228,7 +228,7 @@ export async function POST(request: Request) {
  */
 export async function GET(request: Request) {
   const authKey = request.headers.get('x-viceroy-key');
-  if (authKey !== process.env.VICEROY_API_KEY && process.env.VICEROY_API_KEY) {
+  if (!process.env.VICEROY_API_KEY || authKey !== process.env.VICEROY_API_KEY) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 

@@ -64,6 +64,16 @@ function emailWrapper(content: string): string {
 </html>`;
 }
 
+/** Recipient-supplied values (names) must never become markup in our emails. */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function p(text: string, style = ''): string {
   return `<p style="font-family:'Georgia',serif;font-size:15px;color:rgba(240,240,243,0.75);line-height:1.8;margin:0 0 20px 0;${style}">${text}</p>`;
 }
@@ -102,7 +112,7 @@ function blockquote(text: string): string {
 function step1Html(firstName: string, assessmentUrl: string): string {
   const content = `
     ${label('Private Capital Participation')}
-    ${h1(`${firstName}, your assets may qualify for a private participation structure.`)}
+    ${h1(`${escapeHtml(firstName)}, your assets may qualify for a private participation structure.`)}
     ${p('Most capital sits in accounts designed for yesterday\'s economy. CDs at 4.5%. 401(k)s absorbing market volatility. Real estate equity tied to a single address.')}
     ${p('There\'s a different structure. One that doesn\'t require you to hand your capital to a fund manager, accept a lock-up period, or trust a projection.')}
     ${p('It\'s called <strong style="color:#f0f0f3;">private contractual participation</strong> — and it\'s built around one principle: your capital participates in demonstrated operational performance. Not forecasts. Not promises. Performance.')}
@@ -126,7 +136,7 @@ function step1Html(firstName: string, assessmentUrl: string): string {
 function step2Html(firstName: string, assessmentUrl: string): string {
   const content = `
     ${label('Following Up')}
-    ${h1(`${firstName}, the question most people have is: "What exactly is this?"`)}
+    ${h1(`${escapeHtml(firstName)}, the question most people have is: "What exactly is this?"`)}
     ${p('That\'s the right question. Let me answer it directly.')}
     ${blockquote('"Private contractual participation" means your capital is structured into a private agreement tied to the operating performance of a specific business or asset — not a market index, not a fund\'s discretion, not a projection."')}
     ${p('You don\'t buy stock. You don\'t become a partner. You enter a private contract that defines what happens when the operation performs — and what happens when it doesn\'t.')}
@@ -156,7 +166,7 @@ function step2Html(firstName: string, assessmentUrl: string): string {
 function step3Html(firstName: string, assessmentUrl: string): string {
   const content = `
     ${label('Final Note')}
-    ${h1(`${firstName}, this is the last time I'll send this.`)}
+    ${h1(`${escapeHtml(firstName)}, this is the last time I'll send this.`)}
     ${p('The participation structure isn\'t for everyone, and I don\'t follow up indefinitely. If the timing isn\'t right, that\'s a legitimate answer — and there\'s no pressure here.')}
     ${p('But if you\'ve been sitting on capital that isn\'t doing what you\'d like it to do — CDs earning below-market rates, equity locked in a property you\'re holding but not leveraging, retirement accounts riding a market you don\'t fully control — the structure I\'ve described may be worth 60 seconds of your consideration.')}
     ${blockquote('The individuals who move forward with Viceroy participation share one trait: they make decisions based on structure, not stories. If that\'s you, the assessment is the first step.')}

@@ -27,9 +27,9 @@ export async function GET(request: Request) {
   const format = searchParams.get("format") || "csv";
   const shouldEnrich = searchParams.get("enrich") === "true";
 
-  // Auth check — simple API key for now
+  // Auth — fail closed: with no VICEROY_API_KEY configured, nobody gets in.
   const authKey = request.headers.get("x-viceroy-key");
-  if (authKey !== process.env.VICEROY_API_KEY && process.env.VICEROY_API_KEY) {
+  if (!process.env.VICEROY_API_KEY || authKey !== process.env.VICEROY_API_KEY) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
