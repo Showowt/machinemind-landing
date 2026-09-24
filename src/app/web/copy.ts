@@ -24,7 +24,7 @@ export interface Copy {
     businessName: { label: string; placeholder: string };
     businessType: { label: string; hint: string; placeholder: string };
     city: { label: string; placeholder: string };
-    whatsapp: { label: string; hint: string; placeholder: string; country: string };
+    whatsapp: { label: string; hint: string; placeholder: string; country: string; consent: string };
     services: { label: string; hint: string; placeholder: string };
     differentiator: { label: string; hint: string; placeholder: string };
     hours: { label: string; placeholder: string };
@@ -90,6 +90,10 @@ export interface Copy {
     another: string;
   };
   helpText: (business: string) => string;
+  fallbackText: (d: { business: string; type: string; city: string; whatsapp: string; services: string }) => string;
+  chipDays: (n: number) => string;
+  nextDays: (n: number) => string;
+  highDemand: string;
   footer: { disclaimer: string; privacy: string; verify: string };
   noscript: string;
 }
@@ -115,7 +119,13 @@ const es: Copy = {
     businessName: { label: "Nombre del negocio", placeholder: "Ej: Barbería El Corte" },
     businessType: { label: "¿A qué se dedica?", hint: "En una frase", placeholder: "Ej: Barbería para caballeros" },
     city: { label: "Ciudad o zona", placeholder: "Ej: San Salvador, colonia Escalón" },
-    whatsapp: { label: "WhatsApp del negocio", hint: "Por aquí le confirmamos todo", placeholder: "7000 0000", country: "País" },
+    whatsapp: {
+      label: "WhatsApp del negocio",
+      hint: "Por aquí le confirmamos todo",
+      placeholder: "7000 0000",
+      country: "País",
+      consent: "Al continuar, acepta que le escribamos por WhatsApp sobre su web.",
+    },
     services: {
       label: "Sus servicios o productos principales",
       hint: "De 3 a 6, separados por coma",
@@ -229,6 +239,20 @@ const es: Copy = {
     another: "Enviar otra solicitud",
   },
   helpText: (business) => `Hola, quiero mi web gratis.${business ? ` Negocio: ${business}.` : ""}`,
+  fallbackText: (d) =>
+    [
+      "Hola, quiero mi web gratis (el formulario no me dejó enviar).",
+      d.business && `Negocio: ${d.business}`,
+      d.type && `Rubro: ${d.type}`,
+      d.city && `Ciudad: ${d.city}`,
+      d.whatsapp && `WhatsApp: ${d.whatsapp}`,
+      d.services && `Servicios: ${d.services}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  chipDays: (n) => `Lista en ${n} días`,
+  nextDays: (n) => `En unos ${n} días su web queda lista y se la mandamos por WhatsApp.`,
+  highDemand: "Estamos recibiendo muchas solicitudes: su web entra en fila y le avisamos por WhatsApp apenas empecemos.",
   footer: {
     disclaimer: "MachineMind es una empresa privada. Este programa no está afiliado ni patrocinado por el Gobierno de El Salvador.",
     privacy: "Su información se usa solo para crear su web.",
@@ -258,7 +282,13 @@ const en: Copy = {
     businessName: { label: "Business name", placeholder: "e.g. El Corte Barbershop" },
     businessType: { label: "What does it do?", hint: "In one sentence", placeholder: "e.g. Men's barbershop" },
     city: { label: "City or area", placeholder: "e.g. San Salvador, Escalón" },
-    whatsapp: { label: "Business WhatsApp", hint: "We confirm everything here", placeholder: "7000 0000", country: "Country" },
+    whatsapp: {
+      label: "Business WhatsApp",
+      hint: "We confirm everything here",
+      placeholder: "7000 0000",
+      country: "Country",
+      consent: "By continuing, you agree that we can message you on WhatsApp about your website.",
+    },
     services: {
       label: "Your main services or products",
       hint: "3 to 6, separated by commas",
@@ -372,6 +402,20 @@ const en: Copy = {
     another: "Send another request",
   },
   helpText: (business) => `Hi, I want my free website.${business ? ` Business: ${business}.` : ""}`,
+  fallbackText: (d) =>
+    [
+      "Hi, I want my free website (the form would not let me send it).",
+      d.business && `Business: ${d.business}`,
+      d.type && `Trade: ${d.type}`,
+      d.city && `City: ${d.city}`,
+      d.whatsapp && `WhatsApp: ${d.whatsapp}`,
+      d.services && `Services: ${d.services}`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+  chipDays: (n) => `Ready in ${n} days`,
+  nextDays: (n) => `In about ${n} days your site is ready and we send it to you on WhatsApp.`,
+  highDemand: "We are receiving a lot of requests: your site joins the queue and we will message you on WhatsApp as soon as we start.",
   footer: {
     disclaimer: "MachineMind is a private company. This program is not affiliated with or sponsored by the Government of El Salvador.",
     privacy: "Your information is only used to build your website.",

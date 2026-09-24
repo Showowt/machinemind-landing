@@ -2,16 +2,19 @@
  * POST /api/web-gratis/submit — final submission of the free-website form.
  *
  * Flips the draft to 'nuevo' with the price + share acknowledgements recorded,
- * attaches the files that actually exist in storage, then notifies the team
- * (Telegram to every chat + email) after the response. Idempotent: a second
- * submit of an already-submitted draft returns the same result without
- * re-notifying. If the database write fails, the raw request is pushed to
- * Telegram so the lead is never silently lost.
+ * attaches the files that actually exist in storage, queues the team alert in
+ * the outbox and drains it right after the response (the 1-minute cron picks
+ * up anything left). Idempotent: re-submitting an already-submitted draft
+ * returns the same result and never re-alerts (outbox dedupe key). If the
+ * database write fails on the client's final attempt, the raw request is
+ * pushed straight to Telegram so the lead is never silently lost.
  */
 import { after } from "next/server";
+import { sendCapiEvent } from "@/lib/web-gratis/capi";
 import { MAX_LOGOS, MAX_PHOTOS, splitServices, toE164 } from "@/lib/web-gratis/config";
 import { fail, ok } from "@/lib/web-gratis/http";
-import { emailSubmitted, notifySaveFailed, notifySubmitted } from "@/lib/web-gratis/notify";
+import { notifySaveFailed } from "@/lib/web-gratis/notify";
+import { drainIfQuiet, enqueue } from "@/lib/web-gratis/outbox";
 import { submitRequestSchema } from "@/lib/web-gratis/schema";
 import {
   findReferrer,
@@ -22,13 +25,14 @@ import {
   listDraftFiles,
   newReferralCode,
   recentDraftsFromIp,
-  signedLinks,
   SIGNUPS_TABLE,
-  type Referrer,
   type WebGratisSignup,
 } from "@/lib/web-gratis/server";
 
-const SUBMITS_PER_IP_PER_HOUR = 20;
+export const maxDuration = 60;
+
+/** Obvious-bot ceiling only (shared carrier IPs) — see draft route. */
+const HARD_PER_IP_PER_HOUR = 1000;
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -88,18 +92,16 @@ export async function POST(request: Request) {
 
     const { data: existing, error: readError } = await db
       .from(SIGNUPS_TABLE)
-      .select("*")
+      .select("id, status, referral_code, business_name")
       .eq("id", req.draftId)
       .maybeSingle();
     if (readError) throw readError;
 
     let row: WebGratisSignup | null = null;
-    let referrer: Referrer | null = null;
 
     if (existing) {
-      const current = existing as WebGratisSignup;
-      if (current.status !== "borrador") {
-        return ok({ referralCode: current.referral_code, businessName: current.business_name });
+      if (existing.status !== "borrador") {
+        return ok({ referralCode: existing.referral_code as string, businessName: existing.business_name as string });
       }
       const { data, error } = await db
         .from(SIGNUPS_TABLE)
@@ -119,20 +121,12 @@ export async function POST(request: Request) {
         throw new Error("draft vanished during submit");
       }
       row = data as WebGratisSignup;
-      if (row.referred_by_id) {
-        const { data: ref } = await db
-          .from(SIGNUPS_TABLE)
-          .select("id, business_name, whatsapp, referral_code")
-          .eq("id", row.referred_by_id)
-          .maybeSingle();
-        referrer = (ref as Referrer | null) ?? null;
-      }
     } else {
       // No draft on the server (step-1 save never landed, or a restored old draft).
       const hash = ipHash(request);
-      if ((await recentDraftsFromIp(hash)) >= SUBMITS_PER_IP_PER_HOUR) return fail(429, "rate_limited");
+      if ((await recentDraftsFromIp(hash)) >= HARD_PER_IP_PER_HOUR) return fail(429, "rate_limited");
       const found = await findReferrer(req.attribution?.ref);
-      referrer = found && found.whatsapp !== whatsapp ? found : null;
+      const referrer = found && found.whatsapp !== whatsapp ? found : null;
       const a = req.attribution ?? {};
       for (let attempt = 0; attempt < 4 && !row; attempt++) {
         const { data, error } = await db
@@ -156,6 +150,11 @@ export async function POST(request: Request) {
           .select("*")
           .single();
         if (error && isReferralCodeCollision(error)) continue;
+        if (error && error.code === "23505" && /_pkey/.test(error.message ?? "")) {
+          // A concurrent request created this draft first — report whichever state won.
+          const { data: winner } = await db.from(SIGNUPS_TABLE).select("referral_code, business_name").eq("id", req.draftId).single();
+          if (winner) return ok({ referralCode: winner.referral_code as string, businessName: winner.business_name as string });
+        }
         if (error) {
           if (isDuplicateBusiness(error)) return fail(409, "duplicate");
           throw error;
@@ -165,40 +164,59 @@ export async function POST(request: Request) {
       if (!row) throw new Error("referral code generation exhausted");
     }
 
-    const { count: otherRequests } = await db
-      .from(SIGNUPS_TABLE)
-      .select("id", { count: "exact", head: true })
-      .eq("whatsapp", row.whatsapp)
-      .neq("id", row.id)
-      .neq("status", "borrador");
-    const links = await signedLinks([...row.logo_paths, ...row.photo_paths]);
-
     const saved = row;
-    const ctx = { referrer, links, otherRequestsSameWhatsapp: otherRequests ?? 0 };
+    const queued = await enqueue("submitted", `submitted:${saved.id}`, saved.id);
     after(async () => {
-      await Promise.all([notifySubmitted(saved, ctx), emailSubmitted(saved, ctx)]);
+      if (queued) {
+        await drainIfQuiet().catch((error: unknown) =>
+          console.error("[WebGratis:submit] drain after submit failed (cron will retry)", error),
+        );
+      } else {
+        await notifySaveFailed(
+          {
+            negocio: saved.business_name,
+            rubro: saved.business_type,
+            ciudad: saved.city,
+            whatsapp: saved.whatsapp,
+            servicios: saved.services.join(", "),
+            draft: saved.id,
+          },
+          "La solicitud SÍ se guardó, pero la alerta no pudo entrar a la cola. Revise el tablero.",
+        );
+      }
+      await sendCapiEvent({
+        eventName: "CompleteRegistration",
+        eventId: `${saved.id}-complete`,
+        whatsapp: saved.whatsapp,
+        externalId: saved.id,
+        sourceUrl: saved.landing_url,
+        fbclid: saved.fbclid,
+        request,
+      });
     });
 
     return ok({ referralCode: saved.referral_code, businessName: saved.business_name });
   } catch (error) {
     console.error("[WebGratis:submit]", error);
-    const reason = error instanceof Error ? error.message : JSON.stringify(error);
-    after(() =>
-      notifySaveFailed(
-        {
-          negocio: content.business_name,
-          rubro: content.business_type,
-          ciudad: content.city,
-          whatsapp: content.whatsapp,
-          servicios: content.services.join(", "),
-          horario: content.hours,
-          instagram: content.instagram,
-          facebook: content.facebook,
-          draft: req.draftId,
-        },
-        reason,
-      ),
-    );
+    if (req.attempt === undefined || req.attempt >= 2) {
+      const reason = error instanceof Error ? error.message : JSON.stringify(error);
+      after(() =>
+        notifySaveFailed(
+          {
+            negocio: content.business_name,
+            rubro: content.business_type,
+            ciudad: content.city,
+            whatsapp: content.whatsapp,
+            servicios: content.services.join(", "),
+            horario: content.hours,
+            instagram: content.instagram,
+            facebook: content.facebook,
+            draft: req.draftId,
+          },
+          reason,
+        ),
+      );
+    }
     return fail(500, "save_failed");
   }
 }

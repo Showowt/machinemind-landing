@@ -1296,3 +1296,23 @@ textarea.input {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* ─── Capacity notice + step-1 consent ───────────────────────────────────── */
+
+.demand {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border-left: 2px solid #00e5ff;
+  background: rgba(0, 229, 255, 0.07);
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--wg-fg);
+  max-width: 46ch;
+}
+
+.consent {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--wg-dim);
+}

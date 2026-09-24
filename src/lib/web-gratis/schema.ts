@@ -47,8 +47,12 @@ export const step2Schema = z.object({
   siteGoal: z.enum(SITE_GOALS).optional().nullable(),
 });
 
+/** Client retry counter (0-based); the server alerts the team only on the final try. */
+const attemptSchema = z.number().int().min(0).max(10).optional();
+
 export const draftRequestSchema = z.object({
   draftId: z.uuid(),
+  attempt: attemptSchema,
   step: z.union([z.literal(1), z.literal(2), z.literal(3)]),
   lang: z.enum(["es", "en"]).default("es"),
   website: z.string().max(200).optional(), // honeypot — humans never see it
@@ -58,6 +62,7 @@ export const draftRequestSchema = z.object({
 
 export const submitRequestSchema = z.object({
   draftId: z.uuid(),
+  attempt: attemptSchema,
   lang: z.enum(["es", "en"]).default("es"),
   website: z.string().max(200).optional(),
   fields: step1Schema.and(step2Schema),

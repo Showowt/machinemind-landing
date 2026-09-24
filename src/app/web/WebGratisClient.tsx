@@ -198,6 +198,17 @@ async function postJson<T>(url: string, body: unknown): Promise<ApiResult<T>> {
   }
 }
 
+/** Retries network errors and 5xx (flaky mobile data), never 4xx; tells the server which try this is. */
+async function postWithRetry<T>(url: string, body: Record<string, unknown>, tries = 3): Promise<ApiResult<T>> {
+  let last: ApiResult<T> = { ok: false, status: 0, data: null, error: "network" };
+  for (let attempt = 0; attempt < tries; attempt++) {
+    last = await postJson<T>(url, { ...body, attempt });
+    if (last.ok || (last.status >= 400 && last.status < 500)) return last;
+    if (attempt < tries - 1) await new Promise((r) => window.setTimeout(r, attempt === 0 ? 800 : 2000));
+  }
+  return last;
+}
+
 function track(event: string, params: Record<string, unknown>, eventID?: string): void {
   try {
     if (typeof window.fbq === "function") window.fbq("track", event, params, eventID ? { eventID } : undefined);
@@ -338,8 +349,16 @@ function validationText(t: Copy, key: ValidationKey | undefined): string | undef
   return key === "invalidWhatsappGeneric" ? t.errors.invalid_whatsapp : t.validation[key];
 }
 
-function whatsappHelpHref(t: Copy, business: string): string {
-  return `https://wa.me/${MM_WHATSAPP}?text=${encodeURIComponent(t.helpText(business.trim()))}`;
+/** When saving fails, the WhatsApp fallback carries everything they typed — the lead survives. */
+function whatsappHelpHref(t: Copy, f: Fields): string {
+  const text = t.fallbackText({
+    business: f.businessName.trim(),
+    type: f.businessType.trim(),
+    city: f.city.trim(),
+    whatsapp: toE164(f.countryCode, f.whatsappLocal) ?? f.whatsappLocal.trim(),
+    services: f.services.trim().slice(0, 300),
+  });
+  return `https://wa.me/${MM_WHATSAPP}?text=${encodeURIComponent(text)}`;
 }
 
 // ─── Presentational pieces (module scope so inputs never remount) ───────────
@@ -507,6 +526,8 @@ function Skeleton() {
 interface DoneCardProps {
   t: Copy;
   submitted: Submitted;
+  next: string[];
+  highDemand: boolean;
   canShare: boolean;
   copied: boolean;
   onCopy: (link: string) => void;
@@ -514,7 +535,7 @@ interface DoneCardProps {
   onAnother: () => void;
 }
 
-function DoneCard({ t, submitted, canShare, copied, onCopy, onShare, onAnother }: DoneCardProps) {
+function DoneCard({ t, submitted, next, highDemand, canShare, copied, onCopy, onShare, onAnother }: DoneCardProps) {
   const link = referralLink(submitted.referralCode);
   const shareText = t.done.shareText(submitted.businessName, link);
   const confirmHref = `https://wa.me/${MM_WHATSAPP}?text=${encodeURIComponent(
@@ -528,13 +549,14 @@ function DoneCard({ t, submitted, canShare, copied, onCopy, onShare, onAnother }
       </svg>
       <h2 className={styles.doneTitle}>{t.done.title(submitted.businessName)}</h2>
       <p className={styles.doneBody}>{t.done.body}</p>
+      {highDemand ? <p className={styles.demand}>{t.highDemand}</p> : null}
       <a className={styles.btnWa} href={confirmHref} target="_blank" rel="noopener noreferrer">
         {t.done.confirm}
       </a>
 
       <h3 className={styles.kickerSmall}>{t.done.nextTitle}</h3>
       <ol className={styles.timeline}>
-        {t.done.next.map((line, i) => (
+        {next.map((line, i) => (
           <li key={line}>
             <span className={styles.mono}>{String(i + 1).padStart(2, "0")}</span>
             <span>{line}</span>
@@ -607,6 +629,10 @@ export default function WebGratisClient() {
   const [copied, setCopied] = useState(false);
   const [canShare, setCanShare] = useState(false);
   const [honeypot, setHoneypot] = useState("");
+  const [config, setConfig] = useState<{ deliveryDays: number | null; highDemand: boolean }>({
+    deliveryDays: null,
+    highDemand: false,
+  });
   const formColRef = useRef<HTMLElement>(null);
   const draftIdRef = useRef("");
   const filesRef = useRef(new Map<string, Prepared>());
@@ -692,6 +718,20 @@ export default function WebGratisClient() {
     document.documentElement.lang = lang === "es" ? "es-SV" : "en";
   }, [lang]);
 
+  // Capacity settings from the ops board ("lista en X días", high-demand notice).
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/web-gratis/config")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json: { data?: { deliveryDays: number | null; highDemand: boolean } | null } | null) => {
+        if (!cancelled && json?.data) setConfig(json.data);
+      })
+      .catch((error: unknown) => console.error("[WebGratis] config", error));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // "{Negocio} le recomendó este programa."
   useEffect(() => {
     const code = attribution.ref;
@@ -737,7 +777,7 @@ export default function WebGratisClient() {
   }
 
   function saveDraft(target: Step) {
-    return postJson<{ referralCode: string; status: string }>("/api/web-gratis/draft", {
+    return postWithRetry<{ referralCode: string; status: string }>("/api/web-gratis/draft", {
       draftId: draftIdRef.current,
       step: target,
       lang,
@@ -812,7 +852,7 @@ export default function WebGratisClient() {
     }
     setBusy("submitting");
     setServerError(null);
-    const res = await postJson<{ referralCode: string; businessName: string }>("/api/web-gratis/submit", {
+    const res = await postWithRetry<{ referralCode: string; businessName: string }>("/api/web-gratis/submit", {
       draftId: draftIdRef.current,
       lang,
       website: honeypot,
@@ -842,7 +882,7 @@ export default function WebGratisClient() {
 
   async function runUpload(id: string, kind: UploadKind, file: Prepared, allowRecover: boolean): Promise<void> {
     patchUpload(id, { status: "uploading", progress: 0.02, problem: null });
-    const sign = await postJson<{ path: string; signedUrl: string }>("/api/web-gratis/upload-url", {
+    const sign = await postWithRetry<{ path: string; signedUrl: string }>("/api/web-gratis/upload-url", {
       draftId: draftIdRef.current,
       kind,
       contentType: file.type,
@@ -971,6 +1011,10 @@ export default function WebGratisClient() {
   }
 
   const err = (key: ErrorKey) => validationText(t, errors[key]);
+  const chips = config.deliveryDays ? [t.chips[0], t.chipDays(config.deliveryDays), t.chips[2]] : [...t.chips];
+  const doneNext = config.deliveryDays
+    ? t.done.next.map((line, i) => (i === 1 ? t.nextDays(config.deliveryDays as number) : line))
+    : t.done.next;
   const serverMessage = serverError ? t.errors[serverError] : null;
 
   return (
@@ -1007,8 +1051,9 @@ export default function WebGratisClient() {
             </h1>
             <p className={`${styles.lede} ${styles.rise} ${styles.d2}`}>{t.lede}</p>
             {referrerName ? <p className={styles.referred}>{t.referredBy(referrerName)}</p> : null}
+            {config.highDemand ? <p className={styles.demand}>{t.highDemand}</p> : null}
             <ul className={`${styles.chips} ${styles.rise} ${styles.d3}`}>
-              {t.chips.map((chip) => (
+              {chips.map((chip) => (
                 <li key={chip}>{chip}</li>
               ))}
             </ul>
@@ -1030,6 +1075,8 @@ export default function WebGratisClient() {
               <DoneCard
                 t={t}
                 submitted={submitted}
+                next={doneNext}
+                highDemand={config.highDemand}
                 canShare={canShare}
                 copied={copied}
                 onCopy={(link) => void copyLink(link)}
@@ -1141,6 +1188,7 @@ export default function WebGratisClient() {
                             className={errors.whatsappLocal ? `${styles.input} ${styles.inputErr}` : styles.input}
                           />
                         </div>
+                        <p className={styles.consent}>{t.fields.whatsapp.consent}</p>
                       </Field>
                     </>
                   ) : null}
@@ -1357,7 +1405,7 @@ export default function WebGratisClient() {
                     <p>{serverMessage}</p>
                     <a
                       className={styles.alertLink}
-                      href={whatsappHelpHref(t, fields.businessName)}
+                      href={whatsappHelpHref(t, fields)}
                       target="_blank"
                       rel="noopener noreferrer"
                     >
