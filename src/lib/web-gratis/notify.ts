@@ -265,6 +265,150 @@ export function systemHtml(text: string): string {
   return `⚠️ <b>WEB GRATIS — sistema</b>\n${esc(text)}`;
 }
 
+// ─── Client-website alerts (sent by the outbox as Telegram + email) ─────────
+
+export interface SiteAlertInfo {
+  business: string;
+  city: string;
+  whatsapp: string;
+  country: string;
+  slug: string;
+  version: number;
+  previewUrl: string | null;
+  publicUrl: string;
+  /** The generator's note for the team. */
+  notes?: string | null;
+  /** Client files the generator couldn't read. */
+  unread?: string[];
+  /** Guards that fired (prices / claims removed, contrast fixes). */
+  guards?: string[];
+  error?: string | null;
+  attempts?: number;
+  /** Publish: DNS / delivery warnings. */
+  warnings?: string[];
+}
+
+export interface SiteAlertMessage {
+  html: string;
+  text: string;
+  subject: string;
+  emailHtml: string;
+}
+
+function siteAlertEmail(title: string, rows: [string, string | null][], cta: { href: string; label: string } | null): string {
+  const body = rows
+    .filter(([, v]) => v)
+    .map(
+      ([label, value]) =>
+        `<tr><td style="padding:8px 12px;color:#1e9bf0;font-weight:600;vertical-align:top;width:130px">${esc(label)}</td><td style="padding:8px 12px;color:#f0f0f3;white-space:pre-wrap">${esc(value)}</td></tr>`,
+    )
+    .join("");
+  return `
+  <div style="font-family:system-ui,-apple-system,sans-serif;max-width:640px;margin:0 auto;background:#06060a;color:#f0f0f3;padding:28px;border-top:3px solid #1e9bf0">
+    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.2em;color:#1e9bf0;text-transform:uppercase">Web gratis · sitio del cliente</p>
+    <h1 style="margin:0 0 16px;font-size:21px">${esc(title)}</h1>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;background:rgba(255,255,255,0.03)">${body}</table>
+    ${cta ? `<p style="margin:20px 0 0"><a href="${esc(cta.href)}" style="display:inline-block;padding:13px 24px;border:1px solid #1e9bf0;color:#f0f0f3;text-decoration:none">${esc(cta.label)}</a></p>` : ""}
+    <p style="margin:14px 0 0"><a href="${BOARD_URL}" style="color:#1e9bf0">Abrir tablero</a></p>
+  </div>`;
+}
+
+/** "🟢 WEB LISTA PARA REVISAR — <business>" with the preview link. */
+export function siteReadyMessage(i: SiteAlertInfo): SiteAlertMessage {
+  const unread = i.unread ?? [];
+  const guards = i.guards ?? [];
+  const html = [
+    `🟢 <b>WEB LISTA PARA REVISAR — ${esc(clip(i.business, 80))}</b>`,
+    `${esc(i.country)} · ${esc(clip(i.city, 40))} · 📱 ${esc(i.whatsapp)} · v${i.version}`,
+    ``,
+    i.previewUrl ? `👀 <a href="${esc(i.previewUrl)}">Vista previa</a>` : `👀 Vista previa: falta MM_SITES_URL`,
+    `🌐 Al publicar: ${esc(i.publicUrl)}`,
+    i.notes ? `📝 ${esc(clip(i.notes, 500))}` : null,
+    unread.length ? `📎 Sin leer: ${esc(clip(unread.join(" · "), 400))}` : null,
+    guards.length ? `🛡 ${esc(clip(guards.join(" · "), 400))}` : null,
+    ``,
+    `📋 <a href="${BOARD_URL}">Tablero → Sitio web → Publicar</a>`,
+  ]
+    .filter((l): l is string => l !== null)
+    .join("\n");
+  const text = `WEB LISTA PARA REVISAR — ${i.business} (${i.city}) v${i.version}. Vista previa: ${i.previewUrl ?? "falta MM_SITES_URL"}`;
+  return {
+    html,
+    text,
+    subject: `🟢 Web lista para revisar — ${i.business} (${i.city})`,
+    emailHtml: siteAlertEmail(
+      `Web lista para revisar — ${i.business}`,
+      [
+        ["Negocio", `${i.business} — ${i.city} (${i.country})`],
+        ["WhatsApp", i.whatsapp],
+        ["Versión", `v${i.version}`],
+        ["Al publicar", i.publicUrl],
+        ["Nota", i.notes ?? null],
+        ["Sin leer", unread.length ? unread.join("\n") : null],
+        ["Filtros", guards.length ? guards.join("\n") : null],
+      ],
+      i.previewUrl ? { href: i.previewUrl, label: "Ver vista previa" } : null,
+    ),
+  };
+}
+
+/** "🚨 URGENTE — no se pudo generar la web de <business>". */
+export function siteFailedMessage(i: SiteAlertInfo): SiteAlertMessage {
+  const html = [
+    `🚨 <b>URGENTE — no se pudo generar la web de ${esc(clip(i.business, 80))}</b>`,
+    `${esc(i.country)} · ${esc(clip(i.city, 40))} · 📱 ${esc(i.whatsapp)}`,
+    ``,
+    `${esc(clip(i.error ?? "error desconocido", 700))}${i.attempts ? ` (${i.attempts} intento${i.attempts === 1 ? "" : "s"})` : ""}`,
+    ``,
+    `📋 <a href="${BOARD_URL}">Tablero → Sitio web → «Generar ahora»</a> para reintentar (puede dar instrucciones), o ármela a mano.`,
+  ].join("\n");
+  return {
+    html,
+    text: `URGENTE — no se pudo generar la web de ${i.business}: ${i.error ?? "error"}`,
+    subject: `🚨 URGENTE — no se pudo generar la web de ${i.business}`,
+    emailHtml: siteAlertEmail(
+      `No se pudo generar la web de ${i.business}`,
+      [
+        ["Negocio", `${i.business} — ${i.city} (${i.country})`],
+        ["WhatsApp", i.whatsapp],
+        ["Error", i.error ?? "desconocido"],
+        ["Intentos", i.attempts ? String(i.attempts) : null],
+        ["Qué hacer", "Tablero → Sitio web → «Generar ahora» (con instrucciones si hace falta), o armarla a mano."],
+      ],
+      null,
+    ),
+  };
+}
+
+/** "✅ WEB PUBLICADA — <business> → <url>". */
+export function sitePublishedMessage(i: SiteAlertInfo): SiteAlertMessage {
+  const warnings = i.warnings ?? [];
+  const html = [
+    `✅ <b>WEB PUBLICADA — ${esc(clip(i.business, 80))}</b> → <a href="${esc(i.publicUrl)}">${esc(i.publicUrl)}</a>`,
+    `${esc(i.country)} · ${esc(clip(i.city, 40))} · 📱 ${esc(i.whatsapp)} · v${i.version}`,
+    `«Web lista» sale sola por WhatsApp ~10 min después (7:00–20:59).`,
+    warnings.length ? `⚠️ ${esc(clip(warnings.join(" · "), 500))}` : null,
+  ]
+    .filter((l): l is string => l !== null)
+    .join("\n");
+  return {
+    html,
+    text: `WEB PUBLICADA — ${i.business} → ${i.publicUrl}`,
+    subject: `✅ Web publicada — ${i.business} → ${i.publicUrl}`,
+    emailHtml: siteAlertEmail(
+      `Web publicada — ${i.business}`,
+      [
+        ["Negocio", `${i.business} — ${i.city} (${i.country})`],
+        ["WhatsApp", i.whatsapp],
+        ["Dirección", i.publicUrl],
+        ["Versión", `v${i.version}`],
+        ["Avisos", warnings.length ? warnings.join("\n") : null],
+      ],
+      { href: i.publicUrl, label: "Abrir la web" },
+    ),
+  };
+}
+
 // ─── Email ──────────────────────────────────────────────────────────────────
 
 export async function sendSubmittedEmail(row: WebGratisSignup, ctx: LeadContext): Promise<SendResult> {
@@ -416,6 +560,27 @@ export async function sendDigestEmail(
     const { error } = await resend.emails.send(
       { from: FROM_EMAIL, to: TEAM_EMAIL, subject: `🟢 Web gratis: ${rows.length} solicitudes nuevas`, html },
       { idempotencyKey },
+    );
+    if (!error) return { ok: true };
+    const name = (error as { name?: string }).name ?? "";
+    const message = `resend ${name}: ${error.message}`;
+    if (name === "rate_limit_exceeded" || name === "concurrent_idempotent_requests") return { ok: false, retryAfterSec: 2, error: message };
+    if (name === "application_error" || name === "internal_server_error") return { ok: false, retryAfterSec: 30, error: message };
+    return { ok: false, permanent: true, error: message };
+  } catch (error) {
+    return { ok: false, retryAfterSec: 30, error: `resend network: ${String(error)}` };
+  }
+}
+
+/** One team e-mail for a client-website alert (ready / failed / published). */
+export async function sendAlertEmail(subject: string, html: string, idempotencyKey: string): Promise<SendResult> {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  if (!apiKey) return { ok: false, permanent: true, error: "RESEND_API_KEY missing" };
+  try {
+    const resend = new Resend(apiKey);
+    const { error } = await resend.emails.send(
+      { from: FROM_EMAIL, to: TEAM_EMAIL, subject, html },
+      { idempotencyKey: idempotencyKey.slice(0, 256) },
     );
     if (!error) return { ok: true };
     const name = (error as { name?: string }).name ?? "";

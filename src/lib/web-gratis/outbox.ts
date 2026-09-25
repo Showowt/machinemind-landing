@@ -10,6 +10,7 @@
  */
 import {
   abandonedDigests,
+  sendAlertEmail,
   sendDigestEmail,
   sendSubmittedEmail,
   sendTelegram,
@@ -26,12 +27,33 @@ export const OUTBOX_TABLE = "web_gratis_outbox";
 
 type Kind = "submitted" | "abandoned" | "system";
 
+/**
+ * Client-website alerts. Stored as kind 'system' (the table's CHECK allows only
+ * submitted / abandoned / system) with `payload.alert` set; unlike plain system
+ * alerts they carry their own Telegram HTML and also go out by e-mail.
+ */
+export type SiteAlertKind = "site_ready" | "site_failed" | "site_published";
+const SITE_ALERT_KINDS: readonly string[] = ["site_ready", "site_failed", "site_published"];
+
+interface OutboxPayload {
+  tg_done?: string[];
+  text?: string;
+  alert?: SiteAlertKind;
+  html?: string;
+  subject?: string;
+  email_html?: string;
+}
+
+function isSiteAlert(r: { kind: Kind; payload: OutboxPayload | null }): boolean {
+  return r.kind === "system" && !!r.payload?.alert && SITE_ALERT_KINDS.includes(r.payload.alert);
+}
+
 interface OutboxRow {
   id: number;
   dedupe_key: string;
   kind: Kind;
   signup_id: string | null;
-  payload: { tg_done?: string[]; text?: string } | null;
+  payload: OutboxPayload | null;
   status: string;
   telegram_done: boolean;
   email_done: boolean;
@@ -97,6 +119,22 @@ export function enqueueSystem(key: string, text: string): Promise<boolean> {
   return enqueue("system", `system:${key}`, null, { text });
 }
 
+/** Client-website alert (Telegram HTML + e-mail), deduplicated by key. */
+export function enqueueSiteAlert(
+  kind: SiteAlertKind,
+  key: string,
+  signupId: string | null,
+  message: { html: string; text: string; subject: string; emailHtml: string },
+): Promise<boolean> {
+  return enqueue("system", `site:${key}`.slice(0, 200), signupId, {
+    alert: kind,
+    text: message.text,
+    html: message.html,
+    subject: message.subject,
+    email_html: message.emailHtml,
+  });
+}
+
 // ─── Drain ──────────────────────────────────────────────────────────────────
 
 export async function drainOutbox({ budgetMs, limit = 60 }: { budgetMs: number; limit?: number }): Promise<DrainReport> {
@@ -123,7 +161,7 @@ export async function drainOutbox({ budgetMs, limit = 60 }: { budgetMs: number; 
   for (const r of rows) {
     state.set(r.id, {
       tgDone: new Set(r.payload?.tg_done ?? []),
-      emailDone: r.email_done || r.kind !== "submitted",
+      emailDone: r.email_done || (r.kind !== "submitted" && !isSiteAlert(r)),
       retryAfterSec: null,
       touched: false,
       errors: [],
@@ -173,7 +211,9 @@ export async function drainOutbox({ budgetMs, limit = 60 }: { budgetMs: number; 
     const abandoned = pending.filter((r) => r.kind === "abandoned");
 
     const plan: { rows: OutboxRow[]; html: string; photos?: string[] }[] = [];
-    for (const r of system) plan.push({ rows: [r], html: systemHtml(String(r.payload?.text ?? "")) });
+    for (const r of system) {
+      plan.push({ rows: [r], html: isSiteAlert(r) && r.payload?.html ? r.payload.html : systemHtml(String(r.payload?.text ?? "")) });
+    }
     if (submitted.length <= INDIVIDUAL_MAX) {
       for (const r of submitted) {
         const lead = leadOf(r);
@@ -255,6 +295,27 @@ export async function drainOutbox({ budgetMs, limit = 60 }: { budgetMs: number; 
     }
     if (res.ok) report.emails++;
     await sleep(550); // Resend allows ~2 requests/second
+  }
+
+  // ── Email: client-website alerts (one each; they're rare) ──
+  for (const r of live.filter((row) => isSiteAlert(row) && !state.get(row.id)!.emailDone)) {
+    if (Date.now() > deadline - 1500) break;
+    const st = state.get(r.id)!;
+    st.touched = true;
+    const subject = r.payload?.subject ?? "Web gratis — sitio del cliente";
+    const html = r.payload?.email_html ?? systemHtml(String(r.payload?.text ?? ""));
+    const res = await sendAlertEmail(subject, html, `web-gratis-${r.dedupe_key}`);
+    if (res.ok) {
+      st.emailDone = true;
+      report.emails++;
+    } else if ("retryAfterSec" in res) {
+      st.retryAfterSec = Math.max(st.retryAfterSec ?? 0, res.retryAfterSec);
+      st.errors.push(res.error);
+    } else {
+      st.emailDone = true; // permanent (quota, no key): Telegram + board still carry it
+      st.errors.push(res.error);
+    }
+    await sleep(550);
   }
 
   // ── Persist outcomes ──

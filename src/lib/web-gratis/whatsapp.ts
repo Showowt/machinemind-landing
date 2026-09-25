@@ -622,6 +622,11 @@ function stateQuery(only?: string[]) {
   return viewQuery(only).is("opted_out_at", null).is("no_whatsapp_at", null);
 }
 
+/** D5 harness rows ("ZZ <run> …") — never acted on by a general production sweep. */
+export function isTestSignupName(name: string | null | undefined): boolean {
+  return /^ZZ /.test(name ?? "");
+}
+
 async function rows(q: PromiseLike<{ data: unknown; error: unknown }>): Promise<WaStateRow[]> {
   const { data, error } = await q;
   if (error) throw error;
@@ -726,6 +731,13 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
   const spacingMs = options.spacingMs ?? 300;
   const deadline = options.deadline ?? Date.now() + 25_000;
   const only = options.onlySignupIds;
+  // Test rows ("ZZ …", the D5 harness) share the production DB. A general sweep (the live cron)
+  // must never act on them — they carry random real-looking numbers (2026-09-25: the live cron sent
+  // real WhatsApp confirmations to test rows mid-harness). Harness runs always pass onlySignupIds.
+  const liveRows = async (q: PromiseLike<{ data: unknown; error: unknown }>): Promise<WaStateRow[]> => {
+    const list = await rows(q);
+    return only ? list : list.filter((r) => !isTestSignupName(r.business_name));
+  };
   const db = getDb();
   const now = deps.now();
   const nowIso = iso(now);
@@ -783,7 +795,7 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
       const ids = [...new Set(due.map((r) => r.signup_id).filter((id): id is string => !!id))];
       const states = new Map<string, WaStateRow>();
       if (ids.length) {
-        for (const s of await rows(db.from(STATE_VIEW).select("*").in("id", ids))) states.set(s.id, s);
+        for (const s of await liveRows(db.from(STATE_VIEW).select("*").in("id", ids))) states.set(s.id, s);
       }
       // Rows a person queued can be for signups outside the view (e.g. 'activa').
       const missingManual = [
@@ -792,7 +804,10 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
       if (missingManual.length) {
         const { data: direct, error: directError } = await db.from(SIGNUPS_TABLE).select(SUBJECT_COLUMNS).in("id", missingManual);
         if (directError) throw directError;
-        for (const d of (direct ?? []) as unknown as Omit<WaStateRow, "templates" | "last_template_at">[]) states.set(d.id, asState(d));
+        for (const d of (direct ?? []) as unknown as Omit<WaStateRow, "templates" | "last_template_at">[]) {
+          if (!only && isTestSignupName(d.business_name)) continue;
+          states.set(d.id, asState(d));
+        }
       }
       for (const row of due) {
         const template = row.template as TemplateName;
@@ -855,7 +870,7 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
   // T1 — confirmation: 15 min after submitting (their own chat usually comes first),
   // skipped when they already wrote to us, capped per phone and per network.
   try {
-    const t1 = await rows(
+    const t1 = await liveRows(
       stateQuery(only)
         .in("status", BUILDING)
         .not("submitted_at", "is", null)
@@ -897,7 +912,7 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
 
   // T2 — site ready (10 min after "→ Entregada", so a "Web lista" sent by hand is seen first).
   try {
-    const t2 = await rows(
+    const t2 = await liveRows(
       stateQuery(only)
         .in("status", LIVE_FREE)
         .not("site_url", "is", null)
@@ -929,7 +944,7 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
   const waitingForPayLink: string[] = [];
   for (const r of reminders) {
     try {
-      const due = await rows(
+      const due = await liveRows(
         stateQuery(only)
           .in("status", LIVE_FREE)
           .is("activated_at", null)
@@ -963,7 +978,7 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
   // earlier reminder did. Never-asked clients are held and reported once a day.
   // Clients we can't / mustn't message (opted out, no WhatsApp, said no) pause at +3.
   try {
-    const candidates = await rows(
+    const candidates = await liveRows(
       viewQuery(only)
         .in("status", LIVE_FREE)
         .is("activated_at", null)
@@ -1050,14 +1065,14 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
         .is("activated_at", null)
         .not("templates", "cs", "{cqv_web_rescue}")
         .or(`last_template_at.is.null,last_template_at.lt.${gapCutoff}`);
-    const live = await rows(
+    const live = await liveRows(
       base()
         .in("status", LIVE_FREE)
         .lte("delivered_at", iso(new Date(now.getTime() - 21 * DAY_MS)))
         .order("delivered_at", { ascending: true })
         .limit(50),
     );
-    const paused = await rows(
+    const paused = await liveRows(
       base()
         .eq("status", "pausada")
         .lte("paused_at", iso(new Date(now.getTime() - 30 * DAY_MS)))

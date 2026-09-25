@@ -7,11 +7,16 @@
  *    notice / rescue + auto-pause), max 25 sends, inside the send windows.
  * 4. Referral credits a failed write left behind are granted (idempotent).
  * 5. Drains the outbox until it's empty or the time budget runs out.
+ * 0. First of all it kicks /api/web-gratis/sites/run (client-website
+ *    generation, one site per minute) as a separate invocation, without
+ *    awaiting it on this path — a 1–2 minute model call must never delay the
+ *    WhatsApp scheduler or the alerts.
  * Vercel sends `Authorization: Bearer $CRON_SECRET`; without CRON_SECRET set
  * the route refuses everything (fail closed).
  */
 import { timingSafeEqual } from "crypto";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import { SITE_ORIGIN } from "@/lib/web-gratis/config";
 import { sendTelegram, systemHtml, telegramChats } from "@/lib/web-gratis/notify";
 import { drainOutbox, enqueueSystem, runMaintenance, type DrainReport } from "@/lib/web-gratis/outbox";
 import { reconcileReferralCredits } from "@/lib/web-gratis/payments";
@@ -28,10 +33,33 @@ function authorized(request: Request): boolean {
   return given.length === expected.length && timingSafeEqual(given, expected);
 }
 
+/**
+ * Start the site generator in its own invocation (it answers as soon as it has
+ * claimed a site and generates after its response). Production calls the
+ * public domain; previews call their own deployment.
+ */
+function kickSiteGenerator(request: Request): Promise<void> {
+  const secret = process.env.CRON_SECRET?.trim() ?? "";
+  const origin = process.env.VERCEL_ENV === "production" ? SITE_ORIGIN : new URL(request.url).origin;
+  return fetch(`${origin}/api/web-gratis/sites/run`, {
+    headers: { authorization: `Bearer ${secret}` },
+    signal: AbortSignal.timeout(20_000),
+    cache: "no-store",
+  })
+    .then(async (res) => {
+      if (!res.ok) console.error("[WebGratis:cron] site generator kick", res.status, (await res.text().catch(() => "")).slice(0, 300));
+    })
+    .catch((error: unknown) => console.error("[WebGratis:cron] site generator kick failed", error));
+}
+
 export async function GET(request: Request) {
   if (!authorized(request)) {
     return NextResponse.json({ data: null, error: "unauthorized", message: null }, { status: 401 });
   }
+
+  // Runs concurrently with everything below; never awaited on the scheduler's path.
+  const siteKick = kickSiteGenerator(request);
+  after(() => siteKick);
 
   const started = Date.now();
   try {

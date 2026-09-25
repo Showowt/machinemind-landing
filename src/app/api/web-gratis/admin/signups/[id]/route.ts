@@ -35,6 +35,7 @@ import {
   svDate,
   type SignupStatus,
 } from "@/lib/web-gratis/server";
+import { revalidateSignupSite } from "@/lib/web-gratis/sites/mm-sites";
 import { queueManualTemplate, svDateOf } from "@/lib/web-gratis/whatsapp";
 
 const STATUSES = [
@@ -244,6 +245,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       throw error;
     }
     const saved = normalizeOpsRow(data as OpsSignup);
+
+    // The client's website hides while its signup is paused / cancelled / discarded and shows
+    // again when reopened (mm-sites joins on the signup): purge its cached page either way.
+    if (saved.status !== current.status && (CLOSED.includes(saved.status) || CLOSED.includes(current.status))) {
+      after(() => revalidateSignupSite(saved.id));
+    }
 
     const becameActive = saved.status === "activa" && current.status !== "activa";
     const creditDue = !!saved.activated_at && !!saved.referred_by_id && (becameActive || referralLinked);

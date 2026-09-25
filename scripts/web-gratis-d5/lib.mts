@@ -195,6 +195,18 @@ export async function cleanup(): Promise<string> {
   if (error) throw error;
   const ids = (rows ?? []).map((r: { id: string }) => r.id);
   let files = 0;
+  // Website images published for ZZ sites (web-gratis-public/<slug>/…); the site rows cascade with the signups.
+  let publicFiles = 0;
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data: sites } = await db.from("web_gratis_sites").select("slug").in("signup_id", ids.slice(i, i + 200));
+    for (const s of (sites ?? []) as { slug: string }[]) {
+      const { data: objs } = await db.storage.from("web-gratis-public").list(s.slug, { limit: 100 });
+      if (objs?.length) {
+        await db.storage.from("web-gratis-public").remove(objs.map((o: { name: string }) => `${s.slug}/${o.name}`));
+        publicFiles += objs.length;
+      }
+    }
+  }
   for (const id of ids) {
     const { data: objs } = await db.storage.from("web-gratis").list(id, { limit: 100 });
     if (objs?.length) {
@@ -218,5 +230,8 @@ export async function cleanup(): Promise<string> {
     : { count: 0 };
   const { count: evts } = await db.from("web_gratis_stripe_events").select("id", { count: "exact", head: true }).like("id", "evt_ZZ%");
   const { count: credits } = await db.from("web_gratis_referral_credits").select("id", { count: "exact", head: true });
-  return `cleanup: signups deleted=${ids.length} files=${files} | left: ZZ signups=${left} ZZ-phone messages=${msgs} ZZ stripe events=${evts} referral credits(total)=${credits}`;
+  const { count: sitesLeft } = ids.length
+    ? await db.from("web_gratis_sites").select("id", { count: "exact", head: true }).in("signup_id", ids.slice(0, 200))
+    : { count: 0 };
+  return `cleanup: signups deleted=${ids.length} files=${files} public site files=${publicFiles} | left: ZZ signups=${left} ZZ sites=${sitesLeft} ZZ-phone messages=${msgs} ZZ stripe events=${evts} referral credits(total)=${credits}`;
 }

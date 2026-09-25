@@ -20,6 +20,7 @@
  */
 import { cleanup, db, results, RUN } from "./lib.mts";
 import { runInProcess } from "./inproc.mts";
+import { runSites } from "./sites.mts";
 import { runHttp } from "./http.mts";
 
 const outboxBefore = await db.from("web_gratis_outbox").select("id", { count: "exact", head: true });
@@ -27,6 +28,7 @@ console.log(`RUN ${RUN} — outbox rows before: ${outboxBefore.count}`);
 let crashed: unknown = null;
 try {
   await runInProcess();
+  await runSites();
   await runHttp();
 } catch (error) {
   crashed = error;

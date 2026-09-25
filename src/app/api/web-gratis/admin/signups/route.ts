@@ -3,7 +3,9 @@
  * Returns one page of rows for a tab (optionally one country: SV | CO | OTHER),
  * per-country counts for the tab, board stats, settings, 1-hour signed links for
  * logos / photos / documents, file sizes for documents, referrer names, each
- * client's WhatsApp log (newest 25) and referral credits.
+ * client's WhatsApp log (newest 25) and referral credits, plus each signup's
+ * generated website (summary + 30-day stats, keyed by signup id) and which
+ * site integrations are configured.
  * Bearer WEB_GRATIS_ADMIN_TOKEN.
  */
 import {
@@ -23,6 +25,8 @@ import { fail, ok } from "@/lib/web-gratis/http";
 import { boardStats } from "@/lib/web-gratis/outbox";
 import { CREDITS_TABLE } from "@/lib/web-gratis/payments";
 import { getDb, SETTINGS_TABLE, SIGNUPS_TABLE, storage } from "@/lib/web-gratis/server";
+import type { SiteSummary } from "@/lib/web-gratis/sites/shared";
+import { siteSummaries, sitesConfig } from "@/lib/web-gratis/sites/summary";
 import { MESSAGES_TABLE } from "@/lib/web-gratis/whatsapp";
 
 export const dynamic = "force-dynamic";
@@ -138,7 +142,7 @@ export async function GET(request: Request) {
     };
 
     const ids = rows.map((r) => r.id);
-    const [stats, settingsRes, logRes, creditRes, countryCountList, fileInfo] = await Promise.all([
+    const [stats, settingsRes, logRes, creditRes, countryCountList, fileInfo, sites] = await Promise.all([
       boardStats(),
       db.from(SETTINGS_TABLE).select("delivery_days, high_demand, pay_link, demo_link, paypal_link").eq("id", 1).single(),
       ids.length
@@ -160,6 +164,10 @@ export async function GET(request: Request) {
         return null;
       }),
       documentFileInfo(rows),
+      siteSummaries(ids).catch((siteError: unknown): Record<string, SiteSummary> => {
+        console.error("[WebGratis:admin:list] sites", siteError);
+        return {};
+      }),
     ]);
     if (logRes.error) console.error("[WebGratis:admin:list] whatsapp log", logRes.error);
     if (creditRes.error) console.error("[WebGratis:admin:list] credits", creditRes.error);
@@ -221,6 +229,8 @@ export async function GET(request: Request) {
       referrers,
       messages,
       credits,
+      sites,
+      sitesConfig: sitesConfig(),
     });
   } catch (error) {
     console.error("[WebGratis:admin:list]", error);

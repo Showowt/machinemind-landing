@@ -5,6 +5,8 @@
  * in-process with captured alerts), so nothing reaches the real outbox / Telegram.
  */
 import { spawn, type ChildProcess } from "node:child_process";
+import http from "node:http";
+import { sampleContent } from "./sites.mts";
 import {
   ADMIN_TOKEN,
   BRIDGE_SECRET,
@@ -61,9 +63,37 @@ const stripeSig = (raw: string, secret = STRIPE_SECRET, t = Math.floor(Date.now(
   `t=${t},v1=${site.bridgeAuth.hmacHex(secret, `${t}.${raw}`)}`;
 const get = (path: string) => fetch(`${BASE}${path}`, { redirect: "manual" });
 
+/** Local stand-in for mm-sites' POST /api/revalidate (records {slug} + secret). */
+const MM_SECRET = "zz-test-revalidate-secret-0123456789";
+async function startMockMmSites(): Promise<{ url: string; purges: { slug: string; secret: string }[]; close: () => Promise<void> }> {
+  const purges: { slug: string; secret: string }[] = [];
+  const server = http.createServer((req, res) => {
+    let raw = "";
+    req.on("data", (c: Buffer) => (raw += c.toString("utf8")));
+    req.on("end", () => {
+      if (req.method === "POST" && req.url === "/api/revalidate") {
+        try {
+          purges.push({ slug: String((JSON.parse(raw) as { slug?: string }).slug), secret: String(req.headers["x-revalidate-secret"] ?? "") });
+        } catch {
+          purges.push({ slug: "(bad json)", secret: "" });
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end('{"revalidated":true}');
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = (server.address() as { port: number }).port;
+  return { url: `http://127.0.0.1:${port}`, purges, close: () => new Promise((resolve) => server.close(() => resolve())) };
+}
+
 export async function runHttp(): Promise<void> {
   const mock = await startMockRewired(BRIDGE_SECRET);
   mock.plan = okReply;
+  const mm = await startMockMmSites();
   const child = spawn(`${REPO}/node_modules/.bin/next`, ["start", "-p", String(PORT), "-H", "127.0.0.1"], {
     cwd: REPO,
     env: {
@@ -79,6 +109,13 @@ export async function runHttp(): Promise<void> {
       TELEGRAM_CHAT_ID: "",
       RESEND_API_KEY: "",
       META_CAPI_TOKEN: "",
+      // Client websites: never a real model call or a real Vercel domain from the harness.
+      ANTHROPIC_API_KEY: "",
+      VERCEL_TOKEN: "",
+      VERCEL_TEAM_ID: "",
+      MM_SITES_PROJECT_ID: "",
+      MM_SITES_URL: mm.url,
+      MM_SITES_REVALIDATE_SECRET: MM_SECRET,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -418,9 +455,80 @@ export async function runHttp(): Promise<void> {
       res = await fetch(`${BASE}/api/web-gratis/cron`);
       check("cron without CRON_SECRET → 401 (fail closed)", res.status === 401, res.status);
     }
+
+    // ──────────────────────────────────────────────────────────────────
+    section("HTTP client websites: board routes, runner auth, publish without Vercel, pause coupling");
+    {
+      const auth = { "content-type": "application/json", authorization: `Bearer ${ADMIN_TOKEN}` };
+      const noAuth = { "content-type": "application/json" };
+      const unknown = crypto.randomUUID();
+      // Future timestamps: the live production cron never sees these rows as due.
+      const future = new Date(Date.now() + 3 * 86_400_000).toISOString();
+      const w1 = await seed("H web", { status: "en_construccion", submitted_at: future });
+      const w2 = await seed("H web pausa", { status: "entregada", submitted_at: future, delivered_at: future, site_url: "https://zz-pausa.example.com", free_until: site.server.svDate(new Date(), 30) });
+
+      let res = await fetch(`${BASE}/api/web-gratis/sites/run`);
+      check("site runner without CRON_SECRET → 401 (fail closed)", res.status === 401, res.status);
+      const routes: [string, string][] = [
+        ["POST", "/api/web-gratis/admin/sites"],
+        ["GET", `/api/web-gratis/admin/sites/${unknown}`],
+        ["PATCH", `/api/web-gratis/admin/sites/${unknown}`],
+        ["POST", `/api/web-gratis/admin/sites/${unknown}/publish`],
+        ["POST", `/api/web-gratis/admin/sites/${unknown}/state`],
+        ["POST", `/api/web-gratis/admin/sites/${unknown}/domain`],
+        ["DELETE", `/api/web-gratis/admin/sites/${unknown}/domain`],
+      ];
+      const statuses = await Promise.all(routes.map(([method, path]) => fetch(`${BASE}${path}`, { method, headers: noAuth, body: method === "GET" || method === "DELETE" ? undefined : "{}" }).then((r) => r.status)));
+      check("every site board route without the token → 401", statuses.every((s) => s === 401), routes.map(([m, p], i) => `${m} ${p.replace(unknown, ":id")} ${statuses[i]}`));
+      res = await fetch(`${BASE}/api/web-gratis/admin/sites/${unknown}`, { headers: auth });
+      check("unknown site with token → 404", res.status === 404, res.status);
+      res = await fetch(`${BASE}/api/web-gratis/admin/sites`, { method: "POST", headers: auth, body: JSON.stringify({ signupId: "nope", action: "generate" }) });
+      check("bad body → 400", res.status === 400, res.status);
+      res = await fetch(`${BASE}/api/web-gratis/admin/sites`, { method: "POST", headers: auth, body: JSON.stringify({ signupId: w1.id, action: "generate" }) });
+      let json = (await res.json().catch(() => null)) as { error?: string; message?: string } | null;
+      const { count: noRow } = await db.from("web_gratis_sites").select("id", { count: "exact", head: true }).eq("signup_id", w1.id);
+      check("'Generar ahora' without ANTHROPIC_API_KEY → 503 not_configured, clear message, nothing created", res.status === 503 && json?.error === "not_configured" && String(json?.message).includes("ANTHROPIC_API_KEY") && noRow === 0, [res.status, json]);
+
+      const slug1 = `zz-${RUN.toLowerCase()}-http-web`;
+      const { data: s1 } = await db.from("web_gratis_sites").insert({ signup_id: w1.id, slug: slug1, status: "draft", content: sampleContent(w1), version: 1 }).select("*").single();
+      res = await fetch(`${BASE}/api/web-gratis/admin/sites/${s1?.id}/publish`, { method: "POST", headers: auth, body: "{}" });
+      json = (await res.json().catch(() => null)) as { error?: string; message?: string } | null;
+      const w1After = await signup(w1.id);
+      check("'Publicar' without Vercel env → 503 not_configured naming VERCEL_TOKEN; signup NOT delivered", res.status === 503 && json?.error === "not_configured" && String(json?.message).includes("VERCEL_TOKEN") && w1After.status === "en_construccion" && !w1After.site_url, [res.status, json, w1After.status]);
+
+      res = await fetch(`${BASE}/api/web-gratis/admin/signups?view=todas&q=${encodeURIComponent(`ZZ ${RUN} H web`)}`, { headers: auth });
+      const list = (await res.json()) as { data: { sites: Record<string, { slug: string; status: string; previewUrl: string | null; exportUrl: string | null }>; sitesConfig: Record<string, boolean> } | null };
+      const summary = list.data?.sites?.[w1.id];
+      check("board list carries the site summary (+ preview/export links on MM_SITES_URL) and sitesConfig", res.status === 200 && summary?.slug === slug1 && summary?.status === "draft" && summary?.previewUrl === `${mm.url}/p/${slug1}?t=${s1?.preview_token}` && summary?.exportUrl === `${mm.url}/api/export/${slug1}?t=${s1?.preview_token}` && list.data?.sitesConfig?.generator === false && list.data?.sitesConfig?.preview === true && list.data?.sitesConfig?.vercel === false, [summary, list.data?.sitesConfig]);
+
+      res = await fetch(`${BASE}/api/web-gratis/admin/sites/${s1?.id}`, { method: "PATCH", headers: auth, body: JSON.stringify({ edits: { tagline: "Nueva frase" }, expectedVersion: 1 }) });
+      const edited = (await res.json()) as { data: { site: { version: number }; content: { business: { tagline: string } } } | null };
+      check("quick edit over HTTP → 200, version 2", res.status === 200 && edited.data?.site.version === 2 && edited.data?.content.business.tagline === "Nueva frase", edited);
+      res = await fetch(`${BASE}/api/web-gratis/admin/sites/${s1?.id}`, { method: "PATCH", headers: auth, body: JSON.stringify({ edits: { palette: { bg: "blue" } }, expectedVersion: 2 }) });
+      check("bad color → 400", res.status === 400, res.status);
+
+      const slug2 = `zz-${RUN.toLowerCase()}-http-pausa`;
+      await db.from("web_gratis_sites").insert({ signup_id: w2.id, slug: slug2, status: "published", content: sampleContent(w2), version: 1, published_at: new Date().toISOString() });
+      res = await fetch(`${BASE}/api/web-gratis/admin/signups/${w2.id}`, { method: "PATCH", headers: auth, body: JSON.stringify({ status: "pausada" }) });
+      let purged = false;
+      for (let i = 0; i < 20 && !purged; i++) {
+        purged = mm.purges.some((p) => p.slug === slug2 && p.secret === MM_SECRET);
+        if (!purged) await new Promise((r) => setTimeout(r, 250));
+      }
+      check("board pauses the signup → its live site's cache is purged on mm-sites (after())", res.status === 200 && purged, mm.purges);
+      mm.purges.length = 0;
+      await fetch(`${BASE}/api/web-gratis/admin/signups/${w2.id}`, { method: "PATCH", headers: auth, body: JSON.stringify({ status: "entregada" }) });
+      let reopened = false;
+      for (let i = 0; i < 20 && !reopened; i++) {
+        reopened = mm.purges.some((p) => p.slug === slug2);
+        if (!reopened) await new Promise((r) => setTimeout(r, 250));
+      }
+      check("…and reopening it purges again (the site shows up again)", reopened, mm.purges);
+    }
   } finally {
     child.kill("SIGTERM");
     await mock.close();
+    await mm.close();
     const errs = serverLog.split("\n").filter((l) => /\[WebGratis/.test(l));
     if (errs.length) console.log(`\nserver log lines tagged [WebGratis] (expected ones only):\n  ${errs.slice(0, 15).join("\n  ")}`);
   }

@@ -7,6 +7,20 @@ import type { BoardCountry, OpsSignup } from "@/lib/web-gratis/admin";
 import { countryFromE164, DEFAULT_PAYPAL_LINK, footerSnippet, MONTHLY_PRICE_USD, payUrl, referralLink } from "@/lib/web-gratis/config";
 import { scripts, waLink } from "@/lib/web-gratis/scripts";
 import { manualBlock, TEMPLATE_LABEL, UNKNOWN_OUTCOME_CODE, type TemplateName } from "@/lib/web-gratis/templates";
+import type { SiteContentV1 } from "@/lib/web-gratis/site-content";
+import { contrastRatio, fixPalette, isHex, paletteReport, type PaletteColors } from "@/lib/web-gratis/sites/contrast";
+import {
+  dnsRecordsFor,
+  DOMAIN_STATUS_LABEL,
+  isApexDomain,
+  normalizeDomain,
+  publicSiteUrl,
+  SITE_STATUS_LABEL,
+  slugProblem,
+  type SiteQuickEdits,
+  type SitesConfig,
+  type SiteSummary,
+} from "@/lib/web-gratis/sites/shared";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -99,7 +113,19 @@ interface ListResponse {
   referrers: Record<string, { name: string; code: string }>;
   messages: Record<string, LogItem[]>;
   credits: Credit[];
+  /** Generated website per signup id (absent = no site yet). */
+  sites?: Record<string, SiteSummary>;
+  sitesConfig?: SitesConfig;
 }
+
+/** One board call to a site route, already unwrapped from the {data,error,message} envelope. */
+interface SiteApiResult {
+  ok: boolean;
+  status: number;
+  data: unknown;
+  message: string | null;
+}
+type SiteApi = (path: string, init?: RequestInit) => Promise<SiteApiResult>;
 
 interface SettingsDraft {
   days: string;
@@ -213,6 +239,10 @@ function svToday(days = 0): string {
 function sinceDelivered(iso: string | null): number | null {
   if (!iso) return null;
   return Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+}
+
+function minutesSince(iso: string | null): number {
+  return iso ? (Date.now() - new Date(iso).getTime()) / 60_000 : 0;
 }
 
 function withinHours(iso: string | null, hours: number): boolean {
@@ -452,6 +482,623 @@ function DocList({ paths, links, fileInfo, businessName }: DocListProps) {
   );
 }
 
+// ─── Website: quick editor (module scope) ───────────────────────────────────
+
+interface EditorFields {
+  tagline: string;
+  heroHeadline: string;
+  heroSubheadline: string;
+  ctaLabel: string;
+  about: string[];
+  services: { from: number | null; name: string; description: string; price: string }[];
+  primary: string;
+  bg: string;
+  text: string;
+}
+
+function editorFields(c: SiteContentV1): EditorFields {
+  return {
+    tagline: c.business.tagline,
+    heroHeadline: c.hero.headline,
+    heroSubheadline: c.hero.subheadline,
+    ctaLabel: c.hero.ctaLabel,
+    about: [...c.about.body],
+    services: c.services.items.map((s, i) => ({ from: i, name: s.name, description: s.description ?? "", price: s.price ?? "" })),
+    primary: c.theme.palette.primary,
+    bg: c.theme.palette.bg,
+    text: c.theme.palette.text,
+  };
+}
+
+const PAIR_LABEL: Record<string, string> = {
+  "text/bg": "Texto sobre fondo",
+  "text/surface": "Texto sobre tarjetas",
+  "muted/bg": "Texto secundario",
+  "muted/surface": "Secundario en tarjetas",
+  "primaryText/primary": "Texto del botón",
+  "primary/bg": "Botón sobre fondo",
+  "accent/bg": "Acento sobre fondo",
+};
+
+interface CounterProps {
+  value: string;
+  max: number;
+}
+
+function Counter({ value, max }: CounterProps) {
+  return <span className={value.length > max ? styles.countBad : styles.count}>{`${value.length}/${max}`}</span>;
+}
+
+interface ColorFieldProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+function ColorField({ label, value, onChange }: ColorFieldProps) {
+  return (
+    <label className={styles.colorField}>
+      {label}
+      <span>
+        <input type="color" value={isHex(value) ? value : "#000000"} onChange={(e) => onChange(e.target.value)} aria-label={`${label} (selector)`} />
+        <input value={value} maxLength={7} className={styles.mono} onChange={(e) => onChange(e.target.value.trim())} aria-label={`${label} (hex)`} />
+      </span>
+    </label>
+  );
+}
+
+interface SiteEditorProps {
+  siteId: string;
+  /** Version the board last saw (a newer one means the loaded copy is stale). */
+  currentVersion: number;
+  siteApi: SiteApi;
+  onSaved: (site: SiteSummary) => void;
+}
+
+/** Quick edits of a generated site: texts, services, three palette colors (live contrast check). */
+function SiteEditor({ siteId, currentVersion, siteApi, onSaved }: SiteEditorProps) {
+  const [loaded, setLoaded] = useState<{ version: number; content: SiteContentV1 } | null>(null);
+  const [fields, setFields] = useState<EditorFields | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const applyLoad = useCallback((res: SiteApiResult) => {
+    const data = res.data as { site: SiteSummary; content: SiteContentV1 | null } | null;
+    if (!res.ok || !data?.content) {
+      setLoadError(res.message ?? "No se pudo cargar el contenido.");
+      return;
+    }
+    setLoadError(null);
+    setLoaded({ version: data.site.version, content: data.content });
+    setFields(editorFields(data.content));
+    setMessage(null);
+  }, []);
+
+  const load = useCallback(async () => {
+    applyLoad(await siteApi(`/api/web-gratis/admin/sites/${siteId}`));
+  }, [applyLoad, siteApi, siteId]);
+
+  useEffect(() => {
+    let current = true;
+    void siteApi(`/api/web-gratis/admin/sites/${siteId}`).then((res) => {
+      if (current) applyLoad(res);
+    });
+    return () => {
+      current = false;
+    };
+  }, [applyLoad, siteApi, siteId]);
+
+  if (loadError) {
+    return (
+      <div className={styles.siteEditor}>
+        <p className={styles.error}>{loadError}</p>
+        <button type="button" className={styles.linkBtn} onClick={() => void load()}>
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+  if (!loaded || !fields) return <div className={`${styles.siteEditor} ${styles.skeletonSmall}`} aria-busy="true" />;
+
+  const set = (patch: Partial<EditorFields>) => setFields({ ...fields, ...patch });
+  const setService = (i: number, patch: Partial<EditorFields["services"][number]>) =>
+    set({ services: fields.services.map((s, j) => (j === i ? { ...s, ...patch } : s)) });
+
+  const colorsValid = isHex(fields.primary) && isHex(fields.bg) && isHex(fields.text);
+  const palette: PaletteColors = { ...loaded.content.theme.palette, primary: fields.primary, bg: fields.bg, text: fields.text };
+  const report = colorsValid ? paletteReport(palette) : [];
+  const fixed = colorsValid ? fixPalette(palette) : null;
+  const weak = report.filter((r) => r.enforced && !r.ok);
+  const stale = currentVersion > loaded.version;
+
+  async function save() {
+    if (!loaded || !fields) return;
+    if (!colorsValid) {
+      setMessage("Los colores deben ser #rrggbb.");
+      return;
+    }
+    const orig = editorFields(loaded.content);
+    const edits: SiteQuickEdits = {};
+    if (fields.tagline.trim() !== orig.tagline) edits.tagline = fields.tagline.trim();
+    if (fields.heroHeadline.trim() !== orig.heroHeadline) edits.heroHeadline = fields.heroHeadline.trim();
+    if (fields.heroSubheadline.trim() !== orig.heroSubheadline) edits.heroSubheadline = fields.heroSubheadline.trim();
+    if (fields.ctaLabel.trim() !== orig.ctaLabel) edits.ctaLabel = fields.ctaLabel.trim();
+    const about = fields.about.map((p) => p.trim()).filter(Boolean);
+    if (JSON.stringify(about) !== JSON.stringify(orig.about)) edits.about = about;
+    const services = fields.services
+      .filter((s) => s.name.trim())
+      .map((s) => ({ from: s.from, name: s.name.trim(), description: s.description.trim() || null, price: s.price.trim() || null }));
+    const origServices = orig.services.map((s) => ({ from: s.from, name: s.name, description: s.description || null, price: s.price || null }));
+    if (JSON.stringify(services) !== JSON.stringify(origServices)) edits.services = services;
+    const pal: NonNullable<SiteQuickEdits["palette"]> = {};
+    if (fields.primary.toLowerCase() !== orig.primary.toLowerCase()) pal.primary = fields.primary;
+    if (fields.bg.toLowerCase() !== orig.bg.toLowerCase()) pal.bg = fields.bg;
+    if (fields.text.toLowerCase() !== orig.text.toLowerCase()) pal.text = fields.text;
+    if (Object.keys(pal).length) edits.palette = pal;
+    if (!Object.keys(edits).length) {
+      setMessage("No hay cambios.");
+      return;
+    }
+    setSaving(true);
+    const res = await siteApi(`/api/web-gratis/admin/sites/${siteId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ edits, expectedVersion: loaded.version }),
+    });
+    setSaving(false);
+    const data = res.data as { site: SiteSummary; content: SiteContentV1 } | null;
+    if (!res.ok || !data) {
+      setMessage(res.message ?? "No se pudo guardar.");
+      return;
+    }
+    setLoaded({ version: data.site.version, content: data.content });
+    setFields(editorFields(data.content));
+    setMessage(res.message ?? "Guardado.");
+    onSaved(data.site);
+  }
+
+  return (
+    <div className={styles.siteEditor}>
+      {stale ? (
+        <p className={styles.siteWarn}>
+          Hay una versión más nueva (v{currentVersion}).{" "}
+          <button type="button" className={styles.linkBtn} onClick={() => void load()}>
+            Recargar (descarta estos cambios)
+          </button>
+        </p>
+      ) : null}
+      <fieldset>
+        <legend>Portada</legend>
+        <label>
+          <span>
+            Frase de marca <Counter value={fields.tagline} max={120} />
+          </span>
+          <input value={fields.tagline} onChange={(e) => set({ tagline: e.target.value })} />
+        </label>
+        <label>
+          <span>
+            Titular <Counter value={fields.heroHeadline} max={90} />
+          </span>
+          <input value={fields.heroHeadline} onChange={(e) => set({ heroHeadline: e.target.value })} />
+        </label>
+        <label>
+          <span>
+            Subtítulo <Counter value={fields.heroSubheadline} max={220} />
+          </span>
+          <textarea rows={3} value={fields.heroSubheadline} onChange={(e) => set({ heroSubheadline: e.target.value })} />
+        </label>
+        <label>
+          <span>
+            Botón (WhatsApp) <Counter value={fields.ctaLabel} max={40} />
+          </span>
+          <input value={fields.ctaLabel} onChange={(e) => set({ ctaLabel: e.target.value })} />
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Sobre el negocio</legend>
+        {fields.about.map((p, i) => (
+          <label key={i}>
+            <span>
+              Párrafo {i + 1} <Counter value={p} max={600} />
+            </span>
+            <textarea rows={4} value={p} onChange={(e) => set({ about: fields.about.map((q, j) => (j === i ? e.target.value : q)) })} />
+            {fields.about.length > 1 ? (
+              <button type="button" className={styles.linkBtn} onClick={() => set({ about: fields.about.filter((_, j) => j !== i) })}>
+                Quitar párrafo
+              </button>
+            ) : null}
+          </label>
+        ))}
+        {fields.about.length < 3 ? (
+          <button type="button" className={styles.linkBtn} onClick={() => set({ about: [...fields.about, ""] })}>
+            + Párrafo
+          </button>
+        ) : null}
+      </fieldset>
+
+      <fieldset>
+        <legend>Servicios y precios</legend>
+        <p className={styles.dim}>Precio solo si el cliente lo dio (tal cual: «$12», «desde $25»). Vacío = sin precio.</p>
+        {fields.services.map((s, i) => (
+          <div key={`${s.from ?? "n"}-${i}`} className={styles.serviceRow}>
+            <label>
+              <span>
+                Nombre <Counter value={s.name} max={80} />
+              </span>
+              <input value={s.name} onChange={(e) => setService(i, { name: e.target.value })} />
+            </label>
+            <label>
+              <span>
+                Precio <Counter value={s.price} max={40} />
+              </span>
+              <input value={s.price} placeholder="sin precio" onChange={(e) => setService(i, { price: e.target.value })} />
+            </label>
+            <label className={styles.serviceDesc}>
+              <span>
+                Descripción <Counter value={s.description} max={240} />
+              </span>
+              <textarea rows={2} value={s.description} onChange={(e) => setService(i, { description: e.target.value })} />
+            </label>
+            {fields.services.length > 1 ? (
+              <button type="button" className={styles.linkBtn} onClick={() => set({ services: fields.services.filter((_, j) => j !== i) })}>
+                Quitar servicio
+              </button>
+            ) : null}
+          </div>
+        ))}
+        {fields.services.length < 24 ? (
+          <button type="button" className={styles.linkBtn} onClick={() => set({ services: [...fields.services, { from: null, name: "", description: "", price: "" }] })}>
+            + Servicio
+          </button>
+        ) : null}
+      </fieldset>
+
+      <fieldset>
+        <legend>Colores</legend>
+        <div className={styles.colors}>
+          <ColorField label="Principal (botones)" value={fields.primary} onChange={(v) => set({ primary: v })} />
+          <ColorField label="Fondo" value={fields.bg} onChange={(v) => set({ bg: v })} />
+          <ColorField label="Texto" value={fields.text} onChange={(v) => set({ text: v })} />
+        </div>
+        {colorsValid && fixed ? (
+          <>
+            <div className={styles.swatch} style={{ background: fields.bg, color: fixed.palette.text }}>
+              <b>{loaded.content.business.name}</b>
+              <span style={{ color: fixed.palette.muted }}>Así se lee el texto de la web.</span>
+              <span className={styles.swatchBtn} style={{ background: fields.primary, color: fixed.palette.primaryText }}>
+                {fields.ctaLabel || "Escríbanos"}
+              </span>
+            </div>
+            <ul className={styles.contrast}>
+              {report.map((r) => (
+                <li key={r.pair} className={r.ok ? "" : r.enforced ? styles.contrastBad : styles.contrastSoft}>
+                  {PAIR_LABEL[r.pair] ?? r.pair}: {r.ratio.toFixed(2)}:1 {r.ok ? "✓" : r.enforced ? `(mín. ${r.min})` : "(poco visible)"}
+                </li>
+              ))}
+            </ul>
+            {weak.length ? (
+              <p className={styles.siteWarn}>
+                Poco contraste: al guardar se ajusta solo ({fixed.fixes.join("; ") || "texto"}), sin tocar el color principal ni el fondo.
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <p className={styles.error}>Use colores #rrggbb.</p>
+        )}
+        <p className={styles.dim}>Texto sobre fondo actual: {colorsValid ? `${contrastRatio(fields.text, fields.bg).toFixed(2)}:1` : "—"} (AA pide 4.5:1).</p>
+      </fieldset>
+
+      <div className={styles.siteActions}>
+        <button type="button" className={styles.primary} disabled={saving || stale} onClick={() => void save()}>
+          {saving ? "Guardando…" : `Guardar cambios (v${loaded.version} → v${loaded.version + 1})`}
+        </button>
+      </div>
+      {message ? <p className={styles.flash}>{message}</p> : null}
+    </div>
+  );
+}
+
+// ─── Website panel (module scope) ───────────────────────────────────────────
+
+interface SitePanelProps {
+  row: Row;
+  site: SiteSummary | undefined;
+  config: SitesConfig | null;
+  siteApi: SiteApi;
+  onSite: (signupId: string, site: SiteSummary) => void;
+  onReload: () => void;
+}
+
+/** Everything about the signup's generated website: generate, review, edit, publish, domain, stats. */
+function SitePanel({ row, site, config, siteApi, onSite, onReload }: SitePanelProps) {
+  const [busy, setBusy] = useState(false);
+  const [flash, setFlash] = useState<{ text: string; bad: boolean } | null>(null);
+  const [instructions, setInstructions] = useState(site?.instructions ?? "");
+  const [editing, setEditing] = useState(false);
+  const [more, setMore] = useState(false);
+  const [slugDraft, setSlugDraft] = useState(site?.slug ?? "");
+  const [domainDraft, setDomainDraft] = useState(site?.customDomain ?? "");
+  // Keep the drafts in step with the server copy when the site itself changes (not on every refresh).
+  const siteKey = `${site?.id ?? ""}|${site?.slug ?? ""}|${site?.customDomain ?? ""}|${site?.instructions ?? ""}`;
+  const [seenKey, setSeenKey] = useState(siteKey);
+  if (seenKey !== siteKey) {
+    setSeenKey(siteKey);
+    setSlugDraft(site?.slug ?? "");
+    setDomainDraft(site?.customDomain ?? "");
+    setInstructions(site?.instructions ?? "");
+  }
+
+  const say = (text: string, bad = false) => {
+    setFlash({ text, bad });
+    window.setTimeout(() => setFlash(null), bad ? 12_000 : 7_000);
+  };
+
+  async function act(path: string, init: RequestInit, okText?: string): Promise<SiteApiResult> {
+    setBusy(true);
+    const res = await siteApi(path, init);
+    setBusy(false);
+    const data = res.data as { site?: SiteSummary } | null;
+    if (res.ok && data?.site) onSite(row.id, data.site);
+    say(res.ok ? (res.message ?? okText ?? "Listo") : (res.message ?? "No se pudo completar."), !res.ok);
+    return res;
+  }
+
+  const status = site?.status;
+  const generating = status === "generating";
+  const live = status === "published";
+  const building = ["nuevo", "en_construccion"].includes(row.status);
+  // Online but the signup never got marked delivered (that step failed or was cut off): publishing
+  // again is idempotent on Vercel and finishes the delivery through the same path.
+  const finishDelivery = live && building;
+  const minutesSinceSubmit = minutesSince(row.submitted_at);
+  const canGenerate = !!config?.generator && !generating && !live;
+  const url = site ? site.publicUrl : publicSiteUrl(slugDraft || "su-negocio");
+  const domainValue = normalizeDomain(domainDraft);
+  const slugIssue = slugDraft && slugDraft !== site?.slug ? slugProblem(slugDraft) : null;
+
+  async function generate() {
+    if (site && site.version > 0 && !window.confirm(`Se generará una versión nueva (v${site.version + 1}) y reemplaza la actual. ¿Continuar?`)) return;
+    const res = await act("/api/web-gratis/admin/sites", {
+      method: "POST",
+      body: JSON.stringify({ signupId: row.id, action: "generate", instructions: instructions.trim() || null }),
+    });
+    if (res.ok) window.setTimeout(onReload, 4_000);
+  }
+
+  async function publish() {
+    if (!site) return;
+    const question = `¿Publicar la web de ${row.business_name} en\n${site.publicUrl}\n\n${
+      building ? "Se marca «Entregada» (empieza su mes gratis) y «Web lista» le llega sola por WhatsApp ~10 min después." : "Ya está entregada: solo se actualiza su link."
+    }`;
+    if (!window.confirm(question)) return;
+    const res = await act(`/api/web-gratis/admin/sites/${site.id}/publish`, { method: "POST", body: "{}" });
+    if (res.ok) onReload();
+  }
+
+  async function setPaused(pause: boolean) {
+    if (!site) return;
+    if (pause && !window.confirm(`¿Sacar de línea ${site.publicUrl}? El cliente verá que no carga.`)) return;
+    await act(`/api/web-gratis/admin/sites/${site.id}/state`, { method: "POST", body: JSON.stringify({ action: pause ? "pause" : "resume" }) });
+  }
+
+  async function saveSlug() {
+    if (!site || slugIssue || !slugDraft || slugDraft === site.slug) return;
+    await act(`/api/web-gratis/admin/sites/${site.id}`, { method: "PATCH", body: JSON.stringify({ slug: slugDraft }) });
+  }
+
+  async function connectDomain() {
+    if (!site || !domainValue) return;
+    await act(`/api/web-gratis/admin/sites/${site.id}/domain`, { method: "POST", body: JSON.stringify({ domain: domainValue }) });
+  }
+
+  async function removeDomain() {
+    if (!site?.customDomain || !window.confirm(`¿Desconectar ${site.customDomain}?`)) return;
+    await act(`/api/web-gratis/admin/sites/${site.id}/domain`, { method: "DELETE" });
+  }
+
+  const badgeClass = status ? `${styles.siteBadge} ${styles[`site_${status}`] ?? ""}` : `${styles.siteBadge} ${styles.site_none}`;
+
+  return (
+    <section className={styles.site} aria-label="Sitio web">
+      <div className={styles.siteHead}>
+        <h4>Sitio web</h4>
+        <span className={badgeClass}>{status ? SITE_STATUS_LABEL[status] : "Sin generar"}</span>
+        {site && site.version > 0 ? <span className={styles.dim}>v{site.version}</span> : null}
+      </div>
+
+      {config && (!config.generator || !config.preview || !config.vercel) ? (
+        <p className={styles.siteWarn}>
+          {[
+            !config.generator ? "falta ANTHROPIC_API_KEY (no se generan)" : null,
+            !config.preview ? "falta MM_SITES_URL (sin vista previa)" : null,
+            !config.vercel ? "falta VERCEL_TOKEN / MM_SITES_PROJECT_ID (no se puede publicar)" : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      ) : null}
+
+      {!site ? (
+        <p className={styles.dim}>
+          {row.submitted_at
+            ? minutesSinceSubmit >= 10
+              ? "Todavía no tiene web: se genera sola en unos minutos, o use «Generar ahora»."
+              : "Se genera sola ~10 min después de enviar el formulario (para que lleguen sus fotos por WhatsApp)."
+            : "El cliente no terminó el formulario."}
+        </p>
+      ) : null}
+
+      {live && ["pausada", "cancelada"].includes(row.status) ? (
+        <p className={styles.siteWarn}>La solicitud está {row.status}: la web no se muestra al público hasta reabrirla (o hasta que pague).</p>
+      ) : null}
+
+      {generating ? (
+        <p className={styles.siteNote}>
+          <span className={styles.spinner} aria-hidden="true" />
+          {site?.generatingNow ? "Generando… (1–2 min)" : "En cola para generarse"}
+          {site && site.generationAttempts > 0 ? ` · intento ${site.generationAttempts}/3` : ""}
+        </p>
+      ) : null}
+      {site?.generationError ? <p className={styles.siteErr}>{site.generationError}</p> : null}
+
+      {site ? (
+        <div className={styles.siteLinks}>
+          {site.previewUrl && site.version > 0 ? (
+            <a href={site.previewUrl} target="_blank" rel="noopener noreferrer">
+              Vista previa
+            </a>
+          ) : null}
+          {live ? (
+            <a href={site.publicUrl} target="_blank" rel="noopener noreferrer">
+              Abrir web
+            </a>
+          ) : null}
+          {site.exportUrl ? (
+            <a href={site.exportUrl} target="_blank" rel="noopener noreferrer">
+              Descargar archivos
+            </a>
+          ) : null}
+          <span className={styles.mono}>{site.publicUrl.replace(/^https:\/\//, "")}</span>
+        </div>
+      ) : null}
+
+      {site?.stats ? (
+        <p className={styles.siteStats}>
+          <b>{site.stats.views30}</b> visitas · <b>{site.stats.whatsapp30}</b> clics a WhatsApp <span className={styles.dim}>(últimos 30 días)</span>
+        </p>
+      ) : null}
+
+      {site && (site.notes || site.unread.length || site.guards.length) ? (
+        <details className={styles.siteDetails}>
+          <summary>Notas del generador{site.unread.length ? ` · ${site.unread.length} archivo(s) sin leer` : ""}</summary>
+          {site.notes ? <p>{site.notes}</p> : null}
+          {site.unread.length ? (
+            <ul>
+              {site.unread.map((u) => (
+                <li key={u}>{u}</li>
+              ))}
+            </ul>
+          ) : null}
+          {site.guards.length ? <p className={styles.dim}>Filtros: {site.guards.join(" · ")}</p> : null}
+        </details>
+      ) : null}
+
+      <div className={styles.siteActions}>
+        {status === "draft" || (status === "paused" && !site?.publishedAt) || finishDelivery ? (
+          <button type="button" className={styles.primary} disabled={busy || !config?.vercel} onClick={() => void publish()}>
+            {finishDelivery ? "Terminar entrega (marcar «Entregada»)" : "Publicar"}
+          </button>
+        ) : null}
+        {live ? (
+          <button type="button" disabled={busy} onClick={() => void setPaused(true)}>
+            Pausar sitio
+          </button>
+        ) : null}
+        {status === "paused" && site?.publishedAt ? (
+          <button type="button" className={styles.primary} disabled={busy} onClick={() => void setPaused(false)}>
+            Reanudar
+          </button>
+        ) : null}
+        {site && site.version > 0 && !generating ? (
+          <button type="button" disabled={busy} onClick={() => setEditing(!editing)}>
+            {editing ? "Cerrar editor" : "Editar textos y colores"}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          disabled={busy || !canGenerate}
+          title={live ? "Está publicada: páusela para regenerarla, o use el editor." : undefined}
+          onClick={() => void generate()}
+        >
+          {site && site.version > 0 ? "Regenerar" : "Generar ahora"}
+        </button>
+        <button type="button" className={styles.linkBtn} onClick={() => setMore(!more)}>
+          {more ? "Menos opciones" : "Instrucciones, dirección y dominio"}
+        </button>
+      </div>
+
+      {more ? (
+        <div className={styles.siteMore}>
+          <label>
+            Instrucciones para (re)generar (opcional — p. ej. «colores más cálidos, destacar las tazas, precio de camisa $12 según el cliente»)
+            <textarea rows={3} maxLength={2000} value={instructions} onChange={(e) => setInstructions(e.target.value)} />
+          </label>
+
+          {site && !site.publishedAt ? (
+            <div className={styles.inlineForm}>
+              <label>
+                Dirección de la web (antes de publicar)
+                <input
+                  value={slugDraft}
+                  className={styles.mono}
+                  autoComplete="off"
+                  maxLength={40}
+                  onChange={(e) => setSlugDraft(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
+                />
+                <span className={slugIssue ? styles.error : styles.dim}>{slugIssue ?? `${slugDraft || "…"}.machinemindconsulting.com`}</span>
+              </label>
+              <button type="button" disabled={busy || !!slugIssue || !slugDraft || slugDraft === site.slug} onClick={() => void saveSlug()}>
+                Guardar dirección
+              </button>
+            </div>
+          ) : site ? (
+            <p className={styles.dim}>Dirección fija (ya se publicó): {url}</p>
+          ) : null}
+
+          {site ? (
+            <div className={styles.domain}>
+              <div className={styles.inlineForm}>
+                <label>
+                  Dominio propio {site.customDomain ? `· ${DOMAIN_STATUS_LABEL[site.domainStatus ?? ""] ?? site.domainStatus ?? ""}` : "(opcional)"}
+                  <input
+                    value={domainDraft}
+                    placeholder="mitienda.com"
+                    autoComplete="off"
+                    inputMode="url"
+                    onChange={(e) => setDomainDraft(e.target.value)}
+                  />
+                </label>
+                <button type="button" disabled={busy || !domainValue || !config?.vercel} onClick={() => void connectDomain()}>
+                  {site.customDomain && domainValue === site.customDomain ? "Revisar DNS" : "Conectar dominio"}
+                </button>
+              </div>
+              <p className={styles.dim}>
+                En el proveedor del dominio:{" "}
+                {domainValue ? (
+                  isApexDomain(domainValue) ? (
+                    <>
+                      registro <b>A</b> de <span className={styles.mono}>@</span> → <span className={styles.mono}>76.76.21.21</span>
+                    </>
+                  ) : (
+                    <>
+                      registro <b>CNAME</b> de <span className={styles.mono}>{dnsRecordsFor(domainValue)[0]?.name ?? domainValue}</span> →{" "}
+                      <span className={styles.mono}>cname.vercel-dns.com</span>
+                    </>
+                  )
+                ) : (
+                  <>
+                    dominio raíz (mitienda.com): <b>A</b> → <span className={styles.mono}>76.76.21.21</span> · subdominio (www.mitienda.com): <b>CNAME</b> →{" "}
+                    <span className={styles.mono}>cname.vercel-dns.com</span>
+                  </>
+                )}
+              </p>
+              {site.customDomain ? (
+                <button type="button" className={styles.linkBtn} disabled={busy} onClick={() => void removeDomain()}>
+                  Desconectar {site.customDomain}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {editing && site ? <SiteEditor siteId={site.id} currentVersion={site.version} siteApi={siteApi} onSaved={(s) => onSite(row.id, s)} /> : null}
+      {flash ? <p className={flash.bad ? styles.siteErr : styles.flash}>{flash.text}</p> : null}
+    </section>
+  );
+}
+
 // ─── Card (module scope: inputs never remount while typing) ─────────────────
 
 interface CardProps {
@@ -465,10 +1112,21 @@ interface CardProps {
   onPatch: (id: string, body: Record<string, unknown>) => Promise<boolean>;
   onSend: (id: string, template: TemplateName, force: boolean) => Promise<string>;
   onApplyCredit: (creditId: number) => Promise<string>;
+  site: SiteSummary | undefined;
+  sitesConfig: SitesConfig | null;
+  siteApi: SiteApi;
+  onSite: (signupId: string, site: SiteSummary) => void;
+  onReload: () => void;
 }
 
-function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch, onSend, onApplyCredit }: CardProps) {
+function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch, onSend, onApplyCredit, site, sitesConfig, siteApi, onSite, onReload }: CardProps) {
   const [siteUrl, setSiteUrl] = useState(row.site_url ?? "");
+  // Publishing sets site_url on the server: follow it, so blurring a stale field can never erase it.
+  const [seenSiteUrl, setSeenSiteUrl] = useState(row.site_url);
+  if (seenSiteUrl !== row.site_url) {
+    setSeenSiteUrl(row.site_url);
+    setSiteUrl(row.site_url ?? "");
+  }
   const [notes, setNotes] = useState(row.notes ?? "");
   const [phone, setPhone] = useState(row.whatsapp);
   const [refCode, setRefCode] = useState("");
@@ -929,6 +1587,10 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
         </div>
       ) : null}
 
+      {row.status !== "borrador" && row.status !== "descartada" ? (
+        <SitePanel row={row} site={site} config={sitesConfig} siteApi={siteApi} onSite={onSite} onReload={onReload} />
+      ) : null}
+
       <div className={styles.actions}>
         {row.status === "borrador" ? (
           <>
@@ -1204,6 +1866,7 @@ export default function BoardClient() {
                 referrers: { ...prev.referrers, ...payload.referrers },
                 messages: { ...prev.messages, ...payload.messages },
                 credits: [...prev.credits, ...payload.credits.filter((c) => !prev.credits.some((p) => p.id === c.id))],
+                sites: { ...(prev.sites ?? {}), ...(payload.sites ?? {}) },
               }
             : payload,
         );
@@ -1229,16 +1892,49 @@ export default function BoardClient() {
     [api, token, view, country],
   );
 
-  // Load on tab/country/token change; refresh every 45s while visible and not typing.
+  // A website being generated on this page → refresh faster so "Lista para revisar" shows up soon.
+  const anyGenerating = Object.values(data?.sites ?? {}).some((s) => s.status === "generating");
+
+  // Load on tab/country/token change; refresh every 45s (15s while a site generates) while visible and not typing.
   useEffect(() => {
     if (!token) return;
     void load(0);
-    const timer = window.setInterval(() => {
-      const typing = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement;
-      if (document.visibilityState === "visible" && !typing) void load(0);
-    }, 45_000);
-    return () => window.clearInterval(timer);
   }, [token, view, country, load]);
+
+  useEffect(() => {
+    if (!token) return;
+    const timer = window.setInterval(
+      () => {
+        const typing = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement;
+        if (document.visibilityState === "visible" && !typing) void load(0);
+      },
+      anyGenerating ? 15_000 : 45_000,
+    );
+    return () => window.clearInterval(timer);
+  }, [token, load, anyGenerating]);
+
+  /** Site routes: same token, unwrapped envelope, never throws. */
+  const siteApi = useCallback<SiteApi>(
+    async (path, init = {}) => {
+      try {
+        const res = await api(path, init);
+        const json = (await res.json().catch(() => null)) as { data: unknown; error: string | null; message: string | null } | null;
+        return { ok: res.ok, status: res.status, data: json?.data ?? null, message: json?.message ?? (res.ok ? null : "No se pudo completar.") };
+      } catch (err) {
+        console.error("[WebGratis:board] site api", path, err);
+        return { ok: false, status: 0, data: null, message: "Sin conexión con el servidor." };
+      }
+    },
+    [api],
+  );
+
+  const onSite = useCallback((signupId: string, site: SiteSummary) => {
+    setData((prev) => (prev ? { ...prev, sites: { ...(prev.sites ?? {}), [signupId]: site } } : prev));
+  }, []);
+
+  const reloadNow = useCallback(() => {
+    void load(0);
+  }, [load]);
 
   async function onPatch(id: string, body: Record<string, unknown>): Promise<boolean> {
     try {
@@ -1608,6 +2304,11 @@ export default function BoardClient() {
                 onPatch={onPatch}
                 onSend={onSend}
                 onApplyCredit={onApplyCredit}
+                site={data?.sites?.[row.id]}
+                sitesConfig={data?.sitesConfig ?? null}
+                siteApi={siteApi}
+                onSite={onSite}
+                onReload={reloadNow}
               />
             ))}
         {data && rows.length === 0 && !loading ? (
