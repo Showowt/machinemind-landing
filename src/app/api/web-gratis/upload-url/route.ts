@@ -3,11 +3,13 @@
  *
  * Files go straight from the phone to the private `web-gratis` bucket (no 4.5 MB
  * function body limit) and are uploaded the moment they're picked, so an iOS
- * in-app browser reload can't lose them. Only an existing draft may upload, and
- * each draft folder is capped.
+ * in-app browser reload can't lose them. The type is checked against the KIND
+ * (a logo may be an .ai/.eps/.psd/.svg/.pdf, a document may be a PDF, Office
+ * file, text/CSV or a photo of a menu; photos are images only). Only an
+ * existing draft may upload, and each draft folder is capped.
  */
 import { randomBytes } from "crypto";
-import { ALLOWED_UPLOAD_TYPES, MAX_OBJECTS_PER_DRAFT, MAX_UPLOAD_BYTES } from "@/lib/web-gratis/config";
+import { MAX_OBJECTS_PER_DRAFT, MAX_UPLOAD_BYTES, uploadExtension } from "@/lib/web-gratis/config";
 import { fail, ok } from "@/lib/web-gratis/http";
 import { uploadUrlRequestSchema } from "@/lib/web-gratis/schema";
 import { getDb, listDraftFiles, SIGNUPS_TABLE, storage } from "@/lib/web-gratis/server";
@@ -24,7 +26,7 @@ export async function POST(request: Request) {
   if (!parsed.success) return fail(400, "invalid");
   const { draftId, kind, contentType, size } = parsed.data;
 
-  const ext = ALLOWED_UPLOAD_TYPES[contentType.toLowerCase()];
+  const ext = uploadExtension(kind, contentType);
   if (!ext) return fail(415, "unsupported_type");
   if (size > MAX_UPLOAD_BYTES) return fail(413, "too_large");
 

@@ -2,7 +2,7 @@
  * Free-website funnel — request validation (server).
  */
 import { z } from "zod";
-import { COUNTRY_CODES, SITE_GOALS } from "./config";
+import { COUNTRY_CODES, EMAIL_RE, SITE_GOALS, UPLOAD_KINDS } from "./config";
 
 const countryCodes = COUNTRY_CODES.map((c) => c.code) as [string, ...string[]];
 
@@ -14,6 +14,15 @@ const optionalText = (max: number) =>
     .max(max)
     .optional()
     .transform((v) => (v && v.length > 0 ? v : null));
+
+/** Optional email: blank → null, otherwise it must look like an address. */
+const optionalEmail = z
+  .string()
+  .trim()
+  .max(200)
+  .optional()
+  .transform((v) => (v && v.length > 0 ? v.toLowerCase() : null))
+  .refine((v) => v === null || EMAIL_RE.test(v), { message: "email" });
 
 export const attributionSchema = z
   .object({
@@ -32,6 +41,8 @@ export const step1Schema = z.object({
   businessName: trimmed(2, 120),
   businessType: trimmed(2, 200),
   city: trimmed(2, 100),
+  /** Market the person picked on /web. The stored column is derived from the number. */
+  country: z.enum(["SV", "CO", "OTHER"]).optional(),
   countryCode: z.enum(countryCodes),
   // Length/format is judged by toE164() so the API can answer "invalid_whatsapp".
   whatsappLocal: z.string().trim().min(1).max(24),
@@ -47,6 +58,13 @@ export const step2Schema = z.object({
   siteGoal: z.enum(SITE_GOALS).optional().nullable(),
   /** "¿Quién le recomendó?" — free text, for referrals that didn't come through a ?ref= link. */
   referredBy: optionalText(120),
+  /** "¿Ya tiene página web?" — we update it for free or build a new one. */
+  existingWebsite: optionalText(300),
+  /** Street address or a Google Maps link. */
+  address: optionalText(300),
+  contactEmail: optionalEmail,
+  /** "¿Algo más que debamos saber?" */
+  extraNotes: optionalText(1500),
 });
 
 /** Client retry counter (0-based); the server alerts the team only on the final try. */
@@ -70,14 +88,14 @@ export const submitRequestSchema = z.object({
   fields: step1Schema.and(step2Schema),
   acceptTerms: z.literal(true),
   acceptShare: z.literal(true),
-  uploadPaths: z.array(z.string().max(300)).max(40).default([]),
+  uploadPaths: z.array(z.string().max(300)).max(60).default([]),
   attribution: attributionSchema.optional(),
 });
 
 export const uploadUrlRequestSchema = z.object({
   draftId: z.uuid(),
-  kind: z.enum(["logo", "photo"]),
-  contentType: z.string().max(100),
+  kind: z.enum(UPLOAD_KINDS),
+  contentType: z.string().max(200),
   size: z.number().int().positive(),
 });
 
@@ -89,6 +107,7 @@ export type UploadUrlRequest = z.infer<typeof uploadUrlRequestSchema>;
 export type WebGratisErrorCode =
   | "invalid"
   | "invalid_whatsapp"
+  | "invalid_email"
   | "rate_limited"
   | "duplicate"
   | "draft_not_found"
@@ -97,6 +116,11 @@ export type WebGratisErrorCode =
   | "too_many_files"
   | "save_failed"
   | "server_error";
+
+/** A failed draft/submit parse → the most helpful code for the person filling the form. */
+export function validationErrorCode(error: z.ZodError): WebGratisErrorCode {
+  return error.issues.some((issue) => issue.path.includes("contactEmail")) ? "invalid_email" : "invalid";
+}
 
 /** Error codes only server-to-server callers see (bridge, webhooks, admin). */
 export type ServerErrorCode =

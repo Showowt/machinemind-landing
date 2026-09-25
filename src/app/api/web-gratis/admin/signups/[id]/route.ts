@@ -12,14 +12,17 @@
  * it Activa and queues the "Web lista" template.
  * Reopening a paused/closed unpaid site gives it 7 more free days and one more
  * automatic reminder → pause cycle (paused_at is cleared).
- * `whatsapp` corrects the number (and clears a "no WhatsApp" mark);
+ * `whatsapp` corrects the number (clears a "no WhatsApp" mark and re-derives
+ * `country` from the new prefix) — a local number is read as SV (8 digits) or,
+ * for an SV/CO business, CO (mobile, 10 digits); anything else needs its code;
  * `referredByCode` links a referral the business only named in free text.
+ * The saved row comes back with its country resolved (same shape as the list).
  * Bearer token.
  */
 import { after } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/web-gratis/admin";
-import { FREE_DAYS } from "@/lib/web-gratis/config";
+import { normalizeOpsRow, requireAdmin, signupCountry, type BoardCountry, type OpsSignup } from "@/lib/web-gratis/admin";
+import { countryFromE164, FREE_DAYS } from "@/lib/web-gratis/config";
 import { fail, ok } from "@/lib/web-gratis/http";
 import { enqueueSystem } from "@/lib/web-gratis/outbox";
 import { CREDITS_TABLE, grantReferralCredit } from "@/lib/web-gratis/payments";
@@ -31,7 +34,6 @@ import {
   SIGNUPS_TABLE,
   svDate,
   type SignupStatus,
-  type WebGratisSignup,
 } from "@/lib/web-gratis/server";
 import { queueManualTemplate, svDateOf } from "@/lib/web-gratis/whatsapp";
 
@@ -70,13 +72,29 @@ const patchSchema = z.object({
 const REOPEN_FREE_DAYS = 7;
 const CLOSED: readonly SignupStatus[] = ["pausada", "cancelada", "descartada"];
 
-/** "+503 7123-4567", "71234567", "0050371234567", "50371234567" → "+50371234567". Null when it can't be one. */
-function normalizeWhatsapp(raw: string): string | null {
+/**
+ * "+503 7123-4567", "71234567", "0050371234567", "50371234567" → "+50371234567";
+ * "300 123 4567", "+57 300 123 4567" → "+573001234567". A number with El
+ * Salvador's or Colombia's prefix must be a valid one there (SV: 8 digits
+ * starting 2/6/7; CO: mobile, 10 digits starting 3). Null when it can't be one.
+ */
+function normalizeWhatsapp(raw: string, country: BoardCountry): string | null {
   const trimmed = raw.trim();
   let digits = trimmed.replace(/\D/g, "");
-  if (!trimmed.startsWith("+") && digits.startsWith("00")) digits = digits.slice(2);
-  if (!trimmed.startsWith("+") && /^[267]\d{7}$/.test(digits)) return `+503${digits}`; // El Salvador, local
-  if (/^[1-9]\d{9,14}$/.test(digits)) return `+${digits}`;
+  let international = trimmed.startsWith("+");
+  if (!international && digits.startsWith("00")) {
+    digits = digits.slice(2);
+    international = true;
+  }
+  if (!international) {
+    if (/^[267]\d{7}$/.test(digits)) return `+503${digits}`; // El Salvador, local
+    if (country !== "OTHER" && /^3\d{9}$/.test(digits)) return `+57${digits}`; // Colombia mobile, local
+  }
+  if (digits.startsWith("503")) return /^503[267]\d{7}$/.test(digits) ? `+${digits}` : null;
+  if (digits.startsWith("57")) return /^573\d{9}$/.test(digits) ? `+${digits}` : null;
+  // Any other number must carry its country code: a bare 10-digit local number
+  // ("305 555 0123") would otherwise be saved as +305… — a different country.
+  if (international ? /^[1-9]\d{9,14}$/.test(digits) : /^[1-9]\d{10,14}$/.test(digits)) return `+${digits}`;
   return null;
 }
 
@@ -107,14 +125,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { data: found, error: readError } = await db
       .from(SIGNUPS_TABLE)
       .select(
-        "id, status, business_name, whatsapp, delivered_at, free_until, shared_at, activated_at, confirmed_at, paid_via, paused_at, paid_through, referred_by_id, no_whatsapp_at, site_url",
+        "id, status, business_name, whatsapp, delivered_at, free_until, shared_at, activated_at, confirmed_at, paid_via, paused_at, paid_through, referred_by_id, no_whatsapp_at, site_url, country",
       )
       .eq("id", id)
       .maybeSingle();
     if (readError) throw readError;
     if (!found) return fail(404, "draft_not_found");
     const current = found as Pick<
-      WebGratisSignup,
+      OpsSignup,
+      | "country"
       | "id"
       | "status"
       | "business_name"
@@ -178,12 +197,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     }
 
     if (patch.whatsapp !== undefined) {
-      const phone = normalizeWhatsapp(patch.whatsapp);
-      if (!phone) return fail(400, "invalid_whatsapp", "Número inválido. Use el formato +503 7123 4567.");
+      const phone = normalizeWhatsapp(patch.whatsapp, signupCountry(current));
+      if (!phone) {
+        return fail(400, "invalid_whatsapp", "Número inválido. Use +503 7123 4567 (El Salvador) o +57 300 123 4567 (Colombia), con el código del país.");
+      }
       if (phone !== current.whatsapp || current.no_whatsapp_at) {
         update.whatsapp = phone;
         update.no_whatsapp_at = null;
       }
+      // `country` is always derived from the WhatsApp prefix (draft/submit do the same):
+      // a +503 → +57 correction moves the business to Colombia (board filter, /pagar framing, responder).
+      const nextCountry = countryFromE164(phone);
+      if (nextCountry !== current.country) update.country = nextCountry;
     }
 
     let referralLinked = false;
@@ -218,7 +243,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (error.code === "23505") return fail(409, "duplicate", "Ya hay otra solicitud activa para este negocio y WhatsApp.");
       throw error;
     }
-    const saved = data as WebGratisSignup;
+    const saved = normalizeOpsRow(data as OpsSignup);
 
     const becameActive = saved.status === "activa" && current.status !== "activa";
     const creditDue = !!saved.activated_at && !!saved.referred_by_id && (becameActive || referralLinked);

@@ -7,13 +7,24 @@ import { COPY, type Copy, type Lang } from "./copy";
 import {
   ALLOWED_UPLOAD_TYPES,
   COUNTRY_CODES,
+  EMAIL_RE,
+  MARKET_INFO,
+  MARKETS,
+  MAX_DOCUMENTS,
   MAX_PHOTOS,
   MAX_UPLOAD_BYTES,
   MM_WHATSAPP,
+  parseMarket,
   REFERRAL_CODE_RE,
   referralLink,
   splitServices,
   toE164,
+  UPLOAD_ACCEPT,
+  UPLOAD_EXTENSION_TYPES,
+  UPLOAD_KINDS,
+  UPLOAD_TYPES_BY_KIND,
+  type Market,
+  type UploadKind,
 } from "@/lib/web-gratis/config";
 import type { WebGratisErrorCode } from "@/lib/web-gratis/schema";
 
@@ -27,7 +38,6 @@ declare global {
 
 type Step = 1 | 2 | 3;
 type SiteGoal = "" | "whatsapp" | "citas" | "mostrar";
-type UploadKind = "logo" | "photo";
 type UploadProblem = "tooLarge" | "unsupported" | "tooMany" | "failed";
 type ApiError = WebGratisErrorCode | "network";
 
@@ -35,19 +45,26 @@ interface Fields {
   businessName: string;
   businessType: string;
   city: string;
+  country: Market;
   countryCode: string;
   whatsappLocal: string;
   services: string;
   differentiator: string;
   hours: string;
+  address: string;
   instagram: string;
   facebook: string;
+  existingWebsite: string;
+  contactEmail: string;
   style: string;
   siteGoal: SiteGoal;
   referredBy: string;
+  extraNotes: string;
 }
 
 type FieldKey = keyof Fields;
+/** Every field typed by the person (the market has its own picker). */
+type TextKey = Exclude<FieldKey, "country">;
 type ErrorKey = FieldKey | "acceptTerms" | "acceptShare";
 type ValidationKey = keyof Copy["validation"] | "invalidWhatsappGeneric";
 
@@ -55,6 +72,7 @@ interface Upload {
   id: string;
   kind: UploadKind;
   name: string;
+  size: number;
   status: "uploading" | "done" | "error";
   progress: number;
   path: string | null;
@@ -82,8 +100,8 @@ interface Persisted {
   v: 1;
   draftId: string;
   step: Step;
-  fields: Fields;
-  uploads: { id: string; kind: UploadKind; name: string; path: string }[];
+  fields: Partial<Fields>;
+  uploads: { id: string; kind: UploadKind; name: string; path: string; size?: number }[];
   lang: Lang;
   attribution: Attribution;
   submitted: Submitted | null;
@@ -104,6 +122,13 @@ interface Prepared {
   type: string;
 }
 
+export interface WebGratisClientProps {
+  /** From ?pais= / ?country= on the server (null when absent). */
+  initialMarket: Market | null;
+  /** Server-side guess (visitor's IP country) used only when nothing better is known. */
+  marketHint: Market | null;
+}
+
 // ─── Constants + pure helpers ───────────────────────────────────────────────
 
 const STORAGE_KEY = "mm-web-gratis-v1";
@@ -116,35 +141,47 @@ const ERROR_ORDER: ErrorKey[] = [
   "city",
   "whatsappLocal",
   "services",
+  "contactEmail",
   "acceptTerms",
   "acceptShare",
 ];
+const MARKET_DIALS = new Set<string>(MARKETS.map((m) => MARKET_INFO[m].dial));
 
-const EMPTY_FIELDS: Fields = {
-  businessName: "",
-  businessType: "",
-  city: "",
-  countryCode: "503",
-  whatsappLocal: "",
-  services: "",
-  differentiator: "",
-  hours: "",
-  instagram: "",
-  facebook: "",
-  style: "",
-  siteGoal: "",
-  referredBy: "",
-};
+function emptyFields(market: Market): Fields {
+  return {
+    businessName: "",
+    businessType: "",
+    city: "",
+    country: market,
+    countryCode: MARKET_INFO[market].dial,
+    whatsappLocal: "",
+    services: "",
+    differentiator: "",
+    hours: "",
+    address: "",
+    instagram: "",
+    facebook: "",
+    existingWebsite: "",
+    contactEmail: "",
+    style: "",
+    siteGoal: "",
+    referredBy: "",
+    extraNotes: "",
+  };
+}
 
-const EXTENSION_TYPES: Record<string, string> = {
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-  heic: "image/heic",
-  heif: "image/heif",
-  gif: "image/gif",
-  pdf: "application/pdf",
+/** Browsers/OSes that report non-standard MIME names for common files. */
+const TYPE_ALIASES: Record<string, string> = {
+  "image/jpg": "image/jpeg",
+  "image/pjpeg": "image/jpeg",
+  "image/x-png": "image/png",
+  "application/x-pdf": "application/pdf",
+  "text/comma-separated-values": "text/csv",
+  "application/csv": "text/csv",
+  "image/photoshop": "image/vnd.adobe.photoshop",
+  "image/x-photoshop": "image/vnd.adobe.photoshop",
+  "application/photoshop": "image/vnd.adobe.photoshop",
+  "application/x-photoshop": "image/vnd.adobe.photoshop",
 };
 
 const COMPRESSIBLE = new Set(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
@@ -219,16 +256,34 @@ function track(event: string, params: Record<string, unknown>, eventID?: string)
   }
 }
 
-function inferType(file: File): string | null {
-  const byType = file.type.toLowerCase();
-  if (ALLOWED_UPLOAD_TYPES[byType]) return byType;
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
-  return EXTENSION_TYPES[ext] ?? null;
+function extensionOf(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+}
+
+/**
+ * MIME type this kind accepts for the file, or null. The extension wins when it
+ * maps to an accepted type (pickers often report "" or a generic type for .ai,
+ * .psd, .csv, Office files); otherwise the reported type is used.
+ */
+function inferType(file: File, kind: UploadKind): string | null {
+  const allowed = UPLOAD_TYPES_BY_KIND[kind];
+  const byExt = UPLOAD_EXTENSION_TYPES[extensionOf(file.name)];
+  if (byExt && allowed[byExt]) return byExt;
+  const reported = file.type.toLowerCase().split(";")[0].trim();
+  const byType = TYPE_ALIASES[reported] ?? reported;
+  return allowed[byType] ? byType : null;
 }
 
 function safeName(name: string, type: string): string {
-  const base = (name || "archivo").replace(/[^\w.\- ]+/g, "").slice(0, 60) || "archivo";
+  const base = (name || "archivo").replace(/[^\w.\- ]+/g, "").slice(0, 80) || "archivo";
   return base.includes(".") ? base : `${base}.${ALLOWED_UPLOAD_TYPES[type] ?? "bin"}`;
+}
+
+function formatSize(bytes: number, lang: Lang): string {
+  if (!bytes) return "";
+  const nf = new Intl.NumberFormat(lang === "es" ? "es" : "en", { maximumFractionDigits: 1 });
+  return bytes >= 1024 * 1024 ? `${nf.format(bytes / (1024 * 1024))} MB` : `${nf.format(Math.max(1, bytes / 1024))} KB`;
 }
 
 async function decodeImage(
@@ -255,12 +310,15 @@ async function decodeImage(
   return { source: el, width: el.naturalWidth, height: el.naturalHeight, release: () => URL.revokeObjectURL(url) };
 }
 
-/** Downscale phone photos (often 4–8 MB) to ≤1920px JPEG before upload. */
+/**
+ * Photos (often 4–8 MB from a phone) are downscaled to ≤1920px JPEG before
+ * upload. Logos and documents are ALWAYS uploaded exactly as picked.
+ */
 async function prepareFile(file: File, kind: UploadKind, type: string): Promise<Prepared> {
   const name = safeName(file.name, type);
   const original: Prepared = { blob: file.type === type ? file : new Blob([file], { type }), name, type };
   const isHeic = type === "image/heic" || type === "image/heif";
-  if (kind === "logo" || !COMPRESSIBLE.has(type) || (file.size < 450_000 && !isHeic)) return original;
+  if (kind !== "photo" || !COMPRESSIBLE.has(type) || (file.size < 450_000 && !isHeic)) return original;
   try {
     const img = await decodeImage(file);
     const scale = Math.min(1, 1920 / Math.max(img.width, img.height));
@@ -284,22 +342,86 @@ async function prepareFile(file: File, kind: UploadKind, type: string): Promise<
   return original;
 }
 
-/** PUT straight to the signed Supabase Storage URL, with progress. */
-function putFile(url: string, file: Prepared, onProgress: (p: number) => void): Promise<void> {
+/**
+ * At most this many files travel at once: ten 25 MB documents sharing one
+ * mobile uplink would otherwise all crawl, and queued requests would look stalled.
+ */
+const MAX_PARALLEL_UPLOADS = 3;
+/** A visible page whose upload made no progress for this long gets "Reintentar". */
+const UPLOAD_STALL_MS = 60_000;
+/** Hard ceiling for one file, however slow but steady the connection is. */
+const UPLOAD_MAX_MS = 45 * 60_000;
+
+let activeUploads = 0;
+const uploadWaiters: (() => void)[] = [];
+
+function acquireUploadSlot(): Promise<void> {
+  if (activeUploads < MAX_PARALLEL_UPLOADS) {
+    activeUploads += 1;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => uploadWaiters.push(resolve));
+}
+
+/** Hand the slot straight to the next waiting upload (or free it). */
+function releaseUploadSlot(): void {
+  const next = uploadWaiters.shift();
+  if (next) next();
+  else activeUploads = Math.max(0, activeUploads - 1);
+}
+
+/**
+ * PUT straight to the signed Supabase Storage URL, with progress. Fails when no
+ * byte moved for UPLOAD_STALL_MS while the page was visible (a slow but moving
+ * upload is never cut), or when `signal` aborts (the file was removed).
+ */
+function putFile(url: string, file: Prepared, onProgress: (p: number) => void, signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new Error("upload cancelled"));
+      return;
+    }
     const xhr = new XMLHttpRequest();
+    let lastActivity = Date.now();
+    const onVisibility = () => {
+      // Time spent in another app doesn't count as a stall.
+      if (document.visibilityState === "visible") lastActivity = Date.now();
+    };
+    const onAbortSignal = () => xhr.abort();
+    const watchdog = window.setInterval(() => {
+      if (document.visibilityState === "visible" && Date.now() - lastActivity > UPLOAD_STALL_MS) xhr.abort();
+    }, 5_000);
+    let settled = false;
+    const finish = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      window.clearInterval(watchdog);
+      document.removeEventListener("visibilitychange", onVisibility);
+      signal.removeEventListener("abort", onAbortSignal);
+      if (error) reject(error);
+      else resolve();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    signal.addEventListener("abort", onAbortSignal);
+
     xhr.open("PUT", url);
     xhr.setRequestHeader("x-upsert", "false");
-    xhr.timeout = 120_000;
+    xhr.timeout = UPLOAD_MAX_MS;
     xhr.upload.onprogress = (e) => {
+      lastActivity = Date.now();
       if (e.lengthComputable) onProgress(e.loaded / e.total);
+    };
+    // Body fully sent: give the storage server extra time to answer.
+    xhr.upload.onload = () => {
+      lastActivity = Date.now() + UPLOAD_STALL_MS;
     };
     xhr.onload = () =>
       xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(new Error(`upload ${xhr.status}: ${xhr.responseText.slice(0, 200)}`));
-    xhr.onerror = () => reject(new Error("upload network error"));
-    xhr.ontimeout = () => reject(new Error("upload timeout"));
+        ? finish()
+        : finish(new Error(`upload ${xhr.status}: ${xhr.responseText.slice(0, 200)}`));
+    xhr.onerror = () => finish(new Error("upload network error"));
+    xhr.ontimeout = () => finish(new Error("upload timeout"));
+    xhr.onabort = () => finish(new Error(signal.aborted ? "upload cancelled" : "upload stalled"));
     const form = new FormData();
     form.append("cacheControl", "3600");
     form.append("", file.blob, file.name);
@@ -323,6 +445,12 @@ function legacyCopy(text: string): void {
   document.body.removeChild(ta);
 }
 
+function whatsappKey(countryCode: string): ValidationKey {
+  if (countryCode === MARKET_INFO.SV.dial) return "whatsappSV";
+  if (countryCode === MARKET_INFO.CO.dial) return "whatsappCO";
+  return "invalidWhatsappGeneric";
+}
+
 function validate(
   step: Step,
   f: Fields,
@@ -334,11 +462,13 @@ function validate(
     if (f.businessName.trim().length < 2) e.businessName = "required";
     if (f.businessType.trim().length < 2) e.businessType = "required";
     if (f.city.trim().length < 2) e.city = "required";
-    if (!toE164(f.countryCode, f.whatsappLocal)) {
-      e.whatsappLocal = f.countryCode === "503" ? "whatsapp" : "invalidWhatsappGeneric";
-    }
+    if (!toE164(f.countryCode, f.whatsappLocal)) e.whatsappLocal = whatsappKey(f.countryCode);
   }
-  if (step === 2 && splitServices(f.services).length === 0) e.services = "services";
+  if (step === 2) {
+    if (splitServices(f.services).length === 0) e.services = "services";
+    const email = f.contactEmail.trim();
+    if (email && !EMAIL_RE.test(email)) e.contactEmail = "email";
+  }
   if (step === 3) {
     if (!acceptTerms) e.acceptTerms = "acceptTerms";
     if (!acceptShare) e.acceptShare = "acceptShare";
@@ -357,10 +487,15 @@ function whatsappHelpHref(t: Copy, f: Fields): string {
     business: f.businessName.trim(),
     type: f.businessType.trim(),
     city: f.city.trim(),
+    country: MARKET_INFO[f.country].name,
     whatsapp: toE164(f.countryCode, f.whatsappLocal) ?? f.whatsappLocal.trim(),
     services: f.services.trim().slice(0, 300),
   });
   return `https://wa.me/${MM_WHATSAPP}?text=${encodeURIComponent(text)}`;
+}
+
+function flagClass(market: Market): string {
+  return market === "CO" ? styles.flagCO : styles.flagSV;
 }
 
 // ─── Presentational pieces (module scope so inputs never remount) ───────────
@@ -407,9 +542,12 @@ interface TextFieldProps {
   error?: string;
   multiline?: boolean;
   maxLength: number;
+  type?: "text" | "email" | "url";
   autoComplete?: string;
-  inputMode?: "text" | "tel" | "url";
+  inputMode?: "text" | "tel" | "url" | "email";
   enterKeyHint?: "next" | "done" | "go";
+  /** Rendered under the input (e.g. quick-pick chips). */
+  after?: ReactNode;
 }
 
 function TextField(props: TextFieldProps) {
@@ -438,15 +576,25 @@ function TextField(props: TextFieldProps) {
       ) : (
         <input
           {...common}
-          type="text"
+          type={props.type ?? "text"}
           autoComplete={props.autoComplete}
+          autoCapitalize={props.type === "email" || props.type === "url" ? "none" : undefined}
+          spellCheck={props.type === "email" || props.type === "url" ? false : undefined}
           inputMode={props.inputMode}
           enterKeyHint={props.enterKeyHint}
           onChange={(e) => props.onChange(e.target.value)}
         />
       )}
+      {props.after}
     </Field>
   );
+}
+
+function problemText(t: Copy, problem: UploadProblem | null): string {
+  if (problem === "tooLarge") return t.upload.tooLarge;
+  if (problem === "unsupported") return t.upload.unsupported;
+  if (problem === "tooMany") return t.upload.tooMany;
+  return t.upload.failed;
 }
 
 interface UploadTileProps {
@@ -457,15 +605,7 @@ interface UploadTileProps {
 }
 
 function UploadTile({ upload, t, onRemove, onRetry }: UploadTileProps) {
-  const ext = upload.name.split(".").pop()?.toUpperCase() ?? "";
-  const problem =
-    upload.problem === "tooLarge"
-      ? t.upload.tooLarge
-      : upload.problem === "unsupported"
-        ? t.upload.unsupported
-        : upload.problem === "tooMany"
-          ? t.upload.tooMany
-          : t.upload.failed;
+  const ext = extensionOf(upload.name).toUpperCase();
   return (
     <div className={styles.tile}>
       <span className={styles.tileDoc}>{ext || "IMG"}</span>
@@ -482,12 +622,16 @@ function UploadTile({ upload, t, onRemove, onRetry }: UploadTileProps) {
       ) : null}
       {upload.status === "uploading" ? (
         <span className={styles.tileVeil}>
-          <span className={styles.mono}>{Math.round(upload.progress * 100)}%</span>
+          {/* The number changes every tick: hidden from screen readers, which hear "Subiendo" once. */}
+          <span className={styles.mono} aria-hidden="true">
+            {Math.round(upload.progress * 100)}%
+          </span>
+          <span className={styles.sr}>{t.upload.uploading}</span>
         </span>
       ) : null}
       {upload.status === "error" ? (
         <span className={styles.tileErr}>
-          <span>{problem}</span>
+          <span>{problemText(t, upload.problem)}</span>
           {upload.problem === "failed" ? (
             <button type="button" className={styles.tileRetry} onClick={onRetry}>
               {t.upload.retry}
@@ -509,6 +653,78 @@ function UploadTile({ upload, t, onRemove, onRetry }: UploadTileProps) {
   );
 }
 
+interface DocRowProps {
+  upload: Upload;
+  t: Copy;
+  lang: Lang;
+  onRemove: () => void;
+  onRetry: () => void;
+}
+
+/** A document as a file row: type badge, name, extension + size, progress, retry, remove. */
+function DocRow({ upload, t, lang, onRemove, onRetry }: DocRowProps) {
+  const ext = extensionOf(upload.name).toUpperCase() || "DOC";
+  const size = formatSize(upload.size, lang);
+  const status =
+    upload.status === "uploading" ? (
+      <>
+        <span aria-hidden="true">{Math.round(upload.progress * 100)}%</span>
+        <span className={styles.sr}>{t.upload.uploading}</span>
+      </>
+    ) : upload.status === "done" ? (
+      t.upload.done
+    ) : (
+      problemText(t, upload.problem)
+    );
+  return (
+    <li className={upload.status === "error" ? `${styles.docRow} ${styles.docRowErr}` : styles.docRow}>
+      <span className={styles.docIcon} aria-hidden="true">
+        {upload.preview ? (
+          // eslint-disable-next-line @next/next/no-img-element -- local blob preview, not an optimizable asset
+          <img
+            src={upload.preview}
+            alt=""
+            className={styles.docThumb}
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+        ) : null}
+        <span className={styles.docExt}>{ext.slice(0, 4)}</span>
+      </span>
+      <span className={styles.docMeta}>
+        <span className={styles.docName}>{upload.name}</span>
+        <span className={styles.docSub}>
+          {[ext, size].filter(Boolean).join(" · ")}
+          <span
+            className={
+              upload.status === "done" ? styles.docOk : upload.status === "error" ? styles.docBad : styles.docBusy
+            }
+          >
+            {status}
+          </span>
+        </span>
+      </span>
+      <span className={styles.docActions}>
+        {upload.status === "error" && upload.problem === "failed" ? (
+          <button type="button" className={styles.docRetry} onClick={onRetry}>
+            {t.upload.retry}
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className={styles.docRemove}
+          onClick={onRemove}
+          aria-label={`${t.upload.remove} ${upload.name}`}
+        >
+          ×
+        </button>
+      </span>
+      <span className={styles.docBar} style={{ transform: `scaleX(${upload.progress})` }} />
+    </li>
+  );
+}
+
 function Skeleton() {
   return (
     <div className={styles.card} aria-busy="true">
@@ -527,6 +743,7 @@ function Skeleton() {
 
 interface DoneCardProps {
   t: Copy;
+  market: Market;
   submitted: Submitted;
   next: string[];
   highDemand: boolean;
@@ -537,12 +754,24 @@ interface DoneCardProps {
   onAnother: () => void;
 }
 
-function DoneCard({ t, submitted, next, highDemand, canShare, copied, onCopy, onShare, onAnother }: DoneCardProps) {
+function DoneCard({
+  t,
+  market,
+  submitted,
+  next,
+  highDemand,
+  canShare,
+  copied,
+  onCopy,
+  onShare,
+  onAnother,
+}: DoneCardProps) {
   const link = referralLink(submitted.referralCode);
-  const shareText = t.done.shareText(submitted.businessName, link);
+  const shareText = t.market[market].shareText(submitted.businessName, link);
   const confirmHref = `https://wa.me/${MM_WHATSAPP}?text=${encodeURIComponent(
     t.done.confirmText(submitted.businessName, submitted.referralCode),
   )}`;
+  const moreHref = `https://wa.me/${MM_WHATSAPP}?text=${encodeURIComponent(t.done.moreText(submitted.businessName))}`;
   return (
     <div className={`${styles.card} ${styles.done}`}>
       <svg className={styles.doneMark} viewBox="0 0 52 52" aria-hidden="true">
@@ -555,6 +784,14 @@ function DoneCard({ t, submitted, next, highDemand, canShare, copied, onCopy, on
       <a className={styles.btnWa} href={confirmHref} target="_blank" rel="noopener noreferrer">
         {t.done.confirm}
       </a>
+
+      <div className={styles.moreFiles}>
+        <h3 className={styles.moreTitle}>{t.done.moreTitle}</h3>
+        <p className={styles.moreBody}>{t.done.moreBody}</p>
+        <a className={styles.btnWaOutline} href={moreHref} target="_blank" rel="noopener noreferrer">
+          {t.done.moreButton}
+        </a>
+      </div>
 
       <h3 className={styles.kickerSmall}>{t.done.nextTitle}</h3>
       <ol className={styles.timeline}>
@@ -612,15 +849,16 @@ function DoneCard({ t, submitted, next, highDemand, canShare, copied, onCopy, on
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
-export default function WebGratisClient() {
+export default function WebGratisClient({ initialMarket, marketHint }: WebGratisClientProps) {
   const [ready, setReady] = useState(false);
   const [lang, setLang] = useState<Lang>("es");
   const [step, setStep] = useState<Step>(1);
-  const [fields, setFields] = useState<Fields>(EMPTY_FIELDS);
+  const [fields, setFields] = useState<Fields>(() => emptyFields(initialMarket ?? marketHint ?? "SV"));
   const [errors, setErrors] = useState<Partial<Record<ErrorKey, ValidationKey>>>({});
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [acceptShare, setAcceptShare] = useState(false);
   const [uploads, setUploads] = useState<Upload[]>([]);
+  const [skipped, setSkipped] = useState<Record<UploadKind, number>>({ logo: 0, photo: 0, document: 0 });
   const [draftId, setDraftId] = useState("");
   const [attribution, setAttribution] = useState<Attribution>({});
   const [referrerName, setReferrerName] = useState<string | null>(null);
@@ -635,23 +873,41 @@ export default function WebGratisClient() {
     deliveryDays: null,
     highDemand: false,
   });
+  const [pinNav, setPinNav] = useState(false);
   const formColRef = useRef<HTMLElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const draftIdRef = useRef("");
   const filesRef = useRef(new Map<string, Prepared>());
+  /** In-flight uploads, so removing a file (or starting over) stops its transfer. */
+  const abortersRef = useRef(new Map<string, AbortController>());
 
   const t = COPY[lang];
+  const market = fields.country;
+  const mc = t.market[market];
   const logo = uploads.find((u) => u.kind === "logo") ?? null;
   const photos = uploads.filter((u) => u.kind === "photo");
+  const docs = uploads.filter((u) => u.kind === "document");
   const uploading = uploads.some((u) => u.status === "uploading");
 
-  // Restore a saved draft + capture attribution (client only, after hydration).
-  // Reading localStorage during render would make SSR and the first client
-  // render disagree, so this one-time restore deliberately sets state here.
+  // Restore a saved draft, resolve the market + capture attribution (client
+  // only, after hydration). Reading localStorage during render would make SSR
+  // and the first client render disagree, so this one-time restore sets state here.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const now = Date.now();
     const param = (key: string) => params.get(key)?.trim().slice(0, 200) || undefined;
+
+    // Market: ?pais= / ?country= → the person's saved choice → browser time zone → server hint → SV.
+    const fromParam = parseMarket(params.get("pais") ?? params.get("country"));
+    let timeZone = "";
+    try {
+      timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
+    } catch (error) {
+      console.error("[WebGratis] time zone", error);
+    }
+    const fromZone: Market | null =
+      timeZone === MARKET_INFO.CO.timezone ? "CO" : timeZone === MARKET_INFO.SV.timezone ? "SV" : null;
 
     const incoming = (params.get("ref") ?? "").trim().toUpperCase();
     const storedRef = readJSON<{ code: string; at: number }>(REF_KEY);
@@ -673,12 +929,29 @@ export default function WebGratisClient() {
 
     const saved = readJSON<Persisted>(STORAGE_KEY);
     if (saved && saved.v === 1 && saved.draftId && now - saved.savedAt < DRAFT_TTL_MS) {
+      const savedMarket = parseMarket(saved.fields?.country);
+      const chosen = fromParam ?? savedMarket ?? fromZone ?? marketHint ?? "SV";
+      const restored: Fields = { ...emptyFields(chosen), ...saved.fields, country: chosen };
+      // A number already typed keeps its code; an empty one follows the market.
+      if (!restored.whatsappLocal.trim()) restored.countryCode = MARKET_INFO[chosen].dial;
       draftIdRef.current = saved.draftId;
       setDraftId(saved.draftId);
       setStep(saved.step);
-      setFields({ ...EMPTY_FIELDS, ...saved.fields });
+      setFields(restored);
       setUploads(
-        saved.uploads.map((u) => ({ ...u, status: "done", progress: 1, preview: null, problem: null })),
+        (saved.uploads ?? [])
+          .filter((u) => (UPLOAD_KINDS as readonly string[]).includes(u.kind) && typeof u.path === "string")
+          .map((u) => ({
+            id: u.id,
+            kind: u.kind,
+            name: u.name,
+            path: u.path,
+            size: typeof u.size === "number" ? u.size : 0,
+            status: "done",
+            progress: 1,
+            preview: null,
+            problem: null,
+          })),
       );
       setLang(saved.lang === "en" ? "en" : "es");
       setAttribution({ ...fresh, ...saved.attribution, ref: saved.attribution?.ref ?? fresh.ref });
@@ -688,12 +961,13 @@ export default function WebGratisClient() {
       const id = newId();
       draftIdRef.current = id;
       setDraftId(id);
+      setFields(emptyFields(fromParam ?? fromZone ?? marketHint ?? "SV"));
       setAttribution(fresh);
     }
     setCanShare(typeof navigator.share === "function");
     setReady(true);
     track("ViewContent", { content_name: "web_gratis" });
-  }, []);
+  }, [marketHint]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Persist progress so an in-app-browser reload lands the user back in place.
@@ -706,7 +980,7 @@ export default function WebGratisClient() {
       fields,
       uploads: uploads
         .filter((u) => u.status === "done" && u.path)
-        .map((u) => ({ id: u.id, kind: u.kind, name: u.name, path: u.path as string })),
+        .map((u) => ({ id: u.id, kind: u.kind, name: u.name, path: u.path as string, size: u.size })),
       lang,
       attribution,
       submitted,
@@ -717,8 +991,31 @@ export default function WebGratisClient() {
   }, [ready, draftId, step, fields, uploads, lang, attribution, submitted, leadTracked]);
 
   useEffect(() => {
-    document.documentElement.lang = lang === "es" ? "es-SV" : "en";
-  }, [lang]);
+    document.documentElement.lang = lang === "es" ? (market === "CO" ? "es-CO" : "es-SV") : "en";
+  }, [lang, market]);
+
+  // Pin the action bar to the bottom of the screen once the form is really in
+  // view; before that (phone, top of the page) the hero CTA is the one action.
+  useEffect(() => {
+    if (!ready || submitted) return;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const el = formRef.current;
+      if (el) setPinNav(el.getBoundingClientRect().top < window.innerHeight * 0.55);
+    };
+    const schedule = () => {
+      if (!frame) frame = window.requestAnimationFrame(measure);
+    };
+    schedule();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [ready, submitted, step]);
 
   // Capacity settings from the ops board ("lista en X días", high-demand notice).
   useEffect(() => {
@@ -734,7 +1031,7 @@ export default function WebGratisClient() {
     };
   }, []);
 
-  // "{Negocio} le recomendó este programa."
+  // "{Negocio} le recomendó esta iniciativa."
   useEffect(() => {
     const code = attribution.ref;
     if (!code) return;
@@ -750,7 +1047,7 @@ export default function WebGratisClient() {
     };
   }, [attribution.ref]);
 
-  function setField(key: FieldKey, value: string) {
+  function setField(key: TextKey, value: string) {
     setFields((prev) => ({ ...prev, [key]: value }));
     setErrors((prev) => {
       if (!prev[key]) return prev;
@@ -761,37 +1058,95 @@ export default function WebGratisClient() {
     setServerError(null);
   }
 
+  /** Pick El Salvador / Colombia: the phone code follows unless they chose another country's code. */
+  function chooseMarket(next: Market) {
+    setFields((prev) => ({
+      ...prev,
+      country: next,
+      countryCode: MARKET_DIALS.has(prev.countryCode) ? MARKET_INFO[next].dial : prev.countryCode,
+    }));
+    setErrors((prev) => {
+      if (!prev.whatsappLocal) return prev;
+      const rest = { ...prev };
+      delete rest.whatsappLocal;
+      return rest;
+    });
+    // Keep the choice in the URL so a reload (param wins) lands on the same country.
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("pais", next.toLowerCase());
+      url.searchParams.delete("country");
+      window.history.replaceState(window.history.state, "", url.toString());
+    } catch (error) {
+      console.error("[WebGratis] url update", error);
+    }
+  }
+
   function apiFields() {
     return {
       businessName: fields.businessName.trim(),
       businessType: fields.businessType.trim(),
       city: fields.city.trim(),
+      country: fields.country,
       countryCode: fields.countryCode,
       whatsappLocal: fields.whatsappLocal,
       services: fields.services,
       differentiator: fields.differentiator,
       hours: fields.hours,
+      address: fields.address,
       instagram: fields.instagram,
       facebook: fields.facebook,
+      existingWebsite: fields.existingWebsite,
+      contactEmail: fields.contactEmail.trim(),
       style: fields.style,
       siteGoal: fields.siteGoal || null,
       referredBy: fields.referredBy,
+      extraNotes: fields.extraNotes,
     };
   }
 
   function saveDraft(target: Step) {
+    const all = apiFields();
+    // The server only writes step-2 columns from step 2 on, so a step-1 save
+    // sends step-1 fields only — an unfinished step-2 answer (e.g. a half-typed
+    // email after "Atrás") can never block Continue on step 1.
+    const fieldsForStep =
+      target === 1
+        ? {
+            businessName: all.businessName,
+            businessType: all.businessType,
+            city: all.city,
+            country: all.country,
+            countryCode: all.countryCode,
+            whatsappLocal: all.whatsappLocal,
+          }
+        : all;
     return postWithRetry<{ referralCode: string; status: string }>("/api/web-gratis/draft", {
       draftId: draftIdRef.current,
       step: target,
       lang,
       website: honeypot,
-      fields: apiFields(),
+      fields: fieldsForStep,
       attribution,
     });
   }
 
+  /** Show a server-side field error on the step that owns the field. */
+  function showFieldError(target: Step, key: ErrorKey, value: ValidationKey) {
+    if (step !== target) goTo(target);
+    setErrors({ [key]: value });
+    window.setTimeout(() => document.getElementById(`wg-${key}`)?.focus(), 80);
+  }
+
   function scrollToForm() {
     window.requestAnimationFrame(() => formColRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+
+  /** Hero / "how it works" CTA: bring the form into view and put the cursor in the first empty field. */
+  function startFromCta() {
+    scrollToForm();
+    if (submitted || step !== 1) return;
+    window.setTimeout(() => document.getElementById("wg-businessName")?.focus({ preventScroll: true }), 450);
   }
 
   function goTo(next: Step) {
@@ -821,8 +1176,9 @@ export default function WebGratisClient() {
     if (step === 1) {
       if (!res.ok || !res.data) {
         if (res.error === "invalid_whatsapp") {
-          setErrors({ whatsappLocal: fields.countryCode === "503" ? "whatsapp" : "invalidWhatsappGeneric" });
-          focusFirstError({ whatsappLocal: "whatsapp" });
+          const key = whatsappKey(fields.countryCode);
+          setErrors({ whatsappLocal: key });
+          focusFirstError({ whatsappLocal: key });
         }
         setServerError(res.error ?? "save_failed");
         return;
@@ -840,7 +1196,12 @@ export default function WebGratisClient() {
       return;
     }
 
-    // Step 2 save is best-effort: everything is sent again on submit.
+    if (res.error === "invalid_email") {
+      setErrors({ contactEmail: "email" });
+      focusFirstError({ contactEmail: "email" });
+      return;
+    }
+    // Step 2 save is otherwise best-effort: everything is sent again on submit.
     if (!res.ok) console.error("[WebGratis] step 2 save failed", res.error);
     goTo(3);
   }
@@ -868,8 +1229,9 @@ export default function WebGratisClient() {
     setBusy(null);
     if (!res.ok || !res.data) {
       if (res.error === "invalid_whatsapp") {
-        setStep(1);
-        setErrors({ whatsappLocal: "whatsapp" });
+        showFieldError(1, "whatsappLocal", whatsappKey(fields.countryCode));
+      } else if (res.error === "invalid_email") {
+        showFieldError(2, "contactEmail", "email");
       }
       setServerError(res.error ?? "server_error");
       return;
@@ -908,14 +1270,30 @@ export default function WebGratisClient() {
       patchUpload(id, { status: "error", problem });
       return;
     }
-    try {
-      await putFile(sign.data.signedUrl, file, (p) => patchUpload(id, { progress: Math.max(0.02, p) }));
-      patchUpload(id, { status: "done", progress: 1, path: sign.data.path });
-      filesRef.current.delete(id);
-    } catch (error) {
-      console.error("[WebGratis] upload failed", error);
-      patchUpload(id, { status: "error", problem: "failed" });
+    const { path, signedUrl } = sign.data;
+    abortersRef.current.get(id)?.abort();
+    const controller = new AbortController();
+    abortersRef.current.set(id, controller);
+    await acquireUploadSlot();
+    // No try/finally here: the React Compiler skips components that use `finally`.
+    let failure: unknown = null;
+    if (!controller.signal.aborted) {
+      try {
+        await putFile(signedUrl, file, (p) => patchUpload(id, { progress: Math.max(0.02, p) }), controller.signal);
+      } catch (error) {
+        failure = error;
+      }
     }
+    releaseUploadSlot();
+    if (abortersRef.current.get(id) === controller) abortersRef.current.delete(id);
+    if (controller.signal.aborted) return; // removed by the person — nothing to report
+    if (failure) {
+      console.error("[WebGratis] upload failed", failure);
+      patchUpload(id, { status: "error", problem: "failed" });
+      return;
+    }
+    patchUpload(id, { status: "done", progress: 1, path });
+    filesRef.current.delete(id);
   }
 
   async function onPick(kind: UploadKind, e: ChangeEvent<HTMLInputElement>) {
@@ -924,21 +1302,26 @@ export default function WebGratisClient() {
     if (picked.length === 0) return;
 
     let accepted: File[];
+    let left = 0;
     if (kind === "logo") {
       uploads.filter((u) => u.kind === "logo").forEach((u) => removeUpload(u.id));
       accepted = picked.slice(0, 1);
     } else {
-      const room = Math.max(0, MAX_PHOTOS - uploads.filter((u) => u.kind === "photo").length);
+      const max = kind === "photo" ? MAX_PHOTOS : MAX_DOCUMENTS;
+      const room = Math.max(0, max - uploads.filter((u) => u.kind === kind).length);
       accepted = picked.slice(0, room);
+      left = picked.length - accepted.length;
     }
+    setSkipped((prev) => ({ ...prev, [kind]: left }));
 
     for (const file of accepted) {
       const id = newId();
-      const type = inferType(file);
+      const type = inferType(file, kind);
       const tile: Upload = {
         id,
         kind,
-        name: file.name || (kind === "logo" ? "logo" : "foto"),
+        name: file.name || (kind === "logo" ? "logo" : kind === "photo" ? "foto" : "documento"),
+        size: file.size,
         status: "uploading",
         progress: 0.02,
         path: null,
@@ -949,14 +1332,19 @@ export default function WebGratisClient() {
         setUploads((prev) => [...prev, { ...tile, status: "error", problem: "unsupported" }]);
         continue;
       }
+      if (kind !== "photo" && file.size > MAX_UPLOAD_BYTES) {
+        // Logos and documents are never re-encoded, so their size is final.
+        setUploads((prev) => [...prev, { ...tile, status: "error", problem: "tooLarge" }]);
+        continue;
+      }
       setUploads((prev) => [...prev, tile]);
       const prepared = await prepareFile(file, kind, type);
       if (prepared.blob.size > MAX_UPLOAD_BYTES) {
-        patchUpload(id, { status: "error", problem: "tooLarge" });
+        patchUpload(id, { status: "error", problem: "tooLarge", size: prepared.blob.size });
         continue;
       }
       const preview = prepared.type.startsWith("image/") ? URL.createObjectURL(prepared.blob) : null;
-      patchUpload(id, { preview });
+      patchUpload(id, { preview, size: prepared.blob.size });
       filesRef.current.set(id, prepared);
       void runUpload(id, kind, prepared, true);
     }
@@ -969,6 +1357,8 @@ export default function WebGratisClient() {
       return prev.filter((u) => u.id !== id);
     });
     filesRef.current.delete(id);
+    abortersRef.current.get(id)?.abort();
+    abortersRef.current.delete(id);
   }
 
   function retryUpload(upload: Upload) {
@@ -1000,9 +1390,12 @@ export default function WebGratisClient() {
     draftIdRef.current = id;
     uploads.forEach((u) => u.preview && URL.revokeObjectURL(u.preview));
     filesRef.current.clear();
+    abortersRef.current.forEach((c) => c.abort());
+    abortersRef.current.clear();
     setDraftId(id);
-    setFields(EMPTY_FIELDS);
+    setFields(emptyFields(market));
     setUploads([]);
+    setSkipped({ logo: 0, photo: 0, document: 0 });
     setStep(1);
     setSubmitted(null);
     setAcceptTerms(false);
@@ -1014,11 +1407,12 @@ export default function WebGratisClient() {
   }
 
   const err = (key: ErrorKey) => validationText(t, errors[key]);
-  const chips = config.deliveryDays ? [t.chips[0], t.chipDays(config.deliveryDays), t.chips[2]] : [...t.chips];
+  const chips = config.deliveryDays ? t.chips.map((c, i) => (i === 1 ? t.chipDays(config.deliveryDays as number) : c)) : t.chips;
   const doneNext = config.deliveryDays
     ? t.done.next.map((line, i) => (i === 1 ? t.nextDays(config.deliveryDays as number) : line))
     : t.done.next;
   const serverMessage = serverError ? t.errors[serverError] : null;
+  const whatsappDescribedBy = errors.whatsappLocal ? "wg-whatsappLocal-hint wg-whatsappLocal-err" : "wg-whatsappLocal-hint";
 
   return (
     <main className={styles.page}>
@@ -1029,7 +1423,7 @@ export default function WebGratisClient() {
       <div className={styles.shell}>
         <header className={styles.top}>
           <Link href="/" className={styles.brand}>
-            <span className={styles.flagMini} aria-hidden="true" />
+            <span className={`${styles.flagMini} ${flagClass(market)}`} aria-hidden="true" />
             MachineMind
           </Link>
           <button
@@ -1044,14 +1438,18 @@ export default function WebGratisClient() {
 
         <div className={styles.layout}>
           <section className={styles.hero}>
-            <p className={`${styles.kicker} ${styles.rise}`}>
-              <span className={styles.flagStripe} aria-hidden="true" />
-              {t.kicker}
+            <p className={`${styles.badge} ${styles.rise}`}>
+              <span className={`${styles.flagStripe} ${flagClass(market)}`} aria-hidden="true" />
+              <span>
+                {t.badge}
+                <span className={styles.badgeCountry}> · {mc.name}</span>
+              </span>
             </p>
             <h1 className={`${styles.title} ${styles.rise} ${styles.d1}`}>
               {t.titleA}
               <span className={styles.titleB}>{t.titleB}</span>
             </h1>
+            <p className={`${styles.align} ${styles.rise} ${styles.d1}`}>{mc.align}</p>
             <p className={`${styles.lede} ${styles.rise} ${styles.d2}`}>{t.lede}</p>
             {referrerName ? <p className={styles.referred}>{t.referredBy(referrerName)}</p> : null}
             {config.highDemand ? <p className={styles.demand}>{t.highDemand}</p> : null}
@@ -1060,9 +1458,21 @@ export default function WebGratisClient() {
                 <li key={chip}>{chip}</li>
               ))}
             </ul>
+            {submitted ? null : (
+              <a
+                href="#formulario"
+                className={`${styles.heroCta} ${styles.rise} ${styles.d3}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  startFromCta();
+                }}
+              >
+                <span>{t.heroCta}</span>
+              </a>
+            )}
           </section>
 
-          <section className={styles.formCol} ref={formColRef} aria-live="polite">
+          <section id="formulario" className={styles.formCol} ref={formColRef} aria-live="polite">
             <noscript>
               <div className={styles.alert}>
                 <p>{COPY.es.noscript}</p>
@@ -1077,6 +1487,7 @@ export default function WebGratisClient() {
             ) : submitted ? (
               <DoneCard
                 t={t}
+                market={market}
                 submitted={submitted}
                 next={doneNext}
                 highDemand={config.highDemand}
@@ -1088,6 +1499,7 @@ export default function WebGratisClient() {
               />
             ) : (
               <form
+                ref={formRef}
                 className={`${styles.card} ${styles.rise} ${styles.d2}`}
                 noValidate
                 onSubmit={(e) => {
@@ -1100,11 +1512,18 @@ export default function WebGratisClient() {
                   <span className={styles.mono}>{t.stepLabel(step)}</span>
                   <span className={styles.stepName}>{t.stepNames[step - 1]}</span>
                 </div>
-                <div className={styles.progress} aria-hidden="true">
-                  {[1, 2, 3].map((n) => (
-                    <span key={n} className={n <= step ? styles.segOn : styles.seg} />
-                  ))}
-                </div>
+                <ol className={styles.stepper} aria-label={t.stepLabel(step)}>
+                  {t.stepShort.map((name, i) => {
+                    const n = i + 1;
+                    const cls = n < step ? styles.stepDone : n === step ? styles.stepOn : styles.stepLater;
+                    return (
+                      <li key={name} className={cls} aria-current={n === step ? "step" : undefined}>
+                        <span className={styles.stepNum}>{String(n).padStart(2, "0")}</span>
+                        <span className={styles.stepText}>{name}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
 
                 <div className={styles.hp} aria-hidden="true">
                   <label>
@@ -1122,6 +1541,26 @@ export default function WebGratisClient() {
                 <div key={step} className={styles.stepBody}>
                   {step === 1 ? (
                     <>
+                      <fieldset className={styles.fieldset}>
+                        <legend className={styles.label}>{t.countryPicker.label}</legend>
+                        <p className={styles.hint}>{t.countryPicker.hint}</p>
+                        <div className={styles.marketRow}>
+                          {MARKETS.map((m) => (
+                            <label key={m} className={market === m ? styles.marketOn : styles.market}>
+                              <input
+                                type="radio"
+                                name="market"
+                                value={m}
+                                checked={market === m}
+                                onChange={() => chooseMarket(m)}
+                                className={styles.sr}
+                              />
+                              <span className={`${styles.flagStripe} ${flagClass(m)}`} aria-hidden="true" />
+                              <span>{t.market[m].name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </fieldset>
                       <TextField
                         id="wg-businessName"
                         label={t.fields.businessName.label}
@@ -1147,13 +1586,28 @@ export default function WebGratisClient() {
                       <TextField
                         id="wg-city"
                         label={t.fields.city.label}
-                        placeholder={t.fields.city.placeholder}
+                        placeholder={mc.cityPlaceholder}
                         value={fields.city}
                         onChange={(v) => setField("city", v)}
                         error={err("city")}
                         maxLength={100}
                         autoComplete="address-level2"
                         enterKeyHint="next"
+                        after={
+                          <div className={styles.quick} role="group" aria-label={t.fields.city.quickLabel}>
+                            {MARKET_INFO[market].cities.map((c) => (
+                              <button
+                                key={c}
+                                type="button"
+                                className={fields.city === c ? styles.quickOn : styles.quickBtn}
+                                aria-pressed={fields.city === c}
+                                onClick={() => setField("city", c)}
+                              >
+                                {c}
+                              </button>
+                            ))}
+                          </div>
+                        }
                       />
                       <Field
                         id="wg-whatsappLocal"
@@ -1181,13 +1635,17 @@ export default function WebGratisClient() {
                             autoComplete="tel-national"
                             enterKeyHint="go"
                             maxLength={24}
-                            placeholder={t.fields.whatsapp.placeholder}
+                            placeholder={
+                              fields.countryCode === MARKET_INFO.CO.dial
+                                ? t.market.CO.phonePlaceholder
+                                : fields.countryCode === MARKET_INFO.SV.dial
+                                  ? t.market.SV.phonePlaceholder
+                                  : mc.phonePlaceholder
+                            }
                             value={fields.whatsappLocal}
                             onChange={(e) => setField("whatsappLocal", e.target.value)}
                             aria-invalid={errors.whatsappLocal ? true : undefined}
-                            aria-describedby={
-                              errors.whatsappLocal ? "wg-whatsappLocal-hint wg-whatsappLocal-err" : "wg-whatsappLocal-hint"
-                            }
+                            aria-describedby={whatsappDescribedBy}
                             className={errors.whatsappLocal ? `${styles.input} ${styles.inputErr}` : styles.input}
                           />
                         </div>
@@ -1230,6 +1688,18 @@ export default function WebGratisClient() {
                         maxLength={300}
                         enterKeyHint="next"
                       />
+                      <TextField
+                        id="wg-address"
+                        label={t.fields.address.label}
+                        hint={t.fields.address.hint}
+                        placeholder={t.fields.address.placeholder}
+                        optionalLabel={t.optional}
+                        value={fields.address}
+                        onChange={(v) => setField("address", v)}
+                        maxLength={300}
+                        autoComplete="street-address"
+                        enterKeyHint="next"
+                      />
                       <div className={styles.twoCol}>
                         <TextField
                           id="wg-instagram"
@@ -1253,6 +1723,35 @@ export default function WebGratisClient() {
                           enterKeyHint="next"
                         />
                       </div>
+                      <TextField
+                        id="wg-existingWebsite"
+                        label={t.fields.existingWebsite.label}
+                        hint={t.fields.existingWebsite.hint}
+                        placeholder={t.fields.existingWebsite.placeholder}
+                        optionalLabel={t.optional}
+                        value={fields.existingWebsite}
+                        onChange={(v) => setField("existingWebsite", v)}
+                        maxLength={300}
+                        type="url"
+                        inputMode="url"
+                        autoComplete="url"
+                        enterKeyHint="next"
+                      />
+                      <TextField
+                        id="wg-contactEmail"
+                        label={t.fields.contactEmail.label}
+                        hint={t.fields.contactEmail.hint}
+                        placeholder={t.fields.contactEmail.placeholder}
+                        optionalLabel={t.optional}
+                        value={fields.contactEmail}
+                        onChange={(v) => setField("contactEmail", v)}
+                        error={err("contactEmail")}
+                        maxLength={200}
+                        type="email"
+                        inputMode="email"
+                        autoComplete="email"
+                        enterKeyHint="next"
+                      />
                       <fieldset className={styles.fieldset}>
                         <legend className={styles.label}>
                           {t.fields.siteGoal.label}
@@ -1322,7 +1821,7 @@ export default function WebGratisClient() {
                           <label className={styles.pickBtn}>
                             <input
                               type="file"
-                              accept="image/*,.pdf,application/pdf"
+                              accept={UPLOAD_ACCEPT.logo}
                               className={styles.sr}
                               onChange={(e) => void onPick("logo", e)}
                             />
@@ -1352,7 +1851,7 @@ export default function WebGratisClient() {
                             <label className={styles.addTile}>
                               <input
                                 type="file"
-                                accept="image/*"
+                                accept={UPLOAD_ACCEPT.photo}
                                 multiple
                                 className={styles.sr}
                                 onChange={(e) => void onPick("photo", e)}
@@ -1364,7 +1863,61 @@ export default function WebGratisClient() {
                             </label>
                           ) : null}
                         </div>
+                        {skipped.photo > 0 ? <p className={styles.notice}>{t.upload.skipped(skipped.photo, MAX_PHOTOS)}</p> : null}
                       </div>
+
+                      <div className={styles.field}>
+                        <p className={styles.label}>
+                          {t.fields.documents.label}
+                          <span className={styles.opt}>{t.optional}</span>
+                          <span className={styles.count}>{t.fields.documents.count(docs.length, MAX_DOCUMENTS)}</span>
+                        </p>
+                        <p className={styles.hint}>{t.fields.documents.hint}</p>
+                        {docs.length > 0 ? (
+                          <ul className={styles.docList}>
+                            {docs.map((u) => (
+                              <DocRow
+                                key={u.id}
+                                upload={u}
+                                t={t}
+                                lang={lang}
+                                onRemove={() => removeUpload(u.id)}
+                                onRetry={() => retryUpload(u)}
+                              />
+                            ))}
+                          </ul>
+                        ) : null}
+                        {docs.length < MAX_DOCUMENTS ? (
+                          <label className={styles.pickBtn}>
+                            <input
+                              type="file"
+                              accept={UPLOAD_ACCEPT.document}
+                              multiple
+                              className={styles.sr}
+                              onChange={(e) => void onPick("document", e)}
+                            />
+                            <span className={styles.plusInline} aria-hidden="true">
+                              +
+                            </span>
+                            {t.fields.documents.button}
+                          </label>
+                        ) : null}
+                        {skipped.document > 0 ? (
+                          <p className={styles.notice}>{t.upload.skipped(skipped.document, MAX_DOCUMENTS)}</p>
+                        ) : null}
+                      </div>
+
+                      <TextField
+                        id="wg-extraNotes"
+                        label={t.fields.extraNotes.label}
+                        hint={t.fields.extraNotes.hint}
+                        placeholder={t.fields.extraNotes.placeholder}
+                        optionalLabel={t.optional}
+                        value={fields.extraNotes}
+                        onChange={(v) => setField("extraNotes", v)}
+                        maxLength={1500}
+                        multiline
+                      />
 
                       <div className={styles.terms}>
                         <p className={styles.kickerSmall}>{t.terms.title}</p>
@@ -1411,6 +1964,7 @@ export default function WebGratisClient() {
                             {err("acceptShare")}
                           </p>
                         ) : null}
+                        <p className={styles.disclaimer}>{t.disclaimer}</p>
                       </div>
                     </>
                   ) : null}
@@ -1432,32 +1986,35 @@ export default function WebGratisClient() {
 
                 {step === 3 && uploading ? <p className={styles.waiting}>{t.waitingUploads}</p> : null}
 
-                <div className={step === 1 ? styles.navSingle : styles.navRow}>
-                  {step > 1 ? (
+                <div className={pinNav ? `${styles.navBar} ${styles.navPinned}` : styles.navBar}>
+                  {step === 3 ? <p className={styles.priceLine}>{t.priceLine}</p> : null}
+                  <div className={step === 1 ? styles.navSingle : styles.navRow}>
+                    {step > 1 ? (
+                      <button
+                        type="button"
+                        className={styles.btnGhost}
+                        onClick={() => goTo((step - 1) as Step)}
+                        disabled={busy !== null}
+                      >
+                        {t.back}
+                      </button>
+                    ) : null}
                     <button
-                      type="button"
-                      className={styles.btnGhost}
-                      onClick={() => goTo((step - 1) as Step)}
-                      disabled={busy !== null}
+                      type="submit"
+                      className={styles.btnPrimary}
+                      disabled={busy !== null || (step === 3 && uploading)}
                     >
-                      {t.back}
+                      <span>
+                        {busy === "saving"
+                          ? t.saving
+                          : busy === "submitting"
+                            ? t.submitting
+                            : step === 3
+                              ? t.submit
+                              : t.continue}
+                      </span>
                     </button>
-                  ) : null}
-                  <button
-                    type="submit"
-                    className={styles.btnPrimary}
-                    disabled={busy !== null || (step === 3 && uploading)}
-                  >
-                    <span>
-                      {busy === "saving"
-                        ? t.saving
-                        : busy === "submitting"
-                          ? t.submitting
-                          : step === 3
-                            ? t.submit
-                            : t.continue}
-                    </span>
-                  </button>
+                  </div>
                 </div>
                 {step === 1 ? <p className={styles.takes}>{t.takes}</p> : null}
                 {step === 3 ? <p className={styles.fine}>{t.fine}</p> : null}
@@ -1466,6 +2023,10 @@ export default function WebGratisClient() {
           </section>
 
           <section className={styles.how} aria-labelledby="wg-how">
+            <div className={styles.initiative}>
+              <p className={styles.kickerSmall}>{t.initiativeTitle}</p>
+              <p className={styles.initiativeBody}>{mc.mission}</p>
+            </div>
             <h2 id="wg-how" className={styles.kickerSmall}>
               {t.howTitle}
             </h2>
@@ -1480,11 +2041,23 @@ export default function WebGratisClient() {
                 </li>
               ))}
             </ol>
+            {submitted ? null : (
+              <a
+                href="#formulario"
+                className={styles.howCta}
+                onClick={(e) => {
+                  e.preventDefault();
+                  startFromCta();
+                }}
+              >
+                {t.howCta}
+              </a>
+            )}
           </section>
         </div>
 
         <footer className={styles.footer}>
-          <p>{t.footer.disclaimer}</p>
+          <p className={styles.footerDisclaimer}>{t.disclaimer}</p>
           <p>
             {t.footer.privacy}{" "}
             <Link href="/verificar" className={styles.footerLink}>

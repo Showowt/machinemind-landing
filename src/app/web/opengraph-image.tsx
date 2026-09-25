@@ -1,11 +1,16 @@
 import { ImageResponse } from "next/og";
+import { FREE_DAYS, MONTHLY_PRICE_USD } from "@/lib/web-gratis/config";
 
 export const runtime = "edge";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-export const alt = "Su página web, gratis — MachineMind El Salvador";
+export const alt = "Su página web, gratis — Iniciativa de Digitalización de Negocios 2026 · El Salvador y Colombia · MachineMind";
 
-/** Link preview for WhatsApp / Facebook shares of /web and referral links. */
+/**
+ * Link preview for WhatsApp / Facebook shares of /web, /colombia, /elsalvador
+ * and referral links. Neutral across both markets; MachineMind's own initiative
+ * (no government marks, seals or claims).
+ */
 export default function OGImage() {
   return new ImageResponse(
     (
@@ -16,7 +21,7 @@ export default function OGImage() {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          padding: "64px 72px",
+          padding: "60px 72px",
           background: "#06060a",
           position: "relative",
           overflow: "hidden",
@@ -46,30 +51,46 @@ export default function OGImage() {
             display: "flex",
           }}
         />
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 6, display: "flex" }}>
-          <div style={{ flex: 1, background: "#0f47af", display: "flex" }} />
-          <div style={{ flex: 1, background: "#ffffff", display: "flex" }} />
-          <div style={{ flex: 1, background: "#0f47af", display: "flex" }} />
-        </div>
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 6, background: "#1e9bf0", display: "flex" }} />
 
-        <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-          <div style={{ display: "flex", flexDirection: "column", width: 54, height: 34, boxShadow: "0 0 0 2px rgba(255,255,255,0.2)" }}>
-            <div style={{ flex: 1, background: "#0f47af", display: "flex" }} />
-            <div style={{ flex: 1, background: "#ffffff", display: "flex" }} />
-            <div style={{ flex: 1, background: "#0f47af", display: "flex" }} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div
+            style={{
+              display: "flex",
+              alignSelf: "flex-start",
+              padding: "12px 20px",
+              border: "2px solid rgba(30,155,240,0.6)",
+              background: "rgba(30,155,240,0.1)",
+              fontSize: 24,
+              letterSpacing: 5,
+              color: "#f0f0f3",
+              fontFamily: "sans-serif",
+            }}
+          >
+            INICIATIVA DE DIGITALIZACIÓN DE NEGOCIOS 2026
           </div>
-          <div style={{ fontSize: 26, letterSpacing: 8, color: "#1e9bf0", fontFamily: "sans-serif", display: "flex" }}>
-            EL SALVADOR SE MODERNIZA
+          <div style={{ display: "flex", fontSize: 26, letterSpacing: 7, color: "#1e9bf0", fontFamily: "sans-serif" }}>
+            EL SALVADOR · COLOMBIA
           </div>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column" }}>
-          <div style={{ fontSize: 104, fontWeight: 700, color: "#f0f0f3", lineHeight: 1, letterSpacing: -3, fontFamily: "sans-serif", display: "flex" }}>
+          <div
+            style={{
+              fontSize: 100,
+              fontWeight: 700,
+              color: "#f0f0f3",
+              lineHeight: 1,
+              letterSpacing: -3,
+              fontFamily: "sans-serif",
+              display: "flex",
+            }}
+          >
             Su página web,
           </div>
           <div
             style={{
-              fontSize: 128,
+              fontSize: 124,
               fontStyle: "italic",
               color: "#1e9bf0",
               lineHeight: 1.05,
@@ -82,10 +103,19 @@ export default function OGImage() {
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-          <div style={{ fontSize: 28, color: "rgba(240,240,243,0.72)", fontFamily: "sans-serif", display: "flex" }}>
-            Lista en días · 30 días gratis · Sin contrato
+          <div style={{ fontSize: 28, color: "rgba(240,240,243,0.78)", fontFamily: "sans-serif", display: "flex" }}>
+            {`${FREE_DAYS} días gratis · luego $${MONTHLY_PRICE_USD} USD/mes · sin contrato`}
           </div>
-          <div style={{ fontSize: 22, letterSpacing: 6, color: "#f0f0f3", fontWeight: 700, fontFamily: "sans-serif", display: "flex" }}>
+          <div
+            style={{
+              fontSize: 22,
+              letterSpacing: 6,
+              color: "#f0f0f3",
+              fontWeight: 700,
+              fontFamily: "sans-serif",
+              display: "flex",
+            }}
+          >
             MACHINEMIND
           </div>
         </div>

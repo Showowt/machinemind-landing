@@ -1,14 +1,33 @@
 /**
- * Copy for the funnel's payment / redirect pages (es = El Salvador, usted;
- * en mirrors it). Prices are stated plainly, same promise as /web.
+ * Copy for the funnel's payment / redirect pages (es = usted register for El
+ * Salvador and Colombia alike; en mirrors it). Prices come from config, same
+ * promise as /web. Country-specific lines (the initiative tag and the alignment
+ * with each government's vision) exist only for SV and CO; the footer
+ * disclaimer is always shown, so it sits on every page that carries them.
  */
-import { MONTHLY_PRICE_USD } from "@/lib/web-gratis/config";
+import { countryFromE164, FREE_DAYS, MONTHLY_PRICE_USD, type SignupCountry } from "@/lib/web-gratis/config";
 
 export type PayLang = "es" | "en";
+
+/** Market of the business behind a page (null = not known: unknown code, Stripe's thank-you page). */
+export type PayCountry = SignupCountry;
 
 export function payLang(value: string | string[] | undefined, fallback: PayLang = "es"): PayLang {
   const v = Array.isArray(value) ? value[0] : value;
   return v === "en" ? "en" : v === "es" ? "es" : fallback;
+}
+
+/** The signup's country column, else its WhatsApp prefix (rows saved before the column existed). */
+export function payCountry(signup: { country?: string | null; whatsapp?: string | null } | null): PayCountry | null {
+  if (!signup) return null;
+  if (signup.country === "SV" || signup.country === "CO" || signup.country === "OTHER") return signup.country;
+  return countryFromE164(signup.whatsapp ?? "");
+}
+
+/** BCP-47 tag for <main lang>. */
+export function payLocale(lang: PayLang, country: PayCountry | null): string {
+  if (lang === "en") return "en";
+  return country === "SV" ? "es-SV" : country === "CO" ? "es-CO" : "es";
 }
 
 export const PAY_COPY = {
@@ -26,7 +45,7 @@ export const PAY_COPY = {
     cardSoon: "El pago con tarjeta estará disponible muy pronto. Mientras tanto puede pagar por PayPal o escribirnos por WhatsApp.",
     paypalTitle: "Si paga por PayPal",
     paypalSteps: [
-      `Pague $${MONTHLY_PRICE_USD} con el botón de PayPal.`,
+      `Pague $${MONTHLY_PRICE_USD} USD con el botón de PayPal.`,
       "Envíenos el comprobante por WhatsApp con el botón de abajo.",
       "Le confirmamos por WhatsApp y su web queda activa.",
     ],
@@ -38,7 +57,7 @@ export const PAY_COPY = {
     activeHelp: "¿Necesita un cambio? Escríbanos",
     buildingTitle: "Su web aún está en construcción",
     buildingBody: (business: string) =>
-      `No tiene que pagar nada todavía. Primero le entregamos la web de ${business} y la usa gratis 30 días; le avisamos por WhatsApp apenas esté lista.`,
+      `No tiene que pagar nada todavía. Primero le entregamos la web de ${business} y la usa gratis ${FREE_DAYS} días; le avisamos por WhatsApp apenas esté lista.`,
     buildingHelp: "Preguntar por mi web",
     paidBuildingTitle: "Pago recibido ✓",
     paidBuildingBody: (business: string) =>
@@ -67,8 +86,24 @@ export const PAY_COPY = {
         ? `Estamos terminando la web de ${business}. Le avisamos por WhatsApp apenas esté lista.`
         : "Estamos terminando esta web. Le avisamos por WhatsApp apenas esté lista.",
     prontoCta: "Preguntar por WhatsApp",
-    disclaimer: "MachineMind es una empresa privada. Este programa no está afiliado ni patrocinado por el Gobierno de El Salvador.",
-    verify: "Verifique nuestros canales oficiales",
+    /** Pre-written WhatsApp messages (the business sends them to the funnel line). */
+    waActivate: (code: string) => `Hola, quiero activar mi web. Código ${code}`,
+    waHello: (business: string, code: string) => `Hola, soy ${business} (código ${code}).`,
+    waHowIsIt: (business: string, code: string) => `Hola, soy ${business} (código ${code}). ¿Cómo va mi web?`,
+    waHowIsItAnon: "Hola, quiero saber cómo va mi web.",
+    waPaid: "¡Hola! Ya pagué mi web.",
+    /** Small tag + one line under the price, only for SV / CO businesses. */
+    initiative: {
+      SV: "Iniciativa de Digitalización de Negocios 2026 · El Salvador",
+      CO: "Iniciativa de Digitalización de Negocios 2026 · Colombia",
+    },
+    alignment: {
+      SV: "Nos alineamos con la visión del Gobierno de El Salvador de digitalizar a los negocios del país.",
+      CO: "Nos alineamos con la visión de transformación digital del Gobierno de Colombia.",
+    },
+    disclaimer:
+      "MachineMind es una empresa privada. Esta iniciativa no es un programa del gobierno ni cuenta con su patrocinio; compartimos su visión de digitalizar los negocios.",
+    verify: "Verifique que está hablando con MachineMind",
   },
   en: {
     toggle: "Español",
@@ -84,7 +119,7 @@ export const PAY_COPY = {
     cardSoon: "Card payments will be available very soon. Meanwhile you can pay with PayPal or message us on WhatsApp.",
     paypalTitle: "If you pay with PayPal",
     paypalSteps: [
-      `Pay $${MONTHLY_PRICE_USD} with the PayPal button.`,
+      `Pay $${MONTHLY_PRICE_USD} USD with the PayPal button.`,
       "Send us the receipt on WhatsApp with the button below.",
       "We confirm on WhatsApp and your site stays active.",
     ],
@@ -96,7 +131,7 @@ export const PAY_COPY = {
     activeHelp: "Need a change? Message us",
     buildingTitle: "Your website is still being built",
     buildingBody: (business: string) =>
-      `There's nothing to pay yet. We deliver ${business}'s website first and you use it free for 30 days; we'll message you on WhatsApp as soon as it's ready.`,
+      `There's nothing to pay yet. We deliver ${business}'s website first and you use it free for ${FREE_DAYS} days; we'll message you on WhatsApp as soon as it's ready.`,
     buildingHelp: "Ask about my website",
     paidBuildingTitle: "Payment received ✓",
     paidBuildingBody: (business: string) =>
@@ -125,8 +160,22 @@ export const PAY_COPY = {
         ? `We're finishing ${business}'s website. We'll message you on WhatsApp as soon as it's ready.`
         : "We're finishing this website. We'll message you on WhatsApp as soon as it's ready.",
     prontoCta: "Ask on WhatsApp",
-    disclaimer: "MachineMind is a private company. This program is not affiliated with or sponsored by the Government of El Salvador.",
-    verify: "Verify our official channels",
+    waActivate: (code: string) => `Hi, I'd like to activate my website. Code ${code}`,
+    waHello: (business: string, code: string) => `Hi, this is ${business} (code ${code}).`,
+    waHowIsIt: (business: string, code: string) => `Hi, this is ${business} (code ${code}). How is my website coming along?`,
+    waHowIsItAnon: "Hi, I'd like to know how my website is coming along.",
+    waPaid: "Hi! I just paid for my website.",
+    initiative: {
+      SV: "Business Digitalization Initiative 2026 · El Salvador",
+      CO: "Business Digitalization Initiative 2026 · Colombia",
+    },
+    alignment: {
+      SV: "We are aligned with the Government of El Salvador's vision of bringing every business online.",
+      CO: "We are aligned with the Government of Colombia's digital-transformation vision.",
+    },
+    disclaimer:
+      "MachineMind is a private company. This initiative is not a government program and is not sponsored by any government; we share its vision of bringing businesses online.",
+    verify: "Check that you are talking to MachineMind",
   },
 } as const;
 

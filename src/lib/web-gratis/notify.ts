@@ -8,9 +8,9 @@
  * (and therefore the outbox) is unreachable.
  */
 import { Resend } from "resend";
-import { FREE_DAYS, MM_INSTAGRAM, MONTHLY_PRICE_USD, referralLink, SITE_ORIGIN } from "./config";
+import { countryFromE164, FREE_DAYS, MM_INSTAGRAM, MONTHLY_PRICE_USD, referralLink, SITE_ORIGIN, type SignupCountry } from "./config";
 import { scripts, waLink } from "./scripts";
-import type { Referrer, WebGratisSignup } from "./server";
+import { signedLinks, type Referrer, type WebGratisSignup } from "./server";
 
 export const BOARD_URL = `${SITE_ORIGIN}/admin/web-gratis`;
 
@@ -50,6 +50,38 @@ export function clip(text: string | null | undefined, max: number): string {
 
 export function svTime(date: Date = new Date()): string {
   return date.toLocaleString("es-SV", { timeZone: "America/El_Salvador", dateStyle: "medium", timeStyle: "short" });
+}
+
+const COUNTRY_LABELS: Record<SignupCountry, { flag: string; name: string }> = {
+  SV: { flag: "🇸🇻", name: "El Salvador" },
+  CO: { flag: "🇨🇴", name: "Colombia" },
+  OTHER: { flag: "🌎", name: "Otro país" },
+};
+
+/** The row's market; rows older than the country column fall back to the number's prefix. */
+export function rowCountry(row: Pick<WebGratisSignup, "country" | "whatsapp">): SignupCountry {
+  return row.country ?? countryFromE164(row.whatsapp ?? "");
+}
+
+/** "🇨🇴 Colombia" — for Telegram/email alerts. */
+export function countryLabel(row: Pick<WebGratisSignup, "country" | "whatsapp">): string {
+  const c = COUNTRY_LABELS[rowCountry(row)];
+  return `${c.flag} ${c.name}`;
+}
+
+/** Documents are a newer column; tolerate rows loaded before it existed. */
+function docsOf(row: Pick<WebGratisSignup, "document_paths">): string[] {
+  return Array.isArray(row.document_paths) ? row.document_paths : [];
+}
+
+function extOf(path: string): string {
+  return (path.split(".").pop() ?? "archivo").toUpperCase();
+}
+
+/** "logo sí · 3 fotos · 2 documentos" */
+export function filesSummary(row: Pick<WebGratisSignup, "logo_paths" | "photo_paths" | "document_paths">): string {
+  const docs = docsOf(row).length;
+  return `logo ${row.logo_paths.length ? "sí" : "no"} · ${row.photo_paths.length} foto${row.photo_paths.length === 1 ? "" : "s"} · ${docs} documento${docs === 1 ? "" : "s"}`;
 }
 
 export function sourceLabel(row: Pick<WebGratisSignup, "utm_source" | "utm_medium" | "utm_campaign" | "fbclid">): string {
@@ -157,12 +189,15 @@ export interface LeadContext {
 export function submittedHtml(row: WebGratisSignup, ctx: LeadContext): string {
   const photoUrls = row.photo_paths.map((p) => ctx.links[p]).filter(Boolean);
   const logoUrl = row.logo_paths.map((p) => ctx.links[p]).find(Boolean);
+  const docs = docsOf(row);
+  const docLinks = docs.filter((p) => ctx.links[p]).slice(0, 6);
   const lines = [
-    `🟢 <b>WEB GRATIS — SOLICITUD COMPLETA</b>`,
+    `🟢 <b>WEB GRATIS — SOLICITUD COMPLETA</b> · ${esc(countryLabel(row))}`,
     ``,
     `<b>${esc(row.business_name)}</b>`,
     esc(clip(row.business_type, 200)),
     `📍 ${esc(row.city)}   📱 ${esc(row.whatsapp)}`,
+    row.address ? `🏠 ${esc(clip(row.address, 200))}` : null,
     ``,
     `<b>Servicios:</b> ${esc(clip(row.services.join(", "), 400))}`,
     row.differentiator ? `<b>Diferencia:</b> ${esc(clip(row.differentiator, 400))}` : null,
@@ -170,8 +205,12 @@ export function submittedHtml(row: WebGratisSignup, ctx: LeadContext): string {
     row.instagram ? `<b>IG:</b> ${esc(row.instagram)}` : null,
     row.facebook ? `<b>FB:</b> ${esc(row.facebook)}` : null,
     row.style ? `<b>Estilo:</b> ${esc(clip(row.style, 200))}` : null,
+    row.existing_website ? `<b>Ya tiene web:</b> ${esc(clip(row.existing_website, 200))} (actualizarla gratis u ofrecer una nueva)` : null,
+    row.contact_email ? `<b>Email:</b> ${esc(row.contact_email)}` : null,
+    row.extra_notes ? `<b>Notas:</b> ${esc(clip(row.extra_notes, 500))}` : null,
     `<b>Quiere:</b> ${esc(GOAL_LABELS[row.site_goal ?? ""] ?? "—")}${row.site_goal === "citas" ? " 🔥" : ""}`,
     `<b>Logo:</b> ${row.logo_paths.length ? (logoUrl ? `<a href="${esc(logoUrl)}">ver</a>` : "sí") : "no (diseñarlo)"}   <b>Fotos:</b> ${row.photo_paths.length}${photoUrls.length ? " " + photoUrls.slice(0, 4).map((u, i) => `<a href="${esc(u)}">${i + 1}</a>`).join(" ") : ""}${photoUrls.length > 4 ? " (resto en el tablero)" : ""}`,
+    `<b>Documentos:</b> ${docs.length}${docLinks.length ? " " + docLinks.map((p) => `<a href="${esc(ctx.links[p])}">${esc(extOf(p))}</a>`).join(" ") : ""}${docs.length > docLinks.length ? (docLinks.length ? " (resto en el tablero)" : " (en el tablero)") : ""}`,
     ``,
     ctx.referrer
       ? `🤝 Referido por <b>${esc(ctx.referrer.business_name)}</b> (${esc(ctx.referrer.referral_code)}) — 1 mes gratis al activar`
@@ -188,14 +227,14 @@ export function submittedHtml(row: WebGratisSignup, ctx: LeadContext): string {
   ].filter((l): l is string => l !== null);
   const html = lines.join("\n");
   // Very long free-text answers: fall back to the compact line so nothing is cut.
-  return html.length <= TELEGRAM_MAX ? html : [`🟢 <b>WEB GRATIS — SOLICITUD COMPLETA</b>`, ``, submittedLine(row, ctx.referrer ?? undefined), ``, `📋 <a href="${BOARD_URL}">Detalle completo en el tablero</a>`].join("\n");
+  return html.length <= TELEGRAM_MAX ? html : [`🟢 <b>WEB GRATIS — SOLICITUD COMPLETA</b> · ${esc(countryLabel(row))}`, ``, submittedLine(row, ctx.referrer ?? undefined), ``, `📋 <a href="${BOARD_URL}">Detalle completo en el tablero</a>`].join("\n");
 }
 
 /** Compact one-lead line for digests. */
 export function submittedLine(row: WebGratisSignup, ref: Referrer | undefined): string {
   return [
-    `• <b>${esc(clip(row.business_name, 60))}</b> — ${esc(clip(row.business_type, 60))} · ${esc(clip(row.city, 40))}`,
-    `   📱 ${esc(row.whatsapp)} · fotos ${row.photo_paths.length}${row.site_goal === "citas" ? " · 🔥citas" : ""}${ref ? ` · 🤝 ${esc(clip(ref.business_name, 30))}` : row.referred_by_text ? ` · 🤝 «${esc(clip(row.referred_by_text, 30))}»` : ""}`,
+    `• ${COUNTRY_LABELS[rowCountry(row)].flag} <b>${esc(clip(row.business_name, 60))}</b> — ${esc(clip(row.business_type, 60))} · ${esc(clip(row.city, 40))}`,
+    `   📱 ${esc(row.whatsapp)} · ${esc(filesSummary(row))}${row.existing_website ? " · ya tiene web" : ""}${row.site_goal === "citas" ? " · 🔥citas" : ""}${ref ? ` · 🤝 ${esc(clip(ref.business_name, 30))}` : row.referred_by_text ? ` · 🤝 «${esc(clip(row.referred_by_text, 30))}»` : ""}`,
   ].join("\n");
 }
 
@@ -215,7 +254,7 @@ export function abandonedDigests<T>(items: { ref: T; row: WebGratisSignup }[]) {
   return packMessages(
     items.map(({ ref, row }) => ({
       ref,
-      line: `• <b>${esc(clip(row.business_name, 60))}</b> — ${esc(clip(row.business_type, 50))} · ${esc(clip(row.city, 40))} · paso ${row.step}/3 · <a href="${esc(waLink(row.whatsapp, scripts.rescue(row.business_name)))}">escribirle</a>`,
+      line: `• ${COUNTRY_LABELS[rowCountry(row)].flag} <b>${esc(clip(row.business_name, 60))}</b> — ${esc(clip(row.business_type, 50))} · ${esc(clip(row.city, 40))} · paso ${row.step}/3 · <a href="${esc(waLink(row.whatsapp, scripts.rescue(row.business_name)))}">escribirle</a>`,
     })),
     (n) => `🟡 <b>WEB GRATIS — ${n} sin terminar el formulario</b>\nDieron nombre y WhatsApp pero no enviaron. Un mensaje los recupera:`,
     `📋 <a href="${BOARD_URL}">Tablero → Sin terminar</a>`,
@@ -237,11 +276,16 @@ export async function sendSubmittedEmail(row: WebGratisSignup, ctx: LeadContext)
       ? `<tr><td style="padding:10px 12px;color:#1e9bf0;font-weight:600;vertical-align:top;width:130px">${esc(label)}</td><td style="padding:10px 12px;color:#f0f0f3">${esc(value)}</td></tr>`
       : "";
 
-  const tiles = [...row.logo_paths, ...row.photo_paths]
-    .filter((p) => ctx.links[p])
+  // Document links may not be signed by the caller yet — sign the missing ones here.
+  const docs = docsOf(row);
+  const unsigned = docs.filter((p) => !ctx.links[p]);
+  const links = unsigned.length > 0 ? { ...(await signedLinks(unsigned)), ...ctx.links } : ctx.links;
+
+  const tiles = [...row.logo_paths, ...row.photo_paths, ...docs]
+    .filter((p) => links[p])
     .map((p) => {
-      const url = ctx.links[p];
-      const label = p.includes("/logo-") ? "Logo" : "Foto";
+      const url = links[p];
+      const label = p.includes("/logo-") ? "Logo" : p.includes("/document-") ? "Documento" : "Foto";
       return /\.(jpe?g|png|webp|gif)$/i.test(p)
         ? `<a href="${esc(url)}" style="display:inline-block;margin:0 8px 8px 0"><img src="${esc(url)}" alt="${label}" width="120" style="width:120px;height:120px;object-fit:cover;border:1px solid rgba(255,255,255,0.12)"/></a>`
         : `<a href="${esc(url)}" style="display:inline-block;margin:0 8px 8px 0;color:#1e9bf0">${label} (${esc(p.split(".").pop() ?? "archivo")})</a>`;
@@ -250,11 +294,15 @@ export async function sendSubmittedEmail(row: WebGratisSignup, ctx: LeadContext)
 
   const html = `
   <div style="font-family:system-ui,-apple-system,sans-serif;max-width:640px;margin:0 auto;background:#06060a;color:#f0f0f3;padding:32px;border-top:3px solid #1e9bf0">
-    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.2em;color:#1e9bf0;text-transform:uppercase">Web gratis · El Salvador</p>
+    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.2em;color:#1e9bf0;text-transform:uppercase">Web gratis · ${esc(countryLabel(row))}</p>
     <h1 style="margin:0 0 4px;font-size:24px">${esc(row.business_name)}</h1>
     <p style="margin:0 0 20px;color:rgba(240,240,243,0.6)">${esc(row.business_type)} — ${esc(row.city)}</p>
     <table style="width:100%;border-collapse:collapse;font-size:14px;background:rgba(255,255,255,0.03)">
+      ${rowHtml("País", countryLabel(row))}
       ${rowHtml("WhatsApp", row.whatsapp)}
+      ${rowHtml("Dirección", row.address)}
+      ${rowHtml("Email", row.contact_email)}
+      ${rowHtml("Ya tiene web", row.existing_website ? `${row.existing_website} — actualizarla gratis u ofrecer una nueva` : null)}
       ${rowHtml("Servicios", row.services.join(", "))}
       ${rowHtml("Diferencia", row.differentiator)}
       ${rowHtml("Horario", row.hours)}
@@ -262,13 +310,15 @@ export async function sendSubmittedEmail(row: WebGratisSignup, ctx: LeadContext)
       ${rowHtml("Facebook", row.facebook)}
       ${rowHtml("Estilo", row.style)}
       ${rowHtml("Quiere", GOAL_LABELS[row.site_goal ?? ""] ?? null)}
+      ${rowHtml("Notas", row.extra_notes)}
+      ${rowHtml("Archivos", filesSummary(row))}
       ${rowHtml("Referido por", ctx.referrer ? `${ctx.referrer.business_name} (${ctx.referrer.referral_code})` : null)}
       ${rowHtml("Dice que lo recomendó", row.referred_by_text ? `${row.referred_by_text}${ctx.referrer ? "" : " — asigne el código en el tablero para darle el mes gratis"}` : null)}
       ${rowHtml("Su código", `${row.referral_code} — ${referralLink(row.referral_code)}`)}
       ${rowHtml("Fuente", sourceLabel(row))}
       ${rowHtml("Aceptó", `Gratis ${FREE_DAYS} días en línea, luego $${MONTHLY_PRICE_USD}/mes · compartir y etiquetar @${MM_INSTAGRAM}`)}
     </table>
-    ${tiles ? `<h2 style="font-size:14px;margin:24px 0 10px;color:#1e9bf0">Logo y fotos (links válidos 7 días)</h2><div>${tiles}</div>` : `<p style="margin-top:20px;color:rgba(240,240,243,0.6)">Sin logo ni fotos — usar imágenes de su rubro y diseñar logo.</p>`}
+    ${tiles ? `<h2 style="font-size:14px;margin:24px 0 10px;color:#1e9bf0">Logo, fotos y documentos (links válidos 7 días)</h2><div>${tiles}</div>` : `<p style="margin-top:20px;color:rgba(240,240,243,0.6)">Sin logo, fotos ni documentos — usar imágenes de su rubro y diseñar logo.</p>`}
     <p style="margin:24px 0 0;color:rgba(240,240,243,0.7);font-size:14px">${esc(AUTO_CONFIRM_TEXT)}</p>
     <p style="margin:16px 0 0">
       <a href="${BOARD_URL}" style="display:inline-block;padding:14px 26px;border:1px solid #1e9bf0;color:#f0f0f3;text-decoration:none">Abrir tablero</a>
@@ -282,7 +332,7 @@ export async function sendSubmittedEmail(row: WebGratisSignup, ctx: LeadContext)
       {
         from: FROM_EMAIL,
         to: TEAM_EMAIL,
-        subject: `🟢 Web gratis: ${row.business_name} (${row.city})`,
+        subject: `🟢 Web gratis ${COUNTRY_LABELS[rowCountry(row)].flag} ${row.business_name} (${row.city})`,
         html,
       },
       { idempotencyKey: `web-gratis-submitted-${row.id}` },
@@ -326,8 +376,11 @@ export async function sendDigestEmail(
       <div style="border:1px solid rgba(255,255,255,0.1);border-left:3px solid #1e9bf0;padding:14px;margin:0 0 12px;overflow:hidden">
         ${firstPhoto ? `<a href="${esc(links[firstPhoto])}"><img src="${esc(links[firstPhoto])}" alt="" width="96" style="float:right;width:96px;height:96px;object-fit:cover;margin:0 0 8px 12px"/></a>` : ""}
         <div style="font-size:17px;font-weight:700">${esc(row.business_name)}</div>
-        <div style="color:rgba(240,240,243,0.6);margin-bottom:6px">${esc(row.business_type)} — ${esc(row.city)}</div>
+        <div style="color:rgba(240,240,243,0.6);margin-bottom:6px">${esc(row.business_type)} — ${esc(row.city)} · ${esc(countryLabel(row))}</div>
         ${field("WhatsApp", row.whatsapp)}
+        ${field("Dirección", row.address)}
+        ${field("Email", row.contact_email)}
+        ${field("Ya tiene web", row.existing_website)}
         ${field("Servicios", row.services.join(", "))}
         ${field("Diferencia", row.differentiator)}
         ${field("Horario", row.hours)}
@@ -335,7 +388,8 @@ export async function sendDigestEmail(
         ${field("Facebook", row.facebook)}
         ${field("Estilo", row.style)}
         ${field("Quiere", GOAL_LABELS[row.site_goal ?? ""] ?? null)}
-        ${field("Archivos", `${row.logo_paths.length ? "logo + " : ""}${row.photo_paths.length} foto(s)`)}
+        ${field("Notas", row.extra_notes)}
+        ${field("Archivos", filesSummary(row))}
         ${field("Referido por", ref ? `${ref.business_name} (${ref.referral_code})` : null)}
         ${field("Dice que lo recomendó", row.referred_by_text)}
         ${field("Código", row.referral_code)}
@@ -345,7 +399,7 @@ export async function sendDigestEmail(
 
   const html = `
   <div style="font-family:system-ui,-apple-system,sans-serif;max-width:680px;margin:0 auto;background:#06060a;color:#f0f0f3;padding:28px;border-top:3px solid #1e9bf0">
-    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.2em;color:#1e9bf0;text-transform:uppercase">Web gratis · El Salvador</p>
+    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.2em;color:#1e9bf0;text-transform:uppercase">Web gratis · El Salvador y Colombia</p>
     <h1 style="margin:0 0 8px;font-size:22px">${rows.length} solicitudes nuevas</h1>
     <p style="margin:0 0 16px;color:rgba(240,240,243,0.7);font-size:14px">${esc(AUTO_CONFIRM_TEXT)}</p>
     ${cards}

@@ -6,6 +6,9 @@ import { TRANSLATIONS, Lang } from '@/lib/i18n-content';
 import LeadCaptureForm from '@/components/lead-capture/LeadCaptureForm';
 import StickyBar from '@/components/lead-capture/StickyBar';
 import ExitIntent from '@/components/lead-capture/ExitIntent';
+import InitiativeBar from '@/components/web-gratis/InitiativeBar';
+import InitiativeSection from '@/components/web-gratis/InitiativeSection';
+import { WEB_GRATIS_PATH } from '@/lib/web-gratis/config';
 
 interface Project {
   name: string; type: string; industry: string;
@@ -168,6 +171,13 @@ export default function Home() {
   const [visibleProjects, setVisibleProjects] = useState(18);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [lang, setLang] = useState<Lang>('es');
+  // Free-website initiative: while its section is on screen the collapsed sticky
+  // bar steps aside, and once the visitor interacts with the initiative (presses
+  // or focuses the bar or a section control — never mere hover) the exit-intent
+  // modal stays out of the way for the rest of the visit.
+  const [wgInView, setWgInView] = useState(false);
+  const [wgEngaged, setWgEngaged] = useState(false);
+  const markWgEngaged = useCallback(() => setWgEngaged(true), []);
   const videoRef = useRef<HTMLVideoElement>(null);
   const reelRef = useRef<HTMLVideoElement>(null);
   const gsapReady = useRef(false);
@@ -369,6 +379,9 @@ export default function Home() {
       {/* ═══ SCROLL PROGRESS ═══ */}
       <div className="scroll-progress" />
 
+      {/* ═══ INITIATIVE BAR — free website, El Salvador + Colombia ═══ */}
+      <InitiativeBar lang={lang} onEngage={markWgEngaged} />
+
       {/* ═══ NAVIGATION ═══ */}
       <nav className="nav">
         <a href="/" className="nav-logo">
@@ -378,6 +391,9 @@ export default function Home() {
           {navItems.map(item => (
             <a key={item.id} href={`#${item.id}`} className="nav-link">{item.label}</a>
           ))}
+          <a href={WEB_GRATIS_PATH} className="nav-link nav-link-wg">
+            <span className="nav-wg-dot" aria-hidden="true" />{t.nav.webGratis}
+          </a>
         </div>
         <button className="lang-toggle" onClick={() => setLang(l => l === 'en' ? 'es' : 'en')} aria-label="Toggle language">
           {lang === 'en' ? 'ES' : 'EN'}
@@ -390,6 +406,7 @@ export default function Home() {
 
       {mobileMenuOpen && (
         <div className="mobile-menu">
+          <a href={WEB_GRATIS_PATH} className="mm-link mm-link-wg" onClick={() => setMobileMenuOpen(false)}>{t.nav.webGratis}</a>
           {navItems.map(item => (
             <a key={item.id} href={`#${item.id}`} className="mm-link" onClick={() => setMobileMenuOpen(false)}>{item.label}</a>
           ))}
@@ -442,6 +459,9 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      {/* ═══ WEB GRATIS — Business Digitalization Initiative 2026 ═══ */}
+      <InitiativeSection lang={lang} onVisibleChange={setWgInView} onEngage={markWgEngaged} />
 
       {/* ═══ SYSTEMS ═══ */}
       <section id="systems" className="section-dark">
@@ -675,6 +695,7 @@ export default function Home() {
             {navItems.map(item => (
               <a key={item.id} href={`#${item.id}`}>{item.label}</a>
             ))}
+            <a href={WEB_GRATIS_PATH} className="footer-link-wg">{t.nav.webGratis}</a>
           </div>
           <div className="footer-social">
             <a href="https://linkedin.com/company/machinemindconsulting" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn">
@@ -691,9 +712,11 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* Lead Capture Overlays */}
-      <StickyBar lang={lang} />
-      <ExitIntent lang={lang} />
+      {/* Lead Capture Overlays — kept off the initiative CTAs (see wgInView / wgEngaged) */}
+      <div className={wgInView ? 'sb-quiet' : undefined}>
+        <StickyBar lang={lang} />
+      </div>
+      {!wgEngaged && !wgInView && <ExitIntent lang={lang} />}
 
       <style>{STYLES}</style>
     </>
@@ -734,30 +757,45 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .scroll-progress{position:fixed;top:0;left:0;height:2px;width:100%;background:var(--gold);z-index:9999;transform:scaleX(0);transform-origin:left}
 
 /* ═══ NAV ═══ */
-.nav{position:fixed;top:0;left:0;right:0;z-index:1000;padding:20px clamp(24px,5vw,80px);display:flex;justify-content:space-between;align-items:center;transition:background .3s}
+.nav{position:fixed;top:var(--mm-ib-h,0px);left:0;right:0;z-index:1000;padding:20px clamp(24px,5vw,80px);display:flex;justify-content:space-between;align-items:center;transition:background .3s}
 .nav-logo{font-family:var(--fb);font-size:11px;font-weight:700;letter-spacing:.3em;color:var(--fg);text-decoration:none}
 .nav-logo-gold{color:var(--gold)}
 .nav-links{display:flex;gap:36px}
 .nav-link{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--fg);text-decoration:none;opacity:.4;transition:opacity .3s}
 .nav-link:hover{opacity:1}
+.nav-link-wg{display:inline-flex;align-items:center;gap:8px;color:var(--gold);opacity:1}
+.nav-link-wg:hover{color:var(--fg)}
+.nav-wg-dot{width:5px;height:5px;border-radius:50%;background:var(--gold);animation:pulse 2s ease-in-out infinite}
+@media(max-width:1180px){.nav-links{gap:22px}}
+/* Seven links + logo + toggle need ~1000px on one line; below that use the menu */
 .nav-hamburger{display:none;background:none;border:none;width:28px;height:20px;position:relative;z-index:1001;cursor:pointer}
 .hb-line{display:block;width:100%;height:1px;background:var(--fg);position:absolute;left:0;transition:all .3s}
 .hb-line:first-child{top:4px}.hb-line:last-child{bottom:4px}
 .hb-line.open:first-child{top:50%;transform:rotate(45deg)}.hb-line.open:last-child{bottom:50%;transform:rotate(-45deg)}
-@media(max-width:768px){.nav-links{display:none}.nav-hamburger{display:block}}
-.mobile-menu{position:fixed;inset:0;background:rgba(6,6,10,0.97);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:32px}
+@media(max-width:1024px){.nav-links{display:none}.nav-hamburger{display:block}}
+.mobile-menu{position:fixed;inset:0;background:rgba(6,6,10,0.97);z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:32px;overflow-y:auto;padding:calc(var(--mm-ib-h,0px) + 84px) 24px 48px}
+/* Flexible spacers center the links when they fit and collapse when they don't (menu scrolls) */
+.mobile-menu::before,.mobile-menu::after{content:'';flex:1 0 0}
 .mm-link{font-family:var(--fd);font-size:32px;font-weight:500;color:var(--fg);text-decoration:none;opacity:.6;transition:opacity .3s,color .3s}
 .mm-link:hover{opacity:1;color:var(--gold)}
+.mm-link-wg{color:var(--gold);opacity:1}
+@media(max-height:760px){.mobile-menu{gap:20px}.mm-link{font-size:26px}}
 .lang-toggle{background:none;border:1px solid var(--gb);color:var(--gold);font-family:var(--fm);font-size:10px;font-weight:500;letter-spacing:.2em;padding:6px 14px;cursor:pointer;transition:all .3s;margin-left:16px}
 .lang-toggle:hover{border-color:var(--gold);background:rgba(201,169,110,0.1)}
-@media(max-width:768px){.lang-toggle{position:absolute;top:24px;right:72px}}
+/* Sits just left of the hamburger at any nav padding (72px at 360px, as before) */
+@media(max-width:1024px){.lang-toggle{position:absolute;top:24px;right:calc(clamp(24px,5vw,80px) + 48px)}}
 .mobile-menu .lang-toggle{margin:16px auto 0;border-color:var(--gold)}
+/* Wherever the hamburger shows, the nav's own toggle stays visible above the open menu — no second copy */
+@media(max-width:1024px){.mobile-menu .lang-toggle{display:none}}
 
 /* ═══ CONTENT Z-INDEX ═══ */
-.hero,.metrics,.section-dark,.manifesto,.site-footer,.section-divider,.mobile-menu{position:relative;z-index:5}
+/* .mobile-menu is deliberately NOT in this list: it must stay position:fixed, or it
+   renders in-flow at the top of the document (invisible once scrolled). */
+.hero,.metrics,.section-dark,.manifesto,.site-footer,.section-divider{position:relative;z-index:5}
 
 /* ═══ HERO ═══ */
-.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:0 clamp(24px,5vw,80px)}
+.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:calc(var(--mm-ib-h,0px) + 96px) clamp(24px,5vw,80px) 120px}
+section[id]{scroll-margin-top:calc(var(--mm-ib-h,0px) + 72px)}
 .hero-content{max-width:1000px}
 .hero-eyebrow{font-size:10px;letter-spacing:.6em;text-transform:uppercase;color:var(--gold);margin-bottom:28px}
 .hero-title{font-family:var(--fd);font-size:clamp(44px,8vw,110px);font-weight:500;line-height:1.02;letter-spacing:-.04em;margin-bottom:36px;text-shadow:0 4px 60px rgba(0,0,0,0.6)}
@@ -805,7 +843,7 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .metric-label{font-size:9px;letter-spacing:.4em;text-transform:uppercase;color:var(--dim);margin-top:8px;display:block}
 
 /* ═══ SYSTEMS ═══ */
-.systems-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:2px}
+.systems-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(340px,100%),1fr));gap:2px}
 .system-card{background:rgba(6,6,10,0.75);border:1px solid var(--gb);padding:48px 40px;position:relative;transition:border-color .4s,background .4s}
 .system-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--gold);transform:scaleX(0);transform-origin:left;transition:transform .6s cubic-bezier(.4,0,.2,1)}
 .system-card:hover::before{transform:scaleX(1)}
@@ -945,6 +983,8 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .footer-links{display:flex;gap:28px}
 .footer-links a{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--dim);text-decoration:none;transition:color .3s}
 .footer-links a:hover{color:var(--gold)}
+.footer-links a.footer-link-wg{color:var(--gold)}
+.footer-links a.footer-link-wg:hover{color:var(--fg)}
 .footer-social{display:flex;gap:16px;align-items:center}
 .footer-social a{color:var(--dim);transition:color .3s;display:flex;align-items:center}
 .footer-social a:hover{color:var(--gold)}
@@ -979,6 +1019,9 @@ body{font-family:var(--fb);overflow-x:hidden;-webkit-font-smoothing:antialiased}
 /* ═══ STICKY BAR ═══ */
 .sticky-bar{position:fixed;bottom:0;left:0;right:0;z-index:9000;background:rgba(6,6,10,0.95);border-top:1px solid var(--gb);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);animation:slideUp .4s cubic-bezier(.4,0,.2,1)}
 @keyframes slideUp{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}
+.sticky-bar{transition:transform .4s cubic-bezier(.4,0,.2,1),opacity .4s}
+/* Initiative section on screen: the collapsed bar steps aside (never mid-typing) */
+.sb-quiet .sticky-bar:not(.sticky-bar-exp):not(:focus-within){transform:translateY(110%);opacity:0;pointer-events:none;animation:none}
 .sticky-bar-inner{max-width:1200px;margin:0 auto;padding:14px clamp(16px,3vw,40px)}
 .sb-row{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .sb-text{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--fg)}

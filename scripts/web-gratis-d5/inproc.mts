@@ -756,8 +756,10 @@ export async function runInProcess(): Promise<void> {
       check("ledger inbound image points at the stored file", imgRow?.media_path === up?.path, imgRow);
       res = await site.bridge.handleBridge({ type: "media_attached", phone: b1.whatsapp, path: up?.path ?? "", kind: "photo" }, bd);
       check("attach twice → duplicate (no double entry)", (res.body.data as { attached: string })?.attached === "duplicate");
+      res = await site.bridge.handleBridge({ type: "media_upload_url", phone: b1.whatsapp, contentType: "video/mp4", kind: "photo" }, bd);
+      check("unsupported type (video) → 415", res.status === 415 && res.body.error === "unsupported_type");
       res = await site.bridge.handleBridge({ type: "media_upload_url", phone: b1.whatsapp, contentType: "text/plain", kind: "photo" }, bd);
-      check("unsupported type → 415", res.status === 415 && res.body.error === "unsupported_type");
+      check("a text file sent as 'photo' is stored as a document", res.status === 200 && (res.body.data as { kind?: string; path?: string })?.kind === "document" && String((res.body.data as { path?: string })?.path).includes("/document-"), res.body);
       res = await site.bridge.handleBridge({ type: "media_upload_url", phone: p9, contentType: "image/jpeg", kind: "photo" }, bd);
       check("unknown phone → 404 unknown_client", res.status === 404 && res.body.error === "unknown_client" && res.body.data === null);
       res = await site.bridge.handleBridge({ type: "media_attached", phone: b2.whatsapp, path: up?.path ?? "", kind: "photo" }, bd);

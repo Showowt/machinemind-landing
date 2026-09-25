@@ -1,7 +1,9 @@
-/* /web — free-website onboarding (El Salvador).
-   Brand-identity page: MachineMind blue #1e9bf0 on #06060a, El Salvador flag
-   blue #0f47af as the second accent. Sharp corners, glass surfaces, CSS-only
-   motion (nothing is hidden behind a JS animation). Mobile first. */
+/* /web — free-website onboarding (El Salvador + Colombia).
+   Brand-identity page: MachineMind blue #1e9bf0 on #06060a, deep blue #0f47af
+   as the second accent; the chosen country's flag colours appear only in small
+   geographic flag chips. Sharp corners, glass surfaces, CSS-only motion
+   (nothing is hidden behind a JS animation). Mobile first, no horizontal
+   scroll at 360px. */
 
 .page {
   --wg-bg: #06060a;
@@ -108,9 +110,17 @@
 .flagMini {
   width: 18px;
   height: 12px;
-  background: linear-gradient(var(--wg-flag) 0 33.4%, #ffffff 33.4% 66.6%, var(--wg-flag) 66.6%);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
+  outline: 1px solid rgba(255, 255, 255, 0.15);
   flex: none;
+}
+
+/* Country flag chips (geography only — never styled as a seal or emblem). */
+.flagSV {
+  background: linear-gradient(#0f47af 0 33.4%, #ffffff 33.4% 66.6%, #0f47af 66.6%);
+}
+
+.flagCO {
+  background: linear-gradient(#fcd116 0 50%, #003893 50% 75%, #ce1126 75%);
 }
 
 .langBtn {
@@ -176,15 +186,27 @@
 
 /* ─── Hero ───────────────────────────────────────────────────────────────── */
 
-.kicker {
+/* Initiative badge: "Iniciativa de Digitalización de Negocios 2026 · País". */
+.badge {
   display: inline-flex;
   align-items: center;
   gap: 12px;
-  font-size: 12px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  color: var(--wg-blue);
+  max-width: 100%;
   margin: 8px 0 0;
+  padding: 10px 14px;
+  border: 1px solid rgba(30, 155, 240, 0.45);
+  background: rgba(30, 155, 240, 0.08);
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.45;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--wg-fg);
+}
+
+.badgeCountry {
+  color: var(--wg-blue);
+  white-space: nowrap;
 }
 
 .flagStripe {
@@ -193,8 +215,7 @@
   height: 18px;
   overflow: hidden;
   flex: none;
-  background: linear-gradient(var(--wg-flag) 0 33.4%, #ffffff 33.4% 66.6%, var(--wg-flag) 66.6%);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+  outline: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .flagStripe::after {
@@ -234,6 +255,25 @@
   letter-spacing: -0.01em;
   color: var(--wg-blue);
   text-shadow: 0 0 42px rgba(30, 155, 240, 0.45);
+}
+
+/* Alignment with the government's vision — one clear line under the headline. */
+.align {
+  margin: 0 0 18px;
+  padding: 2px 0 2px 14px;
+  border-left: 2px solid var(--wg-blue);
+  font-family: var(--font-instrument), Georgia, serif;
+  font-style: italic;
+  font-size: 20px;
+  line-height: 1.35;
+  color: var(--wg-fg);
+  max-width: 40ch;
+}
+
+@media (min-width: 960px) {
+  .align {
+    font-size: 23px;
+  }
 }
 
 .lede {
@@ -354,29 +394,82 @@
   color: var(--wg-fg);
 }
 
-.progress {
+/* Labeled 3-step path: each step is a bar with its name under it. */
+.stepper {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
-  margin-bottom: 24px;
+  list-style: none;
+  margin: 0 0 24px;
+  padding: 0;
 }
 
-.seg,
-.segOn {
-  height: 3px;
-  background: var(--wg-faint);
+.stepOn,
+.stepDone,
+.stepLater {
   position: relative;
-  overflow: hidden;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding-top: 9px;
+  font-size: 12.5px;
+  line-height: 1.3;
+  color: var(--wg-dim);
 }
 
-.segOn::after {
+.stepOn::before,
+.stepDone::before,
+.stepLater::before {
   content: "";
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--wg-faint);
+}
+
+.stepDone::before {
+  background: var(--wg-blue);
+}
+
+.stepOn::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
   background: linear-gradient(90deg, var(--wg-flag), var(--wg-blue));
-  box-shadow: 0 0 12px rgba(30, 155, 240, 0.6);
   transform-origin: left;
   animation: fillIn 0.6s var(--wg-ease) both;
+}
+
+.stepOn {
+  color: var(--wg-fg);
+  font-weight: 700;
+}
+
+.stepDone {
+  color: var(--wg-soft);
+}
+
+.stepNum {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--wg-blue);
+  flex: none;
+}
+
+.stepLater .stepNum {
+  color: var(--wg-dim);
+}
+
+.stepText {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 @keyframes fillIn {
@@ -1315,4 +1408,446 @@ textarea.input {
   font-size: 12.5px;
   line-height: 1.45;
   color: var(--wg-dim);
+}
+
+/* ─── Hero CTA (phones: the form sits below the fold) ────────────────────── */
+
+.heroCta {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  margin-top: 22px;
+  padding: 16px 20px;
+  border: 1px solid var(--wg-blue);
+  background: var(--wg-blue);
+  color: #06060a;
+  font-family: var(--font-clash), system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 17px;
+  letter-spacing: 0.02em;
+  text-align: center;
+  text-decoration: none;
+}
+
+.heroCta::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--wg-fg);
+  transform: translateY(101%);
+  transition: transform 0.35s var(--wg-ease);
+}
+
+@media (hover: hover) {
+  .heroCta:hover::before {
+    transform: translateY(0);
+  }
+}
+
+.heroCta:focus-visible {
+  outline: 2px solid var(--wg-fg);
+  outline-offset: 3px;
+}
+
+@media (min-width: 960px) {
+  .heroCta {
+    display: none;
+  }
+}
+
+/* ─── Country picker ─────────────────────────────────────────────────────── */
+
+.marketRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.market,
+.marketOn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 12px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.marketOn {
+  border-color: var(--wg-blue);
+  background: var(--wg-blue-soft);
+}
+
+.market:focus-within,
+.marketOn:focus-within {
+  outline: 2px solid var(--wg-blue);
+  outline-offset: 2px;
+}
+
+.market .flagStripe,
+.marketOn .flagStripe {
+  width: 22px;
+  height: 14px;
+}
+
+.market,
+.marketOn {
+  gap: 8px;
+}
+
+/* ─── City quick picks ───────────────────────────────────────────────────── */
+
+.quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.quickBtn,
+.quickOn {
+  min-height: 36px;
+  padding: 7px 11px;
+  border: 1px solid var(--wg-line);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--wg-soft);
+  font: inherit;
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+}
+
+.quickBtn:hover,
+.quickBtn:focus-visible {
+  border-color: var(--wg-blue);
+  color: var(--wg-fg);
+  outline: none;
+}
+
+.quickOn {
+  border-color: var(--wg-blue);
+  background: var(--wg-blue-soft);
+  color: var(--wg-fg);
+}
+
+/* ─── Documents ──────────────────────────────────────────────────────────── */
+
+.docList {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.docRow {
+  position: relative;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 8px 12px 10px;
+  border: 1px solid var(--wg-line);
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+  animation: rise 0.35s var(--wg-ease) both;
+}
+
+.docRowErr {
+  border-color: rgba(255, 122, 122, 0.5);
+  background: rgba(255, 122, 122, 0.06);
+}
+
+.docIcon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 52px;
+  overflow: hidden;
+  border: 1px solid rgba(30, 155, 240, 0.45);
+  background: rgba(30, 155, 240, 0.08);
+}
+
+/* Folded corner, so the tile reads as a page. */
+.docIcon::after {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 12px;
+  height: 12px;
+  background: linear-gradient(225deg, var(--wg-bg) 50%, rgba(30, 155, 240, 0.45) 50%);
+}
+
+.docThumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.55;
+}
+
+.docExt {
+  position: relative;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--wg-fg);
+}
+
+.docMeta {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.docName {
+  font-size: 14.5px;
+  line-height: 1.3;
+  color: var(--wg-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docSub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11.5px;
+  color: var(--wg-dim);
+}
+
+.docOk {
+  color: var(--wg-ok);
+}
+
+.docBad {
+  font-family: var(--font-satoshi), system-ui, sans-serif;
+  color: var(--wg-err);
+}
+
+.docBusy {
+  color: var(--wg-blue);
+}
+
+.docActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.docRetry {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: transparent;
+  color: var(--wg-fg);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.docRemove {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--wg-fg);
+  background: rgba(6, 6, 10, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  cursor: pointer;
+}
+
+.docBar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: var(--wg-blue);
+  transform-origin: left;
+  transition: transform 0.25s linear;
+}
+
+.plusInline {
+  font-family: var(--font-clash), system-ui, sans-serif;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--wg-blue);
+  margin-right: 8px;
+}
+
+.notice {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-left: 2px solid #00e5ff;
+  background: rgba(0, 229, 255, 0.07);
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--wg-fg);
+}
+
+/* ─── Disclaimer (required wherever the initiative framing appears) ─────── */
+
+.disclaimer {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--wg-line);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--wg-dim);
+}
+
+.footerDisclaimer {
+  color: var(--wg-soft);
+}
+
+/* ─── Sticky action bar: the primary CTA stays in reach while scrolling ──── */
+
+.navBar {
+  position: relative;
+  z-index: 5;
+  margin: 8px -18px 0;
+  padding: 18px 18px 12px;
+}
+
+.navPinned {
+  position: sticky;
+  bottom: 0;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom));
+  /* Short fade, then opaque: the terms text must not ghost through the price line or "Atrás". */
+  background: linear-gradient(180deg, rgba(8, 9, 14, 0) 0, rgba(8, 9, 14, 0.96) 16px, #08090e 30px);
+}
+
+/* While typing, the on-screen keyboard owns the bottom of the screen: the bar
+   drops back into the flow so it never covers the field being filled in. */
+.card:has(.input:focus, .select:focus) .navPinned {
+  position: relative;
+  background: none;
+  padding-bottom: 12px;
+}
+
+@media (min-width: 480px) {
+  .navBar {
+    margin-inline: -28px;
+    padding-inline: 28px;
+  }
+}
+
+.navBar .navSingle,
+.navBar .navRow {
+  margin-top: 0;
+}
+
+.btnPrimary span {
+  text-wrap: balance;
+}
+
+.priceLine {
+  text-wrap: balance;
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--wg-fg);
+  text-align: center;
+}
+
+/* ─── Done: send what's missing on WhatsApp ──────────────────────────────── */
+
+.moreFiles {
+  margin: -8px 0 28px;
+  padding: 16px;
+  border: 1px solid rgba(37, 211, 102, 0.35);
+  background: rgba(37, 211, 102, 0.05);
+}
+
+.moreTitle {
+  font-family: var(--font-clash), system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 18px;
+  margin: 0 0 6px;
+}
+
+.moreBody {
+  font-size: 14.5px;
+  line-height: 1.5;
+  color: var(--wg-soft);
+  margin: 0 0 14px;
+}
+
+/* ─── The initiative (above "how it works") ──────────────────────────────── */
+
+.initiative {
+  margin: 0 0 28px;
+  padding: 18px 16px;
+  border: 1px solid var(--wg-line);
+  border-top: 2px solid var(--wg-blue);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.initiativeBody {
+  margin: 0;
+  font-size: 15.5px;
+  line-height: 1.55;
+  color: var(--wg-soft);
+}
+
+.howCta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 52px;
+  margin-top: 18px;
+  padding: 12px 18px;
+  border: 1px solid var(--wg-blue);
+  color: var(--wg-fg);
+  font-family: var(--font-clash), system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 16px;
+  text-decoration: none;
+  transition: background 0.2s;
+}
+
+.howCta:hover,
+.howCta:focus-visible {
+  background: var(--wg-blue-soft);
+}
+
+@media (min-width: 960px) {
+  .howCta {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .done,
+  .docRow,
+  .stepBody,
+  .referred,
+  .stepOn::after,
+  .flagStripe::after,
+  .aurora {
+    animation: none;
+  }
 }

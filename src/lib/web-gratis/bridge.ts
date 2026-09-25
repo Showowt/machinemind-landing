@@ -9,7 +9,7 @@
  *   outbound          log a free-form reply the responder sent
  *   opt_out           STOP/BAJA → never message this phone again
  *   event             responder-detected intent (hot lead, wants changes, …)
- *   media_upload_url  signed upload for a photo/logo sent on WhatsApp
+ *   media_upload_url  signed upload for a photo / logo / document sent on WhatsApp
  *   media_attached    attach that upload to the client's request
  *
  * Handlers are transport-free (return status + envelope) with injectable time
@@ -17,7 +17,8 @@
  */
 import { randomBytes } from "crypto";
 import { z } from "zod";
-import { ALLOWED_UPLOAD_TYPES, payUrl, referralLink, SITE_ORIGIN, WEB_GRATIS_PATH } from "./config";
+import { documentPathsOf, signupCountry, type BoardCountry, type OpsSignup } from "./admin";
+import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, payUrl, referralLink, SITE_ORIGIN, UPLOAD_TYPES_BY_KIND, WEB_GRATIS_PATH } from "./config";
 import { enqueueSystem } from "./outbox";
 import { getDb, listDraftFiles, loadSettings, SIGNUPS_TABLE, storage, type SignupStatus, type WebGratisSignup } from "./server";
 import { TEMPLATE_LABEL, type TemplateName } from "./templates";
@@ -80,13 +81,15 @@ export const bridgeRequestSchema = z.discriminatedUnion("type", [
     type: z.literal("media_upload_url"),
     phone: e164,
     contentType: z.string().max(100),
-    kind: z.enum(["photo", "logo"]),
+    kind: z.enum(["photo", "logo", "document"]),
+    /** Bytes, when Rewired knows it (Meta's file_size); over MAX_UPLOAD_BYTES (25 MB) is refused before uploading. */
+    size: z.number().int().positive().optional().nullable(),
   }),
   z.object({
     type: z.literal("media_attached"),
     phone: e164,
     path: z.string().max(300),
-    kind: z.enum(["photo", "logo"]),
+    kind: z.enum(["photo", "logo", "document"]),
     wamid: wamid.optional().nullable(),
   }),
 ]);
@@ -99,6 +102,8 @@ export interface ClientContext {
   businessName: string;
   businessType: string;
   city: string;
+  /** Market of the business (SV | CO | OTHER): the responder answers in its terms (e.g. "¿es del gobierno?"). */
+  country: BoardCountry;
   status: SignupStatus;
   siteUrl: string | null;
   freeUntil: string | null;
@@ -159,10 +164,10 @@ export function pickPrimary<T extends Pick<WebGratisSignup, "status" | "updated_
   return [...rows].sort((a, b) => STATUS_RANK[a.status] - STATUS_RANK[b.status] || Date.parse(b.updated_at) - Date.parse(a.updated_at))[0];
 }
 
-async function signupsFor(phone: string): Promise<WebGratisSignup[]> {
+async function signupsFor(phone: string): Promise<OpsSignup[]> {
   const { data, error } = await getDb().from(SIGNUPS_TABLE).select("*").eq("whatsapp", phone).limit(20);
   if (error) throw error;
-  return (data ?? []) as WebGratisSignup[];
+  return (data ?? []) as OpsSignup[];
 }
 
 /** Meta timestamps are unix seconds (as string or number); tolerate ISO too. */
@@ -182,7 +187,7 @@ const MEDIA_LABEL: Record<string, string> = {
   other: "[mensaje]",
 };
 
-async function buildContext(primary: WebGratisSignup): Promise<ClientContext> {
+async function buildContext(primary: OpsSignup): Promise<ClientContext> {
   const db = getDb();
   const [settings, last] = await Promise.all([
     loadSettings().catch((error: unknown) => {
@@ -205,6 +210,7 @@ async function buildContext(primary: WebGratisSignup): Promise<ClientContext> {
     businessName: primary.business_name,
     businessType: primary.business_type,
     city: primary.city,
+    country: signupCountry(primary),
     status: primary.status,
     siteUrl: primary.site_url,
     freeUntil: primary.free_until,
@@ -492,28 +498,97 @@ async function onEvent(req: Extract<BridgeRequest, { type: "event" }>, deps: Bri
   return okResult({ signupId: primary?.id ?? null });
 }
 
-/** Photo cap per request (DB check is 12); logos up to 4. */
-const MEDIA_PATH_RE = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(photo|logo)-wa-\d{10,14}-[0-9a-f]{6}\.(jpg|png|webp|heic|heif|gif|pdf)$/;
-const MAX_WA_OBJECTS = 40;
+// ─── Media sent on WhatsApp (photos, logos, documents) ─────────────────────
+
+type MediaKind = "photo" | "logo" | "document";
+
+/**
+ * Per kind, the MIME types accepted from WhatsApp and the extension stored: the
+ * same lists as the /web form (config UPLOAD_TYPES_BY_KIND, all on the bucket's
+ * allow-list). A document may also be a picture (a photo of the menu).
+ */
+const WA_MEDIA_TYPES: Record<MediaKind, Record<string, string>> = UPLOAD_TYPES_BY_KIND;
+
+/** Per-request caps for files sent on WhatsApp (DB checks: photos 12, logos 4; documents 20 here). */
+const WA_MAX: Record<MediaKind, number> = { photo: 12, logo: 4, document: 20 };
+/** Hard cap on objects in one request's folder (form uploads + everything sent on WhatsApp). */
+const MAX_WA_OBJECTS = 64;
+
+const MEDIA_PATH_RE =
+  /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/(photo|logo|document)-wa-\d{10,14}-[0-9a-f]{6}\.(jpg|png|webp|heic|heif|gif|svg|psd|eps|ai|pdf|doc|docx|xls|xlsx|ppt|pptx|odt|ods|txt|csv)$/;
+
+/**
+ * The kind a file is stored as. A file that can't be what was asked (a PDF or
+ * spreadsheet sent as a "photo" by an older responder) is kept as a document
+ * instead of being refused. Null when the type isn't accepted at all.
+ */
+function storedKind(asked: MediaKind, mime: string): { kind: MediaKind; ext: string } | null {
+  const own = WA_MEDIA_TYPES[asked][mime];
+  if (own) return { kind: asked, ext: own };
+  const asDocument = WA_MEDIA_TYPES.document[mime];
+  return asDocument ? { kind: "document", ext: asDocument } : null;
+}
+
+function currentCount(s: OpsSignup, kind: MediaKind): number {
+  if (kind === "photo") return s.photo_paths.length;
+  if (kind === "logo") return s.logo_paths.length;
+  return documentPathsOf(s).length;
+}
+
+/** Postgres text[] literal for an equality filter ({"a","b"}), quoting every element. */
+function pgTextArray(items: string[]): string {
+  return `{${items.map((p) => `"${p.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`).join(",")}}`;
+}
+
+/**
+ * Append a WhatsApp document to document_paths — same answers as the
+ * web_gratis_attach_media RPC does for photos/logos ('attached' | 'duplicate' |
+ * 'full' | 'not_found'). Compare-and-swap on the array itself, so two documents
+ * arriving at once can't overwrite each other.
+ */
+async function attachDocument(signupId: string, path: string): Promise<"attached" | "duplicate" | "full" | "not_found"> {
+  const db = getDb();
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const { data, error } = await db.from(SIGNUPS_TABLE).select("document_paths").eq("id", signupId).maybeSingle();
+    if (error) throw error;
+    if (!data) return "not_found";
+    const current = documentPathsOf(data as { document_paths: string[] | null });
+    if (current.includes(path)) return "duplicate";
+    if (current.length >= WA_MAX.document) return "full";
+    const { data: moved, error: updateError } = await db
+      .from(SIGNUPS_TABLE)
+      .update({ document_paths: [...current, path] })
+      .eq("id", signupId)
+      .filter("document_paths", "eq", pgTextArray(current))
+      .select("id")
+      .maybeSingle();
+    if (updateError) throw updateError;
+    if (moved) return "attached";
+  }
+  throw new Error(`[WebGratis:bridge] document_paths kept changing for ${signupId}; could not attach ${path}`);
+}
 
 async function onMediaUploadUrl(req: Extract<BridgeRequest, { type: "media_upload_url" }>): Promise<BridgeResult> {
   const primary = pickPrimary((await signupsFor(req.phone)).filter((s) => !["descartada", "cancelada"].includes(s.status)));
   if (!primary) return errResult(404, "unknown_client");
-  const ext = ALLOWED_UPLOAD_TYPES[req.contentType.toLowerCase().split(";")[0].trim()];
-  if (!ext) return errResult(415, "unsupported_type");
-  const full = req.kind === "photo" ? primary.photo_paths.length >= 12 : primary.logo_paths.length >= 4;
-  if (full) return errResult(409, "too_many_files", "Ya tiene el máximo de archivos.");
+  const mime = req.contentType.toLowerCase().split(";")[0].trim();
+  const stored = storedKind(req.kind, mime);
+  if (!stored) return errResult(415, "unsupported_type");
+  if (req.size && req.size > MAX_UPLOAD_BYTES) return errResult(413, "too_large", `El archivo pesa más de ${MAX_UPLOAD_MB} MB.`);
+  if (currentCount(primary, stored.kind) >= WA_MAX[stored.kind]) return errResult(409, "too_many_files", "Ya tiene el máximo de archivos.");
   if ((await listDraftFiles(primary.id)).length >= MAX_WA_OBJECTS) return errResult(409, "too_many_files");
-  const path = `${primary.id}/${req.kind}-wa-${Date.now()}-${randomBytes(3).toString("hex")}.${ext}`;
+  const path = `${primary.id}/${stored.kind}-wa-${Date.now()}-${randomBytes(3).toString("hex")}.${stored.ext}`;
   const { data, error } = await storage().createSignedUploadUrl(path);
   if (error || !data) throw error ?? new Error("no signed url");
-  return okResult({ path, signedUrl: data.signedUrl, token: data.token });
+  return okResult({ path, signedUrl: data.signedUrl, token: data.token, kind: stored.kind });
 }
 
 async function onMediaAttached(req: Extract<BridgeRequest, { type: "media_attached" }>, deps: BridgeDeps): Promise<BridgeResult> {
   const db = getDb();
   const match = MEDIA_PATH_RE.exec(req.path);
-  if (!match || match[2] !== req.kind) return errResult(400, "invalid", "path");
+  // The path (minted by media_upload_url) says what the file is; a photo/logo request may have been stored as a document.
+  const pathKind = match?.[2] as MediaKind | undefined;
+  if (!match || !pathKind || (pathKind !== req.kind && pathKind !== "document")) return errResult(400, "invalid", "path");
   const signupId = match[1];
   const owner = (await signupsFor(req.phone)).find((s) => s.id === signupId);
   if (!owner) return errResult(404, "unknown_client");
@@ -523,8 +598,14 @@ async function onMediaAttached(req: Extract<BridgeRequest, { type: "media_attach
   if (listError) throw listError;
   if (!(objects ?? []).some((o) => o.name === name)) return errResult(404, "not_found", "El archivo no está en el almacenamiento.");
 
-  const { data: result, error } = await db.rpc("web_gratis_attach_media", { p_signup_id: signupId, p_kind: req.kind, p_path: req.path });
-  if (error) throw error;
+  let result: string;
+  if (pathKind === "document") {
+    result = await attachDocument(signupId, req.path);
+  } else {
+    const { data: attached, error } = await db.rpc("web_gratis_attach_media", { p_signup_id: signupId, p_kind: pathKind, p_path: req.path });
+    if (error) throw error;
+    result = attached as string;
+  }
 
   // Point the WhatsApp message in the ledger at the stored file (the given
   // wamid, else the newest unlinked photo/document from this phone).
@@ -544,7 +625,7 @@ async function onMediaAttached(req: Extract<BridgeRequest, { type: "media_attach
     if (logError) console.error("[WebGratis:bridge] media ledger link failed", req.path, logError);
   }
 
-  return okResult({ attached: result as string });
+  return okResult({ attached: result, kind: pathKind });
 }
 
 // ─── Entry ──────────────────────────────────────────────────────────────────

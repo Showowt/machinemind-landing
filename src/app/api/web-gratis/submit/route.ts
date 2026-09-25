@@ -2,7 +2,10 @@
  * POST /api/web-gratis/submit — final submission of the free-website form.
  *
  * Flips the draft to 'nuevo' with the price + share acknowledgements recorded,
- * attaches the files that actually exist in storage, queues the team alert in
+ * attaches the files that actually exist in storage (sorted into logo / photo /
+ * document columns by their "<kind>-" filename prefix, only from this draft's
+ * own folder; files already sent on WhatsApp are kept), writes `country` from
+ * the validated WhatsApp number, queues the team alert in
  * the outbox and drains it right after the response (the 1-minute cron picks
  * up anything left). Idempotent: re-submitting an already-submitted draft
  * returns the same result and never re-alerts (outbox dedupe key). If the
@@ -12,8 +15,7 @@
 import { after } from "next/server";
 import { sendCapiEvent } from "@/lib/web-gratis/capi";
 import {
-  MAX_LOGOS,
-  MAX_PHOTOS,
+  countryFromE164,
   REFERRAL_CODE_RE,
   splitServices,
   toE164,
@@ -22,17 +24,20 @@ import {
 import { fail, ok } from "@/lib/web-gratis/http";
 import { notifySaveFailed } from "@/lib/web-gratis/notify";
 import { drainIfQuiet, enqueue } from "@/lib/web-gratis/outbox";
-import { submitRequestSchema } from "@/lib/web-gratis/schema";
+import { submitRequestSchema, validationErrorCode } from "@/lib/web-gratis/schema";
 import {
   findReferrer,
   getDb,
   ipHash,
   isDuplicateBusiness,
   isReferralCodeCollision,
-  listDraftFiles,
+  mergeWhatsappUploads,
   newReferralCode,
   recentDraftsFromIp,
   SIGNUPS_TABLE,
+  sortUploadPaths,
+  storedTypeFitsKind,
+  tryListDraftObjects,
   type WebGratisSignup,
 } from "@/lib/web-gratis/server";
 
@@ -60,7 +65,7 @@ export async function POST(request: Request) {
   }
 
   const parsed = submitRequestSchema.safeParse(body);
-  if (!parsed.success) return fail(400, "invalid");
+  if (!parsed.success) return fail(400, validationErrorCode(parsed.error));
   const req = parsed.data;
 
   if (req.website) return ok({ referralCode: newReferralCode(), businessName: req.fields.businessName });
@@ -76,6 +81,7 @@ export async function POST(request: Request) {
     business_type: req.fields.businessType,
     city: req.fields.city,
     whatsapp,
+    country: countryFromE164(whatsapp),
     lang: req.lang,
     services,
     differentiator: req.fields.differentiator ?? null,
@@ -85,36 +91,47 @@ export async function POST(request: Request) {
     style: req.fields.style ?? null,
     site_goal: req.fields.siteGoal ?? null,
     referred_by_text: req.fields.referredBy ?? null,
+    existing_website: req.fields.existingWebsite ?? null,
+    address: req.fields.address ?? null,
+    contact_email: req.fields.contactEmail ?? null,
+    extra_notes: req.fields.extraNotes ?? null,
   };
 
   try {
     const db = getDb();
 
-    // Attach only files the user kept AND that really landed in storage.
-    const stored = new Set(await listDraftFiles(req.draftId));
-    const kept = req.uploadPaths.filter((p) => stored.has(p)).sort();
-    const logo_paths = kept.filter((p) => p.startsWith(`${req.draftId}/logo-`)).slice(-MAX_LOGOS);
-    const photo_paths = kept.filter((p) => p.startsWith(`${req.draftId}/photo-`)).slice(0, MAX_PHOTOS);
+    // Attach only files the user kept AND that really landed in this draft's folder
+    // with a content type their kind accepts. If storage can't be listed right now,
+    // keep the client's paths rather than silently dropping every file:
+    // sortUploadPaths still confines them to this draft's folder and to
+    // well-formed "<kind>-<ts>-<rand>.<ext>" names.
+    const listed = await tryListDraftObjects(req.draftId);
+    const stored = listed ? new Map(listed.map((o) => [o.path, o.mimetype])) : null;
+    const formUploads = sortUploadPaths(
+      req.draftId,
+      stored
+        ? req.uploadPaths.filter((p) => stored.has(p) && storedTypeFitsKind(p, stored.get(p) ?? null))
+        : req.uploadPaths,
+    );
+
+    const { data: existing, error: readError } = await db
+      .from(SIGNUPS_TABLE)
+      .select("id, status, referral_code, business_name, whatsapp_consent_at, referred_by_id, logo_paths, photo_paths, document_paths")
+      .eq("id", req.draftId)
+      .maybeSingle();
+    if (readError) throw readError;
 
     const submission = {
       ...content,
+      ...mergeWhatsappUploads(formUploads, existing),
       status: "nuevo",
       step: 3,
-      logo_paths,
-      photo_paths,
       submitted_at: now,
       terms_accepted_at: now,
       share_commitment_at: now,
     };
     // First consent wins: the step-1 timestamp/wording is kept; submit records one only if none exists.
     const firstConsent = { whatsapp_consent_at: now, whatsapp_consent_version: WHATSAPP_CONSENT_VERSION_SUBMIT };
-
-    const { data: existing, error: readError } = await db
-      .from(SIGNUPS_TABLE)
-      .select("id, status, referral_code, business_name, whatsapp_consent_at, referred_by_id")
-      .eq("id", req.draftId)
-      .maybeSingle();
-    if (readError) throw readError;
 
     // A referral code typed into "¿Quién le recomendó?" counts when no ?ref= link did.
     const typedCode = codeInText(content.referred_by_text);
@@ -206,8 +223,10 @@ export async function POST(request: Request) {
             negocio: saved.business_name,
             rubro: saved.business_type,
             ciudad: saved.city,
+            pais: saved.country,
             whatsapp: saved.whatsapp,
             servicios: saved.services.join(", "),
+            archivos: `logo ${saved.logo_paths.length} · fotos ${saved.photo_paths.length} · documentos ${(saved.document_paths ?? []).length}`,
             draft: saved.id,
           },
           "La solicitud SÍ se guardó, pero la alerta no pudo entrar a la cola. Revise el tablero.",
@@ -235,11 +254,17 @@ export async function POST(request: Request) {
             negocio: content.business_name,
             rubro: content.business_type,
             ciudad: content.city,
+            pais: content.country,
             whatsapp: content.whatsapp,
             servicios: content.services.join(", "),
             horario: content.hours,
             instagram: content.instagram,
             facebook: content.facebook,
+            web_actual: content.existing_website,
+            direccion: content.address,
+            email: content.contact_email,
+            notas: content.extra_notes,
+            archivos_enviados: req.uploadPaths.length,
             draft: req.draftId,
           },
           reason,

@@ -17,7 +17,7 @@ export const scripts = {
     `¡Recibido, ${business}! 🎉 Le saluda MachineMind. Ya empezamos a armar su web. Le confirmo por acá cuando esté lista (pocos días).`,
 
   rescue: (business: string) =>
-    `¡Hola! Le saluda MachineMind 🇸🇻 Vi que empezó el formulario para la web gratis de ${business}. ¿Le ayudo a terminarlo? Puede seguir aquí, su avance quedó guardado: ${SITE_ORIGIN}${WEB_GRATIS_PATH}`,
+    `¡Hola! Le saluda MachineMind. Vi que empezó el formulario para la web gratis de ${business}. ¿Le ayudo a terminarlo? Puede seguir aquí, su avance quedó guardado: ${SITE_ORIGIN}${WEB_GRATIS_PATH}`,
 
   delivered: (siteUrl: string | null) =>
     `¡Su web ya está lista! 🚀 ${siteUrl ?? "[link de su web]"} — échele un ojo y dígame si quiere ajustar algo.\n\nUn favor (es lo único que le pedimos por ser gratis 🙂): compártala en su historia de Instagram y Facebook y etiquétenos @${MM_INSTAGRAM}. A usted le da visibilidad y a nosotros nos ayuda a llegar a más negocios como el suyo. ¿Me confirma cuando la comparta?`,

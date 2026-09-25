@@ -1,6 +1,10 @@
 // MachineMind Landing — Full-site i18n content
 // Colombian Spanish (es) + English (en)
 // Note: "Intelligence" is intentionally kept in English in both locales as a brand term.
+// The free-website initiative copy (initiativeBar / initiative) uses "usted" in
+// Spanish, matching the /web onboarding funnel it links to.
+
+import { FREE_DAYS, MONTHLY_PRICE_USD } from "@/lib/web-gratis/config";
 
 export type Lang = "en" | "es";
 
@@ -15,6 +19,8 @@ export type NavTranslations = {
   process: string;
   about: string;
   contact: string;
+  /** Link to the free-website funnel (/web) */
+  webGratis: string;
 };
 
 export type HeroTranslations = {
@@ -173,8 +179,66 @@ export type ExitIntentTranslations = {
   successText: string;
 };
 
+export type InitiativeBarTranslations = {
+  /** Initiative name, shown as the gold mono tag */
+  tag: string;
+  /** Full line (tablet/desktop) */
+  text: string;
+  /** Compact line (phones) */
+  short: string;
+  cta: string;
+};
+
+export type InitiativeCountryTranslations = {
+  /** Country name as geography */
+  name: string;
+  /** Alignment line — contract wording, verbatim */
+  line: string;
+  /** CTA label, e.g. "Soy de El Salvador" */
+  cta: string;
+};
+
+export type InitiativeOfferTranslations = {
+  value: string;
+  label: string;
+  note: string;
+};
+
+export type InitiativeStepTranslations = {
+  title: string;
+  note: string;
+};
+
+export type InitiativeTranslations = {
+  eyebrow: string;
+  headingPrefix: string;
+  headingItalic: string;
+  desc: string;
+  visionLabel: string;
+  sv: InitiativeCountryTranslations;
+  co: InitiativeCountryTranslations;
+  offerLabel: string;
+  offers: readonly [
+    InitiativeOfferTranslations,
+    InitiativeOfferTranslations,
+    InitiativeOfferTranslations,
+    InitiativeOfferTranslations,
+  ];
+  stepsLabel: string;
+  steps: readonly [InitiativeStepTranslations, InitiativeStepTranslations, InitiativeStepTranslations];
+  ctaLabel: string;
+  ctaSub: string;
+  whatsappPrompt: string;
+  /** Prefilled WhatsApp message for the funnel line */
+  whatsappText: string;
+  /** Required small-print disclaimer (contract wording, verbatim) */
+  disclaimer: string;
+};
+
 export type SiteTranslations = {
   nav: NavTranslations;
+  initiativeBar: InitiativeBarTranslations;
+  initiative: InitiativeTranslations;
   hero: HeroTranslations;
   metrics: MetricsTranslations;
   systems: SystemsTranslations;
@@ -206,6 +270,68 @@ export const TRANSLATIONS: Record<Lang, SiteTranslations> = {
       process: "Process",
       about: "About",
       contact: "Contact",
+      webGratis: "Free website",
+    },
+
+    initiativeBar: {
+      tag: "Business Digitalization Initiative 2026",
+      text: "Free websites for businesses in El Salvador and Colombia",
+      short: "Free website · El Salvador & Colombia",
+      cta: "Apply",
+    },
+
+    initiative: {
+      eyebrow: "Business Digitalization Initiative 2026 · El Salvador · Colombia",
+      headingPrefix: "Free websites for businesses in",
+      headingItalic: "El Salvador and Colombia.",
+      desc: "We are MachineMind. We design and publish your business's website at no cost, ready to bring you customers on WhatsApp. You just tell us about your business.",
+      visionLabel: "Why we do it",
+      sv: {
+        name: "El Salvador",
+        line: "We are aligned with the Government of El Salvador's vision of bringing every business online.",
+        cta: "I'm in El Salvador",
+      },
+      co: {
+        name: "Colombia",
+        line: "We are aligned with the Government of Colombia's digital-transformation vision.",
+        cta: "I'm in Colombia",
+      },
+      offerLabel: "The offer, in plain words",
+      offers: [
+        { value: "$0", label: "Built for free", note: "We design and build your website at no cost." },
+        { value: `${FREE_DAYS} days`, label: "Free online", note: "Your site live and working. Nothing to pay." },
+        {
+          value: `$${MONTHLY_PRICE_USD}/mo`,
+          label: "After that, no contract",
+          note: "Hosting, support and changes included. Cancel anytime.",
+        },
+        {
+          value: "Have a site?",
+          label: "We upgrade it for free",
+          note: "If you already have a website, we modernize it at no cost.",
+        },
+      ],
+      stepsLabel: "How it works",
+      steps: [
+        {
+          title: "Fill out the 2-minute form",
+          note: "Business name, services, and your logo, photos or documents if you have them.",
+        },
+        {
+          title: "We build your site in a few days",
+          note: "We send it to you on WhatsApp so you can review it and ask for changes.",
+        },
+        {
+          title: "Publish it and share it",
+          note: "Share it with your customers on WhatsApp, Instagram and Facebook.",
+        },
+      ],
+      ctaLabel: "Where is your business?",
+      ctaSub: "Request my free website",
+      whatsappPrompt: "Prefer WhatsApp? Message us at",
+      whatsappText: "Hi, I'd like my free website",
+      disclaimer:
+        "MachineMind is a private company. This initiative is not a government program and is not sponsored by any government; we share its vision of bringing businesses online.",
     },
 
     hero: {
@@ -397,6 +523,68 @@ export const TRANSLATIONS: Record<Lang, SiteTranslations> = {
       process: "Proceso",
       about: "Nosotros",
       contact: "Contacto",
+      webGratis: "Web gratis",
+    },
+
+    initiativeBar: {
+      tag: "Iniciativa de Digitalización de Negocios 2026",
+      text: "Web gratis para negocios de El Salvador y Colombia",
+      short: "Web gratis · El Salvador y Colombia",
+      cta: "Solicitar",
+    },
+
+    initiative: {
+      eyebrow: "Iniciativa de Digitalización de Negocios 2026 · El Salvador · Colombia",
+      headingPrefix: "Web gratis para los negocios de",
+      headingItalic: "El Salvador y Colombia.",
+      desc: "Somos MachineMind. Diseñamos y publicamos la página web de su negocio sin costo, lista para recibir clientes por WhatsApp. Usted solo nos cuenta de su negocio.",
+      visionLabel: "Por qué lo hacemos",
+      sv: {
+        name: "El Salvador",
+        line: "Nos alineamos con la visión del Gobierno de El Salvador de digitalizar a los negocios del país.",
+        cta: "Soy de El Salvador",
+      },
+      co: {
+        name: "Colombia",
+        line: "Nos alineamos con la visión de transformación digital del Gobierno de Colombia.",
+        cta: "Soy de Colombia",
+      },
+      offerLabel: "La oferta, en palabras simples",
+      offers: [
+        { value: "$0", label: "Construcción gratis", note: "Diseñamos y armamos su web sin costo." },
+        { value: `${FREE_DAYS} días`, label: "Gratis en línea", note: "Su web publicada y funcionando, sin pagar nada." },
+        {
+          value: `$${MONTHLY_PRICE_USD}/mes`,
+          label: "Después, sin contrato",
+          note: "Hosting, soporte y cambios incluidos. Cancele cuando quiera.",
+        },
+        {
+          value: "¿Ya tiene web?",
+          label: "La actualizamos gratis",
+          note: "Si ya tiene una página, la modernizamos sin costo.",
+        },
+      ],
+      stepsLabel: "Así funciona",
+      steps: [
+        {
+          title: "Llene el formulario de 2 minutos",
+          note: "Nombre del negocio, servicios, y su logo, fotos o documentos si los tiene.",
+        },
+        {
+          title: "Le armamos la web en pocos días",
+          note: "Se la enviamos por WhatsApp para que la revise y pida cambios.",
+        },
+        {
+          title: "Publíquela y compártala",
+          note: "Compártala con sus clientes por WhatsApp, Instagram y Facebook.",
+        },
+      ],
+      ctaLabel: "¿Dónde está su negocio?",
+      ctaSub: "Solicitar mi web gratis",
+      whatsappPrompt: "¿Prefiere WhatsApp? Escríbanos al",
+      whatsappText: "Hola, quiero mi web gratis",
+      disclaimer:
+        "MachineMind es una empresa privada. Esta iniciativa no es un programa del gobierno ni cuenta con su patrocinio; compartimos su visión de digitalizar los negocios.",
     },
 
     hero: {

@@ -1,5 +1,7 @@
 /**
- * /pagar/gracias — Stripe's success URL for the $19/mes Payment Link.
+ * /pagar/gracias — Stripe's success URL for the monthly-plan Payment Link
+ * (MONTHLY_PRICE_USD). The payer's country isn't known here, so the frame is
+ * neutral (no flag).
  * Activation itself happens in the webhook; this page only thanks and points
  * to the funnel WhatsApp chat (where the next rung is offered).
  */
@@ -21,7 +23,7 @@ interface PageProps {
 export default async function ThanksPage({ searchParams }: PageProps) {
   const lang = payLang((await searchParams).lang);
   const t = PAY_COPY[lang];
-  const chat = `https://wa.me/${MM_WHATSAPP}?text=${encodeURIComponent(lang === "es" ? "¡Hola! Ya pagué mi web." : "Hi! I just paid for my website.")}`;
+  const chat = `https://wa.me/${MM_WHATSAPP}?text=${encodeURIComponent(t.waPaid)}`;
   return (
     <PayShell t={t} lang={lang} toggleHref={`/pagar/gracias?lang=${lang === "es" ? "en" : "es"}`}>
       <section className={styles.card}>

@@ -1,7 +1,8 @@
 /* /pagar, /pagar/gracias, /s/<code>/pronto — the funnel's small public pages.
-   Same identity as /web: MachineMind blue #1e9bf0 on #06060a, El Salvador flag
-   blue as second accent, sharp corners, glass card, CSS-only motion (content
-   is never hidden behind JS). Mobile first. */
+   Same identity as /web: MachineMind blue #1e9bf0 on #06060a, a deep blue as
+   second accent, sharp corners, glass card, CSS-only motion (content is never
+   hidden behind JS). The business's flag (SV / CO) sits by the brand as
+   geography only. Mobile first. */
 
 .page {
   --p-bg: #06060a;
@@ -89,8 +90,23 @@
   width: 18px;
   height: 12px;
   flex: none;
+  outline: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.flagSV {
   background: linear-gradient(var(--p-flag) 0 33.4%, #ffffff 33.4% 66.6%, var(--p-flag) 66.6%);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.15);
+}
+
+.flagCO {
+  background: linear-gradient(#fcd116 0 50%, #003893 50% 75%, #ce1126 75%);
+}
+
+/* Neutral brand mark when the business's country isn't known. */
+.dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  background: var(--p-blue);
 }
 
 .lang {
@@ -216,6 +232,27 @@
   height: 6px;
   background: var(--p-blue);
   box-shadow: 0 0 10px var(--p-blue);
+}
+
+/* Initiative tag + alignment line under the price (SV / CO only). */
+.align {
+  margin: -8px 0 24px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--p-blue);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--p-soft);
+}
+
+.alignTag {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--p-blue);
 }
 
 .actions {

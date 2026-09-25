@@ -46,7 +46,9 @@ export async function sendCapiEvent(event: CapiEvent): Promise<void> {
     fbp: cookie(request, "_fbp"),
     fbc,
   };
+  // ISO country (lowercase, hashed) sharpens Meta's match for both markets.
   if (digits.startsWith("503")) userData.country = [sha256("sv")];
+  else if (digits.startsWith("57")) userData.country = [sha256("co")];
 
   const body: Record<string, unknown> = {
     data: [

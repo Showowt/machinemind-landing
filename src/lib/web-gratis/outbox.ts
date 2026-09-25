@@ -155,7 +155,7 @@ export async function drainOutbox({ budgetMs, limit = 60 }: { budgetMs: number; 
     const { data: same } = await db.from(SIGNUPS_TABLE).select("id, whatsapp").in("whatsapp", phones).neq("status", "borrador");
     for (const s of (same ?? []) as { id: string; whatsapp: string }[]) dupCounts.set(s.whatsapp, (dupCounts.get(s.whatsapp) ?? 0) + 1);
   }
-  const links = await signedLinks(submittedLeads.flatMap((s) => [...s.logo_paths, ...s.photo_paths]));
+  const links = await signedLinks(submittedLeads.flatMap((s) => [...s.logo_paths, ...s.photo_paths, ...(s.document_paths ?? [])]));
   const ctxFor = (s: WebGratisSignup): LeadContext => ({
     referrer: s.referred_by_id ? (referrers.get(s.referred_by_id) ?? null) : null,
     links,

@@ -163,7 +163,7 @@ export async function runHttp(): Promise<void> {
       let res = await get(`/pagar/${p1.referral_code}`);
       let html = await res.text();
       check("/pagar/<code> 200 with business name", res.status === 200 && html.includes(p1.business_name), res.status);
-      check("/pagar shows $20/mes + sin contrato", html.includes("20") && html.includes("Sin contrato") && html.includes("al mes"));
+      check("/pagar shows $19/mes + sin contrato, never $20", html.includes("$19") && !/\$\s?20\b/.test(html.replace(/<[^>]+>/g, " ")) && html.includes("Sin contrato") && html.includes("al mes"));
       const settings = await site.server.loadSettings();
       if (settings.pay_link) {
         check("pay link set → card button carries client_reference_id", html.includes(`client_reference_id=${p1.id}`));
@@ -253,6 +253,91 @@ export async function runHttp(): Promise<void> {
       });
       check("referredBy > 120 chars → 400", long.status === 400, long.status);
       await db.from("web_gratis_signups").delete().eq("id", draftId);
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    section("HTTP Colombia + El Salvador drafts, new fields, documents");
+    {
+      const post = (path: string, body: unknown) =>
+        fetch(`${BASE}${path}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const draftId = crypto.randomUUID();
+      const coLocal = `300${String(Math.floor(Math.random() * 1e7)).padStart(7, "0")}`;
+      const fields = { businessName: `ZZ ${RUN} Colombia`, businessType: "Peluquería", city: "Medellín", countryCode: "57", whatsappLocal: coLocal };
+      let res = await post("/api/web-gratis/draft", { draftId, step: 1, lang: "es", fields });
+      let row = await signup(draftId);
+      check("CO draft (+57 3xx) → 200, whatsapp +57…, country CO", res.status === 200 && row.whatsapp === `+57${coLocal}` && row.country === "CO", { status: res.status, w: row.whatsapp, c: row.country });
+      res = await post("/api/web-gratis/draft", { draftId: crypto.randomUUID(), step: 1, lang: "es", fields: { ...fields, whatsappLocal: "2001234567" } });
+      let json = (await res.json().catch(() => null)) as { error?: string } | null;
+      check("CO landline-style number (not 3xx) → 400 invalid_whatsapp", res.status === 400 && json?.error === "invalid_whatsapp", [res.status, json]);
+      const extra = { existingWebsite: "https://zz-ejemplo.co", address: "Cra 43A #1-50, Medellín", contactEmail: "zz@ejemplo.co", extraNotes: "ZZ nota de prueba" };
+      res = await post("/api/web-gratis/draft", { draftId, step: 2, lang: "es", fields: { ...fields, services: "corte, barba", ...extra } });
+      row = await signup(draftId);
+      check(
+        "step 2 stores existing_website, address, contact_email, extra_notes",
+        res.status === 200 && row.existing_website === extra.existingWebsite && row.address === extra.address && row.contact_email === extra.contactEmail && row.extra_notes === extra.extraNotes,
+        { status: res.status, row: [row.existing_website, row.address, row.contact_email, row.extra_notes] },
+      );
+      res = await post("/api/web-gratis/draft", { draftId, step: 2, lang: "es", fields: { ...fields, services: "corte", contactEmail: "zz@" } });
+      json = (await res.json().catch(() => null)) as { error?: string } | null;
+      check("bad e-mail → 400 invalid_email", res.status === 400 && json?.error === "invalid_email", [res.status, json]);
+
+      const pdf = new Uint8Array(Buffer.from("%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"));
+      res = await post("/api/web-gratis/upload-url", { draftId, kind: "document", contentType: "application/pdf", size: pdf.length });
+      const up = (await res.json().catch(() => null)) as { data?: { path: string; signedUrl: string } } | null;
+      check("upload-url document/pdf → 200, path in the signup's folder as document-*.pdf", res.status === 200 && !!up?.data?.path.startsWith(`${draftId}/document-`) && up.data.path.endsWith(".pdf"), [res.status, up?.data?.path]);
+      if (up?.data?.signedUrl) {
+        const form = new FormData();
+        form.append("cacheControl", "3600");
+        form.append("", new Blob([pdf], { type: "application/pdf" }), "menu.pdf");
+        const put = await fetch(up.data.signedUrl, { method: "PUT", headers: { "x-upsert": "false" }, body: form });
+        check("PDF lands in the private bucket through the signed URL", put.status >= 200 && put.status < 300, [put.status, (await put.text()).slice(0, 200)]);
+      }
+      const docxType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+      res = await post("/api/web-gratis/upload-url", { draftId, kind: "document", contentType: docxType, size: 2048 });
+      const upDocx = (await res.json().catch(() => null)) as { data?: { path: string; signedUrl: string } } | null;
+      check("upload-url document/docx → 200 (.docx)", res.status === 200 && !!upDocx?.data?.path.endsWith(".docx"), [res.status, upDocx?.data?.path]);
+      if (upDocx?.data?.signedUrl) {
+        const form = new FormData();
+        form.append("cacheControl", "3600");
+        form.append("", new Blob([new Uint8Array(Buffer.from("PK\u0003\u0004zz-docx"))], { type: docxType }), "precios.docx");
+        const put = await fetch(upDocx.data.signedUrl, { method: "PUT", headers: { "x-upsert": "false" }, body: form });
+        check("Word document accepted by the bucket's MIME list", put.status >= 200 && put.status < 300, [put.status, (await put.text()).slice(0, 200)]);
+      }
+      res = await post("/api/web-gratis/upload-url", { draftId, kind: "photo", contentType: "application/pdf", size: 1024 });
+      check("a PDF as a 'photo' → 415 (type checked per kind)", res.status === 415, res.status);
+      res = await post("/api/web-gratis/upload-url", { draftId, kind: "logo", contentType: "image/svg+xml", size: 1024 });
+      check("logo/svg → 200", res.status === 200, res.status);
+      res = await post("/api/web-gratis/upload-url", { draftId, kind: "document", contentType: "application/pdf", size: 26 * 1024 * 1024 });
+      check("26 MB document → 413", res.status === 413, res.status);
+      const { data: objs } = await db.storage.from("web-gratis").list(draftId, { limit: 100 });
+      check("storage folder holds the uploaded documents", (objs ?? []).filter((o: { name: string }) => o.name.startsWith("document-")).length >= 2, (objs ?? []).map((o: { name: string }) => o.name));
+    }
+
+    // ──────────────────────────────────────────────────────────────────
+    section("HTTP pages: $19, government-vision framing per country, short URLs, home");
+    {
+      const DISCLAIMER_ES = "MachineMind es una empresa privada. Esta iniciativa no es un programa del gobierno ni cuenta con su patrocinio; compartimos su visión de digitalizar los negocios.";
+      const FORBIDDEN = /programa (del )?gobierno|programa gubernamental|iniciativa del gobierno|patrocinad[oa] por|respaldad[oa] por|avalad[oa] por|en alianza con el gobierno|en convenio con el gobierno/i;
+      const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&[a-z#0-9]+;/gi, " ");
+      const clean = (html: string) => text(html).split(DISCLAIMER_ES).join(" ");
+      let res = await get("/colombia");
+      check("/colombia → 307 /web?pais=co", res.status === 307 && (res.headers.get("location") ?? "").includes("/web?pais=co"), [res.status, res.headers.get("location")]);
+      res = await get("/elsalvador");
+      check("/elsalvador → 307 /web?pais=sv", res.status === 307 && (res.headers.get("location") ?? "").includes("/web?pais=sv"), [res.status, res.headers.get("location")]);
+      res = await get("/web?pais=co");
+      let html = await res.text();
+      check("/web?pais=co SSR: Colombia badge + alignment line + disclaimer", res.status === 200 && /Negocios 2026\s*·\s*Colombia/.test(text(html)) && html.includes("Gobierno de Colombia") && html.includes(DISCLAIMER_ES), res.status);
+      check("/web?pais=co: $19, never $20, no forbidden claim", html.includes("19") && !/\$\s?20\b/.test(text(html)) && !FORBIDDEN.test(clean(html)), (clean(html).match(FORBIDDEN) ?? [])[0]);
+      res = await get("/web?pais=sv");
+      html = await res.text();
+      check("/web?pais=sv SSR: El Salvador alignment line + disclaimer, no forbidden claim", res.status === 200 && html.includes("Gobierno de El Salvador") && html.includes(DISCLAIMER_ES) && !FORBIDDEN.test(clean(html)), (clean(html).match(FORBIDDEN) ?? [])[0]);
+      res = await get("/");
+      html = await res.text();
+      check("home links both countries into the funnel (/web?pais=sv, /web?pais=co)", res.status === 200 && html.includes("/web?pais=sv") && html.includes("/web?pais=co"), res.status);
+      check("home carries the private-company disclaimer and no forbidden claim", (html.includes("empresa privada") || html.includes("private company")) && !FORBIDDEN.test(clean(html)), (clean(html).match(FORBIDDEN) ?? [])[0]);
+      res = await get("/verificar");
+      html = await res.text();
+      check("/verificar lists the funnel line and the disclaimer", res.status === 200 && html.includes("786") && (html.includes("empresa privada") || html.includes("private company")), res.status);
     }
 
     // ──────────────────────────────────────────────────────────────────

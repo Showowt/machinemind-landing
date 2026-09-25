@@ -24,6 +24,7 @@
  * clock; alerts and sends are injectable for the same reason.
  */
 import { randomBytes } from "crypto";
+import { MONTHLY_PRICE_USD } from "./config";
 import { enqueueSystem } from "./outbox";
 import { sendViaRewired, type RewiredSendRequest, type SendOutcome } from "./rewired";
 import {
@@ -1026,7 +1027,7 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
       report.paused++;
       await deps.alert(
         `paused:${s.id}:${today}`,
-        `⏸ pausada — archivar su web: ${s.business_name} (${s.whatsapp}) no activó los $19/mes (${how}). ${s.site_url ? `Web: ${s.site_url}. ` : ""}Pásela a un estado archivado (no borrarla). Recontactar desde ${svDate(now, 60)}.`,
+        `⏸ pausada — archivar su web: ${s.business_name} (${s.whatsapp}) no activó los $${MONTHLY_PRICE_USD}/mes (${how}). ${s.site_url ? `Web: ${s.site_url}. ` : ""}Pásela a un estado archivado (no borrarla). Recontactar desde ${svDate(now, 60)}.`,
       );
     }
     if (neverAsked.length && windowOpen("transactional", now)) {

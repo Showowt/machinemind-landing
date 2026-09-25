@@ -2,17 +2,24 @@
 
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import styles from "./board.module.css";
-import { footerSnippet, payUrl, referralLink } from "@/lib/web-gratis/config";
+// Type-only: admin.ts is server code (erased from the client bundle).
+import type { BoardCountry, OpsSignup } from "@/lib/web-gratis/admin";
+import { countryFromE164, DEFAULT_PAYPAL_LINK, footerSnippet, MONTHLY_PRICE_USD, payUrl, referralLink } from "@/lib/web-gratis/config";
 import { scripts, waLink } from "@/lib/web-gratis/scripts";
-import type { WebGratisSignup } from "@/lib/web-gratis/server";
 import { manualBlock, TEMPLATE_LABEL, UNKNOWN_OUTCOME_CODE, type TemplateName } from "@/lib/web-gratis/templates";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 type View = "nuevo" | "en_construccion" | "entregada" | "compartida" | "activa" | "cerradas" | "borrador" | "todas";
-type Status = WebGratisSignup["status"];
+type Status = OpsSignup["status"];
 
-type Row = WebGratisSignup;
+type Row = OpsSignup;
+
+/** Size / type of a stored document (from the storage listing). */
+interface FileInfo {
+  size: number | null;
+  mime: string | null;
+}
 
 /** One WhatsApp message in a client's log (web_gratis_messages). */
 interface LogItem {
@@ -82,10 +89,13 @@ interface ListResponse {
   page: number;
   pageSize: number;
   total: number;
+  country: BoardCountry | null;
+  countryCounts: Record<BoardCountry, number> | null;
   rows: Row[];
   stats: Stats;
   settings: Settings;
   links: Record<string, string>;
+  fileInfo: Record<string, FileInfo>;
   referrers: Record<string, { name: string; code: string }>;
   messages: Record<string, LogItem[]>;
   credits: Credit[];
@@ -102,6 +112,23 @@ interface SettingsDraft {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const TOKEN_KEY = "mm-wg-admin-token";
+/** The country filter this device last used (a Colombia operator keeps seeing Colombia). */
+const COUNTRY_KEY = "mm-wg-admin-country";
+
+const COUNTRIES: readonly BoardCountry[] = ["SV", "CO", "OTHER"];
+
+const COUNTRY_LABEL: Record<BoardCountry, string> = {
+  SV: "El Salvador",
+  CO: "Colombia",
+  OTHER: "Otros países",
+};
+
+/** Example number for the "Corregir WhatsApp" field, per market. */
+const PHONE_EXAMPLE: Record<BoardCountry, string> = {
+  SV: "+503 7123 4567",
+  CO: "+57 300 123 4567",
+  OTHER: "+1 305 555 0123",
+};
 
 const TABS: { view: View; label: string; statuses: Status[] | null }[] = [
   { view: "nuevo", label: "Nuevas", statuses: ["nuevo"] },
@@ -196,6 +223,71 @@ function leftLabel(days: number): string {
   return days >= 0 ? `faltan ${days} d` : `venció hace ${-days} d`;
 }
 
+/** Market of a row (the API resolves it; the phone prefix covers an older payload). */
+function rowCountry(row: Row): BoardCountry {
+  if (row.country === "SV" || row.country === "CO" || row.country === "OTHER") return row.country;
+  return countryFromE164(row.whatsapp);
+}
+
+function rowDocs(row: Row): string[] {
+  return Array.isArray(row.document_paths) ? row.document_paths : [];
+}
+
+function formatBytes(bytes: number | null): string | null {
+  if (bytes === null || !Number.isFinite(bytes)) return null;
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** "Pupusería Doña Tita" → "pupuseria-dona-tita" (download file names). */
+function slug(text: string): string {
+  const s = text
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .replace(/-+$/g, "");
+  return s || "cliente";
+}
+
+/** Signed storage URL that downloads the file under `name` instead of opening it. */
+function downloadHref(signedUrl: string, name: string): string {
+  return `${signedUrl}${signedUrl.includes("?") ? "&" : "?"}download=${encodeURIComponent(name)}`;
+}
+
+/** Upload time encoded in "<kind>-[wa-]<ms>-<rand>.<ext>", or null. */
+function uploadedAt(path: string): Date | null {
+  const m = /-(\d{10,14})-[0-9a-f]{6}\.[a-z0-9]+$/i.exec(path);
+  if (!m) return null;
+  const n = Number(m[1]);
+  const d = new Date(n < 1e12 ? n * 1000 : n);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** A link the business typed (their current website), made safe to open; null if it isn't one. */
+function safeWebUrl(raw: string | null | undefined): string | null {
+  const value = (raw ?? "").trim();
+  if (!value) return null;
+  try {
+    const url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+    return (url.protocol === "https:" || url.protocol === "http:") && url.hostname.includes(".") ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Their address as a Maps link (or the Maps link they pasted). */
+function mapsHref(address: string, city: string): string {
+  const pasted = safeWebUrl(address);
+  if (pasted && /^https?:\/\/[^/]*(google\.[a-z.]+\/maps|maps\.app\.goo\.gl|goo\.gl\/maps|maps\.google\.)/i.test(pasted)) return pasted;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${address}, ${city}`)}`;
+}
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 async function copyText(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);
@@ -221,7 +313,7 @@ async function copyText(text: string): Promise<boolean> {
 
 interface Badge {
   label: string;
-  tone: "badgeRed" | "badgeAmber" | "badgeGreen" | "badgeDim";
+  tone: "badgeRed" | "badgeAmber" | "badgeGreen" | "badgeDim" | "badgeBlue";
 }
 
 function badgesFor(row: Row): Badge[] {
@@ -246,6 +338,9 @@ function badgesFor(row: Row): Badge[] {
   if (row.rung2_interest_at) out.push({ label: "Quiere citas ($49)", tone: "badgeGreen" });
   if (row.paid_via && row.status === "activa") out.push({ label: `Pagó (${PAID_VIA_LABEL[row.paid_via] ?? row.paid_via})`, tone: "badgeGreen" });
   if (row.referred_by_text && !row.referred_by_id) out.push({ label: "Referido sin asignar", tone: "badgeAmber" });
+  if (row.existing_website?.trim()) out.push({ label: "Ya tiene web — actualizarla", tone: "badgeBlue" });
+  const docs = rowDocs(row).length;
+  if (docs) out.push({ label: `${docs} documento${docs === 1 ? "" : "s"}`, tone: "badgeBlue" });
   if (row.declined_at) out.push({ label: "Dijo que no", tone: "badgeDim" });
   return out;
 }
@@ -293,11 +388,76 @@ function WaAction({ href, className, label, blocked, confirmText, onOpen }: WaAc
   );
 }
 
+// ─── Country tag + documents (module scope) ─────────────────────────────────
+
+function CountryTag({ country }: { country: BoardCountry }) {
+  return (
+    <span className={`${styles.country} ${styles[`country_${country}`] ?? ""}`} title={COUNTRY_LABEL[country]}>
+      {country === "OTHER" ? null : <span className={`${styles.flag} ${styles[`flag_${country}`] ?? ""}`} aria-hidden="true" />}
+      {country === "OTHER" ? "Otro país" : country}
+    </span>
+  );
+}
+
+interface DocListProps {
+  paths: string[];
+  links: Record<string, string>;
+  fileInfo: Record<string, FileInfo>;
+  businessName: string;
+}
+
+/** Menus, price lists, catalogs… the business sent (form or WhatsApp): open or download each one. */
+function DocList({ paths, links, fileInfo, businessName }: DocListProps) {
+  if (paths.length === 0) return null;
+  const base = slug(businessName);
+  return (
+    <div className={styles.docs}>
+      <p className={styles.docsHead}>
+        Documentos ({paths.length}) <span className={styles.dim}>· menús, listas de precios, catálogos</span>
+      </p>
+      <ul>
+        {paths.map((p, i) => {
+          const ext = (p.split(".").pop() ?? "").toLowerCase();
+          const name = `${base}-documento-${i + 1}.${ext}`;
+          const size = formatBytes(fileInfo[p]?.size ?? null);
+          const when = uploadedAt(p);
+          const via = p.includes("/document-wa-") ? "por WhatsApp" : "en el formulario";
+          const link = links[p];
+          return (
+            <li key={p} className={styles.doc}>
+              <span className={styles.docExt}>{ext.toUpperCase() || "?"}</span>
+              <span className={styles.docName} title={p.slice(p.indexOf("/") + 1)}>
+                <b>Documento {i + 1}</b>
+                <span className={styles.dim}>
+                  {[size, via, when ? when.toLocaleDateString("es", { day: "numeric", month: "short" }) : null].filter(Boolean).join(" · ")}
+                </span>
+              </span>
+              {link ? (
+                <span className={styles.docLinks}>
+                  <a href={link} target="_blank" rel="noopener noreferrer" aria-label={`Abrir documento ${i + 1} (${ext.toUpperCase()})`}>
+                    Abrir
+                  </a>
+                  <a href={downloadHref(link, name)} rel="noopener noreferrer" aria-label={`Descargar documento ${i + 1} como ${name}`}>
+                    Descargar
+                  </a>
+                </span>
+              ) : (
+                <span className={styles.dim}>sin enlace — actualice</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 // ─── Card (module scope: inputs never remount while typing) ─────────────────
 
 interface CardProps {
   row: Row;
   links: Record<string, string>;
+  fileInfo: Record<string, FileInfo>;
   referrer: { name: string; code: string } | undefined;
   settings: Settings | null;
   log: LogItem[];
@@ -307,7 +467,7 @@ interface CardProps {
   onApplyCredit: (creditId: number) => Promise<string>;
 }
 
-function Card({ row, links, referrer, settings, log, credits, onPatch, onSend, onApplyCredit }: CardProps) {
+function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch, onSend, onApplyCredit }: CardProps) {
   const [siteUrl, setSiteUrl] = useState(row.site_url ?? "");
   const [notes, setNotes] = useState(row.notes ?? "");
   const [phone, setPhone] = useState(row.whatsapp);
@@ -319,6 +479,10 @@ function Card({ row, links, referrer, settings, log, credits, onPatch, onSend, o
 
   const payLink = settings?.pay_link ?? null;
   const files = [...row.logo_paths, ...row.photo_paths];
+  const docs = rowDocs(row);
+  const country = rowCountry(row);
+  const website = safeWebUrl(row.existing_website);
+  const email = row.contact_email?.trim() ?? "";
   const freeLeft = daysUntil(row.free_until);
   const paidLeft = daysUntil(row.paid_through);
   const dayN = sinceDelivered(row.delivered_at);
@@ -447,7 +611,10 @@ function Card({ row, links, referrer, settings, log, credits, onPatch, onSend, o
             {row.business_type} · {row.city}
           </p>
         </div>
-        <span className={`${styles.pill} ${styles[`pill_${row.status}`] ?? ""}`}>{STATUS_LABEL[row.status]}</span>
+        <div className={styles.headTags}>
+          <CountryTag country={country} />
+          <span className={`${styles.pill} ${styles[`pill_${row.status}`] ?? ""}`}>{STATUS_LABEL[row.status]}</span>
+        </div>
       </header>
 
       {badges.length ? (
@@ -484,6 +651,16 @@ function Card({ row, links, referrer, settings, log, credits, onPatch, onSend, o
         <div>
           <dt>Código</dt>
           <dd className={styles.mono}>{row.referral_code}</dd>
+        </div>
+        <div>
+          <dt>Archivos</dt>
+          <dd>
+            {[
+              row.logo_paths.length ? "logo" : "sin logo",
+              `${row.photo_paths.length} foto${row.photo_paths.length === 1 ? "" : "s"}`,
+              `${docs.length} doc${docs.length === 1 ? "" : "s"}`,
+            ].join(" · ")}
+          </dd>
         </div>
         {referrer ? (
           <div>
@@ -558,7 +735,7 @@ function Card({ row, links, referrer, settings, log, credits, onPatch, onSend, o
           {files.map((p) =>
             links[p] ? (
               <a key={p} href={links[p]} target="_blank" rel="noopener noreferrer" className={styles.thumb}>
-                {/\.(jpe?g|png|webp|gif)$/i.test(p) ? (
+                {/\.(jpe?g|png|webp|gif|svg)$/i.test(p) ? (
                   // eslint-disable-next-line @next/next/no-img-element -- short-lived signed storage URL
                   <img src={links[p]} alt="" loading="lazy" />
                 ) : (
@@ -570,14 +747,24 @@ function Card({ row, links, referrer, settings, log, credits, onPatch, onSend, o
           )}
         </div>
       ) : (
-        <p className={styles.dim}>Sin fotos ni logo — usar imágenes del rubro y diseñar logo.</p>
+        <p className={styles.dim}>
+          Sin fotos ni logo — usar imágenes del rubro y diseñar logo{docs.length ? " (revise sus documentos)" : ""}.
+        </p>
       )}
+
+      <DocList paths={docs} links={links} fileInfo={fileInfo} businessName={row.business_name} />
 
       {expanded || row.no_whatsapp_at ? (
         <div className={styles.inlineForm}>
           <label>
             Corregir WhatsApp {row.no_whatsapp_at ? "(Meta dice que este número no tiene WhatsApp)" : ""}
-            <input value={phone} inputMode="tel" autoComplete="off" onChange={(e) => setPhone(e.target.value)} />
+            <input
+              value={phone}
+              inputMode="tel"
+              autoComplete="off"
+              placeholder={PHONE_EXAMPLE[country]}
+              onChange={(e) => setPhone(e.target.value)}
+            />
           </label>
           <button type="button" disabled={busy || !phone.trim() || phone.trim() === row.whatsapp} onClick={() => void savePhone()}>
             Guardar número
@@ -606,6 +793,40 @@ function Card({ row, links, referrer, settings, log, credits, onPatch, onSend, o
 
       {expanded ? (
         <div className={styles.detail}>
+          <p>
+            <b>País:</b> {COUNTRY_LABEL[country]}
+          </p>
+          {row.existing_website?.trim() ? (
+            <p>
+              <b>Web que ya tiene:</b>{" "}
+              {website ? (
+                <a href={website} target="_blank" rel="noopener noreferrer nofollow">
+                  {row.existing_website}
+                </a>
+              ) : (
+                row.existing_website
+              )}{" "}
+              <span className={styles.dim}>— ofrecerle actualizarla gratis</span>
+            </p>
+          ) : null}
+          {row.address?.trim() ? (
+            <p>
+              <b>Dirección:</b> {row.address}{" "}
+              <a href={mapsHref(row.address, row.city)} target="_blank" rel="noopener noreferrer">
+                Ver en Maps
+              </a>
+            </p>
+          ) : null}
+          {email ? (
+            <p>
+              <b>Correo:</b> {EMAIL_RE.test(email) ? <a href={`mailto:${email}`}>{email}</a> : email}
+            </p>
+          ) : null}
+          {row.extra_notes?.trim() ? (
+            <p className={styles.extraNotes}>
+              <b>Algo más que nos contó:</b> {row.extra_notes}
+            </p>
+          ) : null}
           {row.differentiator ? (
             <p>
               <b>Diferencia:</b> {row.differentiator}
@@ -893,6 +1114,7 @@ export default function BoardClient() {
   const [tokenInput, setTokenInput] = useState("");
   const [ready, setReady] = useState(false);
   const [view, setView] = useState<View>("nuevo");
+  const [country, setCountry] = useState<BoardCountry | null>(null);
   const [q, setQ] = useState("");
   const [data, setData] = useState<ListResponse | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
@@ -902,19 +1124,35 @@ export default function BoardClient() {
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft | null>(null);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
   const qRef = useRef(q);
+  /** Only the newest list request may paint (switching tab/country mid-load). */
+  const loadSeq = useRef(0);
   useEffect(() => {
     qRef.current = q;
   }, [q]);
 
-  // Token lives in localStorage on this device only (restored after hydration).
+  // Token + country filter live in localStorage on this device only (restored after hydration).
   useEffect(() => {
     try {
       setToken(window.localStorage.getItem(TOKEN_KEY));
+      const saved = window.localStorage.getItem(COUNTRY_KEY);
+      if (saved === "SV" || saved === "CO" || saved === "OTHER") setCountry(saved);
     } catch {
       setToken(null);
     }
     setReady(true);
   }, []);
+
+  function pickCountry(next: BoardCountry | null) {
+    if (next === country) return;
+    try {
+      if (next) window.localStorage.setItem(COUNTRY_KEY, next);
+      else window.localStorage.removeItem(COUNTRY_KEY);
+    } catch {
+      // Not remembered on this device; the filter still applies now.
+    }
+    setRows([]);
+    setCountry(next);
+  }
 
   const api = useCallback(
     async (path: string, init: RequestInit = {}) => {
@@ -940,19 +1178,35 @@ export default function BoardClient() {
   const load = useCallback(
     async (nextPage = 0, append = false) => {
       if (!token) return;
+      const seq = ++loadSeq.current;
       setLoading(true);
       setError(null);
       try {
         const params = new URLSearchParams({ view, page: String(nextPage) });
+        if (country) params.set("country", country);
         if (qRef.current.trim()) params.set("q", qRef.current.trim());
         const res = await api(`/api/web-gratis/admin/signups?${params}`);
         const json = (await res.json()) as { data: ListResponse | null; error: string | null; message: string | null };
+        if (seq !== loadSeq.current) return;
         if (!res.ok || !json.data) {
           if (res.status !== 401) setError(json.message ?? "No se pudo cargar el tablero.");
           return;
         }
         const payload = json.data;
-        setData(payload);
+        // "Cargar más" keeps the earlier pages' signed links, file sizes, logs and
+        // credits: without them those cards lose their files and "✓ auto" guards.
+        setData((prev) =>
+          append && prev
+            ? {
+                ...payload,
+                links: { ...prev.links, ...payload.links },
+                fileInfo: { ...(prev.fileInfo ?? {}), ...(payload.fileInfo ?? {}) },
+                referrers: { ...prev.referrers, ...payload.referrers },
+                messages: { ...prev.messages, ...payload.messages },
+                credits: [...prev.credits, ...payload.credits.filter((c) => !prev.credits.some((p) => p.id === c.id))],
+              }
+            : payload,
+        );
         setRows((prev) => (append ? [...prev, ...payload.rows.filter((r) => !prev.some((p) => p.id === r.id))] : payload.rows));
         setPage(nextPage);
         setSettingsDraft(
@@ -967,15 +1221,15 @@ export default function BoardClient() {
         );
       } catch (err) {
         console.error("[WebGratis:board] load", err);
-        setError("Sin conexión con el servidor.");
+        if (seq === loadSeq.current) setError("Sin conexión con el servidor.");
       } finally {
-        setLoading(false);
+        if (seq === loadSeq.current) setLoading(false);
       }
     },
-    [api, token, view],
+    [api, token, view, country],
   );
 
-  // Load on tab/token change; refresh every 45s while visible and not typing.
+  // Load on tab/country/token change; refresh every 45s while visible and not typing.
   useEffect(() => {
     if (!token) return;
     void load(0);
@@ -984,7 +1238,7 @@ export default function BoardClient() {
       if (document.visibilityState === "visible" && !typing) void load(0);
     }, 45_000);
     return () => window.clearInterval(timer);
-  }, [token, view, load]);
+  }, [token, view, country, load]);
 
   async function onPatch(id: string, body: Record<string, unknown>): Promise<boolean> {
     try {
@@ -1001,7 +1255,8 @@ export default function BoardClient() {
             .map((r) => (r.id === id ? { ...r, ...updated } : r))
             .filter((r) => {
               const tab = TABS.find((t) => t.view === view);
-              return !tab?.statuses || tab.statuses.includes(r.status);
+              // A corrected WhatsApp can move a business to another country: drop it from a filtered list.
+              return (!tab?.statuses || tab.statuses.includes(r.status)) && (!country || rowCountry(r) === country);
             }),
         );
       }
@@ -1059,20 +1314,27 @@ export default function BoardClient() {
   }
 
   async function exportCsv() {
-    const res = await api(`/api/web-gratis/admin/export?view=${view}`);
-    if (!res.ok) {
-      setError("No se pudo exportar.");
-      return;
+    try {
+      const params = new URLSearchParams({ view });
+      if (country) params.set("country", country);
+      const res = await api(`/api/web-gratis/admin/export?${params}`);
+      if (!res.ok) {
+        if (res.status !== 401) setError("No se pudo exportar.");
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `web-gratis-${view}${country ? `-${country.toLowerCase()}` : ""}-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("[WebGratis:board] export", err);
+      setError("Sin conexión: no se pudo exportar.");
     }
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `web-gratis-${view}-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
   }
 
   function login() {
@@ -1233,7 +1495,7 @@ export default function BoardClient() {
               Alta demanda: /web avisa que hay fila (nunca deja de recibir)
             </label>
             <label>
-              Enlace de pago Stripe $19/mes (botón «Pagar con tarjeta» de /pagar; sin él no salen los recordatorios de día 28/30 ni se pausan solas las webs vencidas)
+              Enlace de pago Stripe ${MONTHLY_PRICE_USD}/mes (botón «Pagar con tarjeta» de /pagar; sin él no salen los recordatorios de día 28/30 ni se pausan solas las webs vencidas)
               <input
                 value={settingsDraft.payLink}
                 placeholder="https://buy.stripe.com/…"
@@ -1241,10 +1503,10 @@ export default function BoardClient() {
               />
             </label>
             <label>
-              Enlace de PayPal (botón «Pagar con PayPal» de /pagar)
+              Enlace de PayPal de ${MONTHLY_PRICE_USD} (botón «Pagar con PayPal» de /pagar; vacío = {DEFAULT_PAYPAL_LINK})
               <input
                 value={settingsDraft.paypalLink}
-                placeholder="https://paypal.me/MachineMind/20USD"
+                placeholder={DEFAULT_PAYPAL_LINK}
                 onChange={(e) => setSettingsDraft({ ...settingsDraft, paypalLink: e.target.value })}
               />
             </label>
@@ -1281,6 +1543,36 @@ export default function BoardClient() {
         ))}
       </nav>
 
+      <div className={styles.countries} role="group" aria-label="País">
+        <button
+          type="button"
+          aria-pressed={country === null}
+          className={country === null ? styles.countryOn : styles.countryBtn}
+          onClick={() => pickCountry(null)}
+        >
+          Todos los países
+          {data?.countryCounts ? <span>{data.countryCounts.SV + data.countryCounts.CO + data.countryCounts.OTHER}</span> : null}
+        </button>
+        {COUNTRIES.map((c) => (
+          <button
+            key={c}
+            type="button"
+            aria-pressed={country === c}
+            className={country === c ? styles.countryOn : styles.countryBtn}
+            onClick={() => pickCountry(c)}
+          >
+            {c === "OTHER" ? null : <span className={`${styles.flag} ${styles[`flag_${c}`] ?? ""}`} aria-hidden="true" />}
+            {COUNTRY_LABEL[c]}
+            {data?.countryCounts ? <span>{data.countryCounts[c]}</span> : null}
+          </button>
+        ))}
+      </div>
+      {country ? (
+        <p className={styles.dim}>
+          Mostrando solo {COUNTRY_LABEL[country]}. Los números de las pestañas cuentan todos los países.
+        </p>
+      ) : null}
+
       <form
         className={styles.search}
         onSubmit={(e) => {
@@ -1288,7 +1580,7 @@ export default function BoardClient() {
           void load(0);
         }}
       >
-        <input value={q} placeholder="Buscar negocio, WhatsApp, ciudad o código" onChange={(e) => setQ(e.target.value)} />
+        <input value={q} placeholder="Buscar negocio, WhatsApp, ciudad, correo o código" onChange={(e) => setQ(e.target.value)} />
         <button type="submit">Buscar</button>
       </form>
 
@@ -1308,6 +1600,7 @@ export default function BoardClient() {
                 key={row.id}
                 row={row}
                 links={data?.links ?? {}}
+                fileInfo={data?.fileInfo ?? {}}
                 referrer={row.referred_by_id ? data?.referrers[row.referred_by_id] : undefined}
                 settings={data?.settings ?? null}
                 log={data?.messages?.[row.id] ?? []}
@@ -1317,7 +1610,9 @@ export default function BoardClient() {
                 onApplyCredit={onApplyCredit}
               />
             ))}
-        {data && rows.length === 0 && !loading ? <p className={styles.empty}>Nada en esta pestaña.</p> : null}
+        {data && rows.length === 0 && !loading ? (
+          <p className={styles.empty}>{country ? `Nada en esta pestaña para ${COUNTRY_LABEL[country]}.` : "Nada en esta pestaña."}</p>
+        ) : null}
       </section>
 
       {data && rows.length < data.total ? (

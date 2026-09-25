@@ -1,4 +1,4 @@
-// One-time, idempotent Stripe setup for the web-gratis $20/mo plan (product, price, Payment Link,
+// One-time, idempotent Stripe setup for the web-gratis $19/mo plan (product, price, Payment Link,
 // webhook endpoint). Key: STRIPE_KEY_FILE or ~/Personal/Credentials/stripe-web-gratis.key (a restricted
 // key with write access to Products, Prices, Payment Links and Webhook Endpoints). Prints only
 // non-secret IDs/URLs; the webhook signing secret goes to a 0600 file next to the key — set it on
@@ -35,9 +35,9 @@ const get = (path) => fetch(`https://api.stripe.com/v1/${path}`, { headers: H })
     console.log("product created", product.id);
   } else console.log("product exists", product.id);
   const prices = await get(`prices?product=${product.id}&active=true&limit=10`);
-  let price = (prices.data || []).find((p) => p.unit_amount === 2000 && p.currency === "usd" && p.recurring?.interval === "month");
+  let price = (prices.data || []).find((p) => p.unit_amount === 1900 && p.currency === "usd" && p.recurring?.interval === "month");
   if (!price) {
-    price = await post("prices", { product: product.id, unit_amount: "2000", currency: "usd", "recurring[interval]": "month", nickname: "Web gratis $20/mes", "metadata[program]": "web_gratis" });
+    price = await post("prices", { product: product.id, unit_amount: "1900", currency: "usd", "recurring[interval]": "month", nickname: "Web gratis $19/mes", "metadata[program]": "web_gratis" });
     console.log("price created", price.id);
   } else console.log("price exists", price.id);
   const links = await get("payment_links?limit=100&active=true");
@@ -49,7 +49,7 @@ const get = (path) => fetch(`https://api.stripe.com/v1/${path}`, { headers: H })
       "after_completion[type]": "redirect",
       "after_completion[redirect][url]": "https://machinemindconsulting.com/pagar/gracias",
       "phone_number_collection[enabled]": "true",
-      "custom_text[submit][message]": "Mantener su página web en línea: $20/mes, sin contrato. Cancele cuando quiera.",
+      "custom_text[submit][message]": "Mantener su página web en línea: $19/mes, sin contrato. Cancele cuando quiera.",
       "subscription_data[metadata][program]": "web_gratis",
       "metadata[program]": "web_gratis",
     });
@@ -62,7 +62,7 @@ const get = (path) => fetch(`https://api.stripe.com/v1/${path}`, { headers: H })
   if (!hook) {
     hook = await post("webhook_endpoints", {
       url,
-      description: "Web gratis funnel (machinemind-landing) — $20/mo activation",
+      description: "Web gratis funnel (machinemind-landing) — $19/mo activation",
       "enabled_events[0]": "checkout.session.completed",
       "enabled_events[1]": "customer.subscription.deleted",
       "enabled_events[2]": "invoice.payment_failed",

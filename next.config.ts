@@ -14,13 +14,21 @@ const nextConfig: NextConfig = {
   },
   // Free-website funnel aliases → /web. Redirect sources match case-insensitively,
   // so "/gratis" also covers "/Gratis" and "/GRATIS". Never list a case variant of
-  // "/web" itself here — it would match "/web" and loop.
+  // "/web" itself here — it would match "/web" and loop. Country entry links
+  // (/colombia, /elsalvador) pick the market; the visitor's own query string
+  // (utm_*, fbclid, ref) is carried over to /web by Next.js.
   async redirects() {
-    return ["/gratis", "/web-gratis", "/webgratis"].map((source) => ({
+    const aliases = ["/gratis", "/web-gratis", "/webgratis"].map((source) => ({
       source,
       destination: "/web",
       permanent: false,
     }));
+    const markets = [
+      { source: "/colombia", destination: "/web?pais=co", permanent: false },
+      { source: "/elsalvador", destination: "/web?pais=sv", permanent: false },
+      { source: "/el-salvador", destination: "/web?pais=sv", permanent: false },
+    ];
+    return [...aliases, ...markets];
   },
   // Page routes ARE case-sensitive, so a phone-capitalized "/Web" would 404.
   // This (case-insensitive) rewrite only runs after no page matched, so "/web"

@@ -14,16 +14,24 @@ export async function GET(_request: Request, { params }: { params: Promise<{ cod
   const { code } = await params;
   const noStore = { "Cache-Control": "no-store" };
   let business: string | null = null;
+  let english = false;
   let demo: string | null = null;
   try {
     const [signup, settings] = await Promise.all([findSignupByCode(code), loadSettings()]);
     business = signup && !["descartada", "cancelada"].includes(signup.status) ? signup.business_name : null;
+    english = signup?.lang === "en";
     demo = settings.demo_link && /^https:\/\//.test(settings.demo_link) ? settings.demo_link : null;
   } catch (error) {
     console.error("[WebGratis:citas]", code, error);
   }
   if (demo) return NextResponse.redirect(demo, { status: 302, headers: noStore });
-  const text = business ? `Quiero ver la demo de citas para ${business}` : "Quiero ver la demo de citas";
+  const text = english
+    ? business
+      ? `I'd like to see the booking demo for ${business}`
+      : "I'd like to see the booking demo"
+    : business
+      ? `Quiero ver la demo de citas para ${business}`
+      : "Quiero ver la demo de citas";
   return NextResponse.redirect(`https://wa.me/${MM_WHATSAPP}?text=${encodeURIComponent(text)}`, {
     status: 302,
     headers: noStore,

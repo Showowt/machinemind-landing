@@ -6,16 +6,17 @@
  * for drafts idle 20+ min). The step-1 screen shows the WhatsApp consent line,
  * so the first insert records when (and which wording) the person agreed to.
  * Later steps update the same row. A row that was already submitted is never
- * modified here. If the database write fails on the client's final attempt,
+ * modified here. The `country` column is derived from the validated WhatsApp
+ * number (+503 → SV, +57 → CO, else OTHER) so it can never contradict it. If the database write fails on the client's final attempt,
  * the raw data goes straight to Telegram.
  */
 import { after } from "next/server";
 import { sendCapiEvent } from "@/lib/web-gratis/capi";
-import { splitServices, toE164, WHATSAPP_CONSENT_VERSION_STEP1 } from "@/lib/web-gratis/config";
+import { countryFromE164, splitServices, toE164, WHATSAPP_CONSENT_VERSION_STEP1 } from "@/lib/web-gratis/config";
 import { fail, ok } from "@/lib/web-gratis/http";
 import { notifySaveFailed } from "@/lib/web-gratis/notify";
 import { enqueueSystem } from "@/lib/web-gratis/outbox";
-import { draftRequestSchema } from "@/lib/web-gratis/schema";
+import { draftRequestSchema, validationErrorCode } from "@/lib/web-gratis/schema";
 import {
   findReferrer,
   getDb,
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
   }
 
   const parsed = draftRequestSchema.safeParse(body);
-  if (!parsed.success) return fail(400, "invalid");
+  if (!parsed.success) return fail(400, validationErrorCode(parsed.error));
   const req = parsed.data;
 
   // Honeypot filled → a bot. Pretend success, store nothing.
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
     business_type: req.fields.businessType,
     city: req.fields.city,
     whatsapp,
+    country: countryFromE164(whatsapp),
     lang: req.lang,
   };
   // Step-2 columns are only written once the user has reached step 2, so a
@@ -76,6 +78,10 @@ export async function POST(request: Request) {
           style: req.fields.style ?? null,
           site_goal: req.fields.siteGoal ?? null,
           referred_by_text: req.fields.referredBy ?? null,
+          existing_website: req.fields.existingWebsite ?? null,
+          address: req.fields.address ?? null,
+          contact_email: req.fields.contactEmail ?? null,
+          extra_notes: req.fields.extraNotes ?? null,
         }
       : {};
 
@@ -183,6 +189,7 @@ export async function POST(request: Request) {
             negocio: step1.business_name,
             rubro: step1.business_type,
             ciudad: step1.city,
+            pais: step1.country,
             whatsapp,
             paso: req.step,
             draft: req.draftId,

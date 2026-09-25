@@ -747,3 +747,194 @@ button:disabled {
   margin: 2px 0;
   overflow-wrap: anywhere;
 }
+
+/* ─── Country (SV / CO) + documents (2026-09-24) ─────────────────────────── */
+
+.headTags {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  max-width: 55%;
+}
+
+.country {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  padding: 3px 7px;
+  border: 1px solid var(--b-line);
+  color: var(--b-fg);
+}
+
+.country_SV {
+  border-color: rgba(30, 155, 240, 0.55);
+}
+
+.country_CO {
+  border-color: rgba(255, 205, 0, 0.55);
+}
+
+.country_OTHER {
+  color: var(--b-dim);
+  border-style: dashed;
+}
+
+/* Geography only: a tiny flag, never a seal or anything styled as a government mark. */
+.flag {
+  display: inline-block;
+  width: 16px;
+  height: 11px;
+  flex: none;
+  outline: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.flag_SV {
+  background: linear-gradient(#0f47af 0 33.4%, #f0f0f3 33.4% 66.6%, #0f47af 66.6%);
+}
+
+.flag_CO {
+  background: linear-gradient(#fcd116 0 50%, #003893 50% 75%, #ce1126 75%);
+}
+
+.countries {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.countryBtn,
+.countryOn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--b-line);
+  background: transparent;
+  color: var(--b-dim);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.countryOn {
+  color: var(--b-fg);
+  border-color: var(--b-blue);
+  background: rgba(30, 155, 240, 0.1);
+}
+
+.countryBtn span:last-child:not(.flag),
+.countryOn span:last-child:not(.flag) {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.badgeBlue {
+  border-color: rgba(30, 155, 240, 0.6);
+  color: var(--b-blue);
+}
+
+.extraNotes {
+  border-left: 2px solid var(--b-amber);
+  padding-left: 8px;
+  white-space: pre-wrap;
+}
+
+.docs {
+  margin: 6px 0 10px;
+}
+
+.docsHead {
+  margin: 0 0 6px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--b-fg);
+}
+
+.docsHead .dim {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.docs ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.doc {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--b-line);
+  background: rgba(255, 255, 255, 0.02);
+  min-width: 0;
+}
+
+.docExt {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 44px;
+  text-align: center;
+  padding: 6px 4px;
+  border: 1px solid rgba(30, 155, 240, 0.5);
+  color: var(--b-blue);
+}
+
+.docName {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+.docName .dim {
+  font-size: 12px;
+}
+
+.docLinks {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.docLinks a {
+  min-height: 36px;
+  padding: 6px 12px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--b-line);
+  color: var(--b-fg);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.docLinks a:hover {
+  border-color: var(--b-blue);
+}
+
+@media (min-width: 560px) {
+  .doc {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .docLinks {
+    grid-column: auto;
+  }
+}

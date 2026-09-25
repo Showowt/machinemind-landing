@@ -1,5 +1,5 @@
 /**
- * Free-website funnel — payments ($19/mes) and referral credits.
+ * Free-website funnel — payments (MONTHLY_PRICE_USD a month, $19) and referral credits.
  *
  * Stripe: the /pagar/<code> button opens the Payment Link with
  * client_reference_id = signup id. The webhook (verified by hand — no Stripe
@@ -8,9 +8,10 @@
  * first, so a Stripe retry never double-activates or double-alerts.
  *
  * The webhook endpoint receives these event types for the WHOLE Stripe account
- * (shared with Rewired's own checkouts), so only the $19/mes funnel's events
- * are acted on: the Payment Link and its subscriptions carry
- * metadata.program = "web_gratis"; anything else is ignored silently.
+ * (shared with Rewired's own checkouts), so only the monthly-plan funnel's
+ * events are acted on: the Payment Link and its subscriptions carry
+ * metadata.program = "web_gratis"; a checkout tagged with any other program is
+ * ignored silently, whatever its amount or reference.
  *
  * A request that pays before its site is delivered keeps its build status (it
  * stays in the team's build queue, marked as paid) and becomes 'activa' when
@@ -21,6 +22,7 @@
  */
 import { z } from "zod";
 import { verifySignedBody, type SignatureCheck } from "./bridge-auth";
+import { MONTHLY_PRICE_USD } from "./config";
 import type { RewiredSendRequest, SendOutcome } from "./rewired";
 import { getDb, SIGNUPS_TABLE, type SignupStatus, type WebGratisSignup } from "./server";
 import { MESSAGES_TABLE } from "./whatsapp";
@@ -30,9 +32,12 @@ export const CREDITS_TABLE = "web_gratis_referral_credits";
 
 /** metadata.program on the web-gratis Payment Link, its sessions and subscriptions. */
 export const STRIPE_PROGRAM = "web_gratis";
-/** $19.00 — the plan's price in cents (fallback floor when metadata is missing; a $19 legacy
- *  charge still clears since the check is "at least"). Phil 2026-09-24: $20 → $19. */
-const PLAN_CENTS = 1900;
+/**
+ * The plan's price in cents (1900 = $19.00, Phil 2026-09-24: $20 → $19). Only the
+ * fallback for a checkout with no program metadata uses it, as a floor: a legacy
+ * $20 subscription still clears, anything under the plan price does not.
+ */
+export const PLAN_CENTS = MONTHLY_PRICE_USD * 100;
 
 export const THANK_YOU_TEXT =
   "¡Listo! Su web queda activa 💛 ¿Le muestro cómo su WhatsApp puede agendar citas solo? Es el siguiente paso.";
@@ -87,12 +92,16 @@ function money(cents: number | null, currency: string | null): string {
 }
 
 /**
- * A Checkout Session of the $19/mes funnel: created by the web-gratis Payment
- * Link (metadata copied from the link), or — if that metadata is ever missing —
- * a USD charge of at least $19 that names one of our signups.
+ * A Checkout Session of the monthly-plan funnel: created by the web-gratis
+ * Payment Link (metadata copied from the link), or — only if it carries no
+ * program metadata at all — a USD charge of at least the plan price that names
+ * one of our signups. Another product's checkout (metadata.program set to
+ * anything else) is never ours, even with a UUID reference.
  */
 export function isFunnelCheckout(o: Record<string, unknown>): boolean {
-  if (obj(o.metadata).program === STRIPE_PROGRAM) return true;
+  const program = obj(o.metadata).program;
+  if (program === STRIPE_PROGRAM) return true;
+  if (program !== undefined && program !== null && program !== "") return false;
   const ref = str(o.client_reference_id);
   return !!ref && UUID_RE.test(ref) && str(o.currency) === "usd" && (num(o.amount_total) ?? 0) >= PLAN_CENTS;
 }
@@ -471,7 +480,7 @@ async function processEvent(event: StripeEvent, deps: PaymentDeps): Promise<Stri
       const who = s ? `${s.business_name} (${s.whatsapp})` : `cliente Stripe ${idOf(o.customer) ?? "?"}`;
       await deps.alert(
         `subdel:${event.id}`,
-        `⚠️ ${who} canceló su suscripción de $19/mes en Stripe. Su web sigue "activa" en el tablero: decidan si pausarla o contactarlo.`,
+        `⚠️ ${who} canceló su suscripción de $${MONTHLY_PRICE_USD}/mes en Stripe. Su web sigue "activa" en el tablero: decidan si pausarla o contactarlo.`,
       );
       return { duplicate: false, handled: "subscription_deleted_alert", signupId: s?.id ?? null };
     }

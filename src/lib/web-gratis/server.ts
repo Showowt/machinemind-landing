@@ -4,7 +4,17 @@
  */
 import { createHash, randomInt } from "crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { REFERRAL_CODE_RE, STORAGE_BUCKET } from "./config";
+import {
+  ALLOWED_UPLOAD_TYPES,
+  MAX_DOCUMENTS,
+  MAX_LOGOS,
+  MAX_PHOTOS,
+  REFERRAL_CODE_RE,
+  STORAGE_BUCKET,
+  uploadExtension,
+  type SignupCountry,
+  type UploadKind,
+} from "./config";
 
 export interface WebGratisSignup {
   id: string;
@@ -33,6 +43,14 @@ export interface WebGratisSignup {
   site_goal: "whatsapp" | "citas" | "mostrar" | null;
   logo_paths: string[];
   photo_paths: string[];
+  /** Menus, price lists, catalogs, brochures (20260927 migration). */
+  document_paths: string[];
+  /** Always derived from the WhatsApp number's prefix; null only on rows older than the column. */
+  country: SignupCountry | null;
+  existing_website: string | null;
+  address: string | null;
+  contact_email: string | null;
+  extra_notes: string | null;
   referral_code: string;
   referred_by_id: string | null;
   ref_raw: string | null;
@@ -228,14 +246,114 @@ export async function recentDraftsFromIp(hash: string): Promise<number> {
   return count ?? 0;
 }
 
-/** Files actually present in a draft's storage folder. */
-export async function listDraftFiles(draftId: string): Promise<string[]> {
-  const { data, error } = await storage().list(draftId, { limit: 100 });
-  if (error) {
+export interface DraftObject {
+  path: string;
+  /** Content type Storage recorded for the object (null when metadata is missing). */
+  mimetype: string | null;
+}
+
+/**
+ * Objects actually present in a draft's storage folder, or null when the listing
+ * itself failed (so a caller can tell "no files" from "could not check").
+ */
+export async function tryListDraftObjects(draftId: string): Promise<DraftObject[] | null> {
+  try {
+    const { data, error } = await storage().list(draftId, { limit: 100 });
+    if (error) throw error;
+    return (data ?? [])
+      .filter((f) => f.id)
+      .map((f) => {
+        const meta: Record<string, unknown> = f.metadata ?? {};
+        return {
+          path: `${draftId}/${f.name}`,
+          mimetype: typeof meta.mimetype === "string" ? meta.mimetype : null,
+        };
+      });
+  } catch (error) {
     console.error("[WebGratis] storage list failed", error);
-    return [];
+    return null;
   }
-  return (data ?? []).filter((f) => f.id).map((f) => `${draftId}/${f.name}`);
+}
+
+/** Paths in a draft's storage folder, or null when the listing failed. */
+export async function tryListDraftFiles(draftId: string): Promise<string[] | null> {
+  const objects = await tryListDraftObjects(draftId);
+  return objects ? objects.map((o) => o.path) : null;
+}
+
+/**
+ * The signed upload URL doesn't pin a content type, so a crafted client could
+ * store e.g. a PDF under a "photo-…" name. False only when Storage recorded a
+ * known upload type that this path's kind does not accept; missing or unknown
+ * metadata never drops a real file.
+ */
+export function storedTypeFitsKind(path: string, mimetype: string | null): boolean {
+  const kind = /\/(logo|photo|document)-/.exec(path)?.[1] as UploadKind | undefined;
+  if (!kind || !mimetype) return true;
+  const mime = mimetype.toLowerCase().split(";")[0].trim();
+  if (!(mime in ALLOWED_UPLOAD_TYPES)) return true;
+  return uploadExtension(kind, mime) !== null;
+}
+
+/** Files actually present in a draft's storage folder ([] when the listing fails). */
+export async function listDraftFiles(draftId: string): Promise<string[]> {
+  return (await tryListDraftFiles(draftId)) ?? [];
+}
+
+export interface SortedUploads {
+  logo_paths: string[];
+  photo_paths: string[];
+  document_paths: string[];
+}
+
+/** "<signupId>/<kind>-<ts>-<rand>.<ext>" (form) or "<signupId>/<kind>-wa-<ts>-<rand>.<ext>" (WhatsApp). */
+const UPLOAD_NAME_RE = /^(logo|photo|document)-(?:wa-)?\d{10,14}-[0-9a-f]{6}\.[a-z0-9]{2,5}$/;
+
+/** DB caps: logo_paths ≤ 4 and photo_paths ≤ 12 (CHECK constraints); documents kept to 30. */
+const DB_CAP: Record<UploadKind, number> = { logo: 4, photo: 12, document: 30 };
+
+/**
+ * Sort submitted object paths by their "<kind>-" filename prefix. Only paths
+ * inside this signup's own folder with a well-formed name are accepted; the
+ * newest logo wins, photos and documents keep upload order up to the form caps.
+ */
+export function sortUploadPaths(signupId: string, paths: readonly string[]): SortedUploads {
+  const prefix = `${signupId}/`;
+  const byKind: Record<UploadKind, string[]> = { logo: [], photo: [], document: [] };
+  for (const path of Array.from(new Set(paths)).sort()) {
+    if (!path.startsWith(prefix)) continue;
+    const match = UPLOAD_NAME_RE.exec(path.slice(prefix.length));
+    if (!match) continue;
+    byKind[match[1] as UploadKind].push(path);
+  }
+  return {
+    logo_paths: byKind.logo.slice(-MAX_LOGOS),
+    photo_paths: byKind.photo.slice(0, MAX_PHOTOS),
+    document_paths: byKind.document.slice(0, MAX_DOCUMENTS),
+  };
+}
+
+/**
+ * Keep files a client already sent on WhatsApp (bridge "-wa-" uploads attached
+ * to the draft) when the form's own uploads are written at submit.
+ */
+export function mergeWhatsappUploads(
+  form: SortedUploads,
+  existing: Partial<Record<keyof SortedUploads, unknown>> | null | undefined,
+): SortedUploads {
+  const merge = (kind: UploadKind, column: keyof SortedUploads) => {
+    const current = existing?.[column];
+    const fromWa = (Array.isArray(current) ? current : []).filter(
+      (p): p is string => typeof p === "string" && p.includes(`/${kind}-wa-`),
+    );
+    const all = Array.from(new Set([...form[column], ...fromWa]));
+    return kind === "logo" ? all.slice(-DB_CAP.logo) : all.slice(0, DB_CAP[kind]);
+  };
+  return {
+    logo_paths: merge("logo", "logo_paths"),
+    photo_paths: merge("photo", "photo_paths"),
+    document_paths: merge("document", "document_paths"),
+  };
 }
 
 /** 7-day signed links so the team can open uploads from Telegram / email. */

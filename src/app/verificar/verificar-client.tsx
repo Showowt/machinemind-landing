@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
+import { MM_WHATSAPP, WEB_GRATIS_PATH } from '@/lib/web-gratis/config';
+import { formatWhatsAppDisplay, whatsAppHref } from '@/components/web-gratis/whatsapp-display';
 
 /*
  * /verificar — the official verification page.
@@ -16,7 +18,7 @@ const OFFICIAL_NUMBERS: { number: string; display: string; label: string }[] = [
   { number: '15559243163', display: '+1 (555) 924-3163', label: 'El Salvador' },
   { number: '15559232954', display: '+1 (555) 923-2954', label: 'El Salvador' },
   { number: '17866500003', display: '+1 (786) 650-0003', label: 'El Salvador' },
-  { number: '17862570284', display: '+1 (786) 257-0284', label: 'El Salvador · web gratis' },
+  { number: '17862570284', display: '+1 (786) 257-0284', label: 'Web gratis · El Salvador y Colombia' },
   { number: '19543889003', display: '+1 (954) 388-9003', label: 'Panamá · principal' },
   { number: '17724096432', display: '+1 (772) 409-6432', label: 'Panamá' },
   { number: '15612904501', display: '+1 (561) 290-4501', label: 'Colombia' },
@@ -42,6 +44,34 @@ const PLEDGE: { title: string; body: string }[] = [
   },
 ];
 
+/*
+ * Free-website initiative (MachineMind's own, aligned with each government's
+ * vision — never a government program). Alignment lines and disclaimer use the
+ * shared contract wording verbatim.
+ */
+const WG_LINE_DISPLAY = formatWhatsAppDisplay(MM_WHATSAPP);
+
+const WG_ALIGNMENT: { country: string; line: string }[] = [
+  {
+    country: 'El Salvador',
+    line: 'Nos alineamos con la visión del Gobierno de El Salvador de digitalizar a los negocios del país.',
+  },
+  {
+    country: 'Colombia',
+    line: 'Nos alineamos con la visión de transformación digital del Gobierno de Colombia.',
+  },
+];
+
+const WG_EN =
+  "In English: the 2026 Business Digitalization Initiative (free websites for businesses in El Salvador and Colombia) and the WhatsApp line " +
+  `${WG_LINE_DISPLAY} belong to MachineMind. We are aligned with the Government of El Salvador's vision of bringing every business online. ` +
+  "We are aligned with the Government of Colombia's digital-transformation vision.";
+
+const WG_DISCLAIMER_ES =
+  'MachineMind es una empresa privada. Esta iniciativa no es un programa del gobierno ni cuenta con su patrocinio; compartimos su visión de digitalizar los negocios.';
+const WG_DISCLAIMER_EN =
+  'MachineMind is a private company. This initiative is not a government program and is not sponsored by any government; we share its vision of bringing businesses online.';
+
 const WORK: { name: string; where: string; url: string }[] = [
   { name: 'Piel Dorada', where: 'El Salvador', url: 'https://pieldoradasv.com' },
   { name: 'AMO Cartagena', where: 'Colombia', url: 'https://amocartagena.co' },
@@ -49,7 +79,22 @@ const WORK: { name: string; where: string; url: string }[] = [
 ];
 
 export default function VerificarClient() {
+  const pageRef = useRef<HTMLElement>(null);
+
   useEffect(() => {
+    const page = pageRef.current;
+    if (!page) return;
+    const items = Array.from(page.querySelectorAll<HTMLElement>('.mmv-reveal'));
+    // A slow bundle may land after the CSS failsafe already revealed content —
+    // keep that content shown instead of hiding it again.
+    items.forEach((el) => {
+      if (getComputedStyle(el).opacity === '1') el.classList.add('mmv-in');
+    });
+    page.classList.add('mmv-live');
+    if (typeof IntersectionObserver === 'undefined') {
+      items.forEach((el) => el.classList.add('mmv-in'));
+      return;
+    }
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
@@ -61,12 +106,14 @@ export default function VerificarClient() {
       },
       { threshold: 0.12 },
     );
-    document.querySelectorAll('.mmv-reveal').forEach((el) => observer.observe(el));
+    items.forEach((el) => {
+      if (!el.classList.contains('mmv-in')) observer.observe(el);
+    });
     return () => observer.disconnect();
   }, []);
 
   return (
-    <main className="mmv-page">
+    <main className="mmv-page" ref={pageRef}>
       <style>{`
         .mmv-page { min-height: 100vh; background: #06060a; color: #f0f0f3; font-family: var(--font-satoshi, 'Satoshi', sans-serif); padding: 0 24px 120px; }
         .mmv-wrap { max-width: 880px; margin: 0 auto; }
@@ -109,8 +156,31 @@ export default function VerificarClient() {
         .mmv-report-title { font-family: var(--font-clash, 'Clash Display', sans-serif); font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 10px; }
         .mmv-report-body { font-size: 14.5px; line-height: 1.7; color: rgba(240,240,243,0.55); }
         .mmv-footer { margin-top: 100px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 12px; letter-spacing: 0.08em; color: rgba(240,240,243,0.3); display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; }
-        .mmv-reveal { opacity: 0; transform: translateY(40px); transition: opacity 0.7s cubic-bezier(0.22,1,0.36,1), transform 0.7s cubic-bezier(0.22,1,0.36,1); }
+        .mmv-wg { isolation: isolate; border: 1px solid rgba(30,155,240,0.35); background: rgba(30,155,240,0.05); padding: 30px 28px; }
+        .mmv-wg-title { font-family: var(--font-clash, 'Clash Display', sans-serif); font-size: clamp(20px, 3vw, 26px); font-weight: 600; line-height: 1.25; margin-bottom: 14px; }
+        .mmv-wg-title span { color: #1e9bf0; white-space: nowrap; }
+        .mmv-wg-body { font-size: 15px; line-height: 1.75; color: rgba(240,240,243,0.6); max-width: 680px; }
+        .mmv-wg-body strong { color: #f0f0f3; font-weight: 500; }
+        .mmv-wg-body a { color: #1e9bf0; text-decoration: none; }
+        .mmv-wg-lines { margin-top: 26px; border-left: 1px solid rgba(30,155,240,0.5); padding-left: 20px; display: flex; flex-direction: column; gap: 18px; }
+        .mmv-wg-country { font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase; color: #1e9bf0; margin-bottom: 6px; }
+        .mmv-wg-quote { font-family: var(--font-instrument, 'Instrument Serif', serif); font-style: italic; font-size: clamp(19px, 2.6vw, 23px); line-height: 1.4; color: #f0f0f3; }
+        .mmv-wg-qa { margin-top: 26px; font-size: 14.5px; line-height: 1.7; color: rgba(240,240,243,0.55); max-width: 680px; }
+        .mmv-wg-qa strong { color: #f0f0f3; font-weight: 500; }
+        .mmv-wg-en { margin-top: 18px; font-size: 13px; line-height: 1.7; color: rgba(240,240,243,0.4); max-width: 680px; }
+        .mmv-wg-fine { margin-top: 24px; padding-top: 16px; border-top: 1px solid rgba(255,255,255,0.06); font-size: 11.5px; line-height: 1.7; color: rgba(240,240,243,0.55); max-width: 720px; }
+        .mmv-wg-fine + .mmv-wg-fine { margin-top: 6px; padding-top: 0; border-top: none; color: rgba(240,240,243,0.42); }
+        .mmv-wg .mmv-btn { white-space: nowrap; }
+        @media (max-width: 480px) {
+          .mmv-wg { padding: 24px 20px; }
+          .mmv-wg .mmv-contact { gap: 10px; }
+          .mmv-wg .mmv-btn { flex: 1 1 auto; text-align: center; font-size: 11px; letter-spacing: 0.1em; padding: 13px 16px; }
+        }
+        .mmv-reveal { opacity: 0; transform: translateY(40px); transition: opacity 0.7s cubic-bezier(0.22,1,0.36,1), transform 0.7s cubic-bezier(0.22,1,0.36,1); animation: mmv-failsafe 0.01s 2.5s both; }
+        .mmv-live .mmv-reveal { animation: none; }
         .mmv-reveal.mmv-in { opacity: 1; transform: translateY(0); }
+        @keyframes mmv-failsafe { to { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) { .mmv-reveal { opacity: 1; transform: none; transition: none; animation: none; } }
       `}</style>
 
       <div className="mmv-wrap">
@@ -146,6 +216,51 @@ export default function VerificarClient() {
             &ldquo;Servicio profesional&rdquo;, esta página web y nuestro correo. Próximamente
             también línea local +503 para llamadas.
           </p>
+        </section>
+
+        <section className="mmv-sec mmv-reveal" id="web-gratis">
+          <div className="mmv-sec-title">Web gratis — Iniciativa de Digitalización de Negocios 2026</div>
+          <div className="mmv-wg">
+            <h2 className="mmv-wg-title">
+              La web gratis y la línea <span>{WG_LINE_DISPLAY}</span> son de MachineMind
+            </h2>
+            <p className="mmv-wg-body">
+              La <strong>Iniciativa de Digitalización de Negocios 2026</strong> (páginas web gratis
+              para negocios de El Salvador y Colombia) es de <strong>MachineMind</strong>. Las
+              solicitudes se reciben en{' '}
+              <a href={WEB_GRATIS_PATH}>machinemindconsulting.com{WEB_GRATIS_PATH}</a>, y el WhatsApp{' '}
+              <strong>{WG_LINE_DISPLAY}</strong> es nuestra línea para confirmar solicitudes, enviar
+              cada web para revisión y avisar antes de cualquier pago. Nadie paga nada antes de ver
+              su web funcionando.
+            </p>
+            <div className="mmv-wg-lines">
+              {WG_ALIGNMENT.map((a) => (
+                <div key={a.country}>
+                  <div className="mmv-wg-country">{a.country}</div>
+                  <p className="mmv-wg-quote">{a.line}</p>
+                </div>
+              ))}
+            </div>
+            <p className="mmv-wg-qa">
+              <strong>¿Es del gobierno?</strong> No. Somos una empresa privada, MachineMind; nos
+              alineamos con la visión de los gobiernos de El Salvador y de Colombia de digitalizar
+              los negocios, pero no hablamos en su nombre.
+            </p>
+            <div className="mmv-contact">
+              <a className="mmv-btn" href={WEB_GRATIS_PATH}>Solicitar la web gratis</a>
+              <a
+                className="mmv-btn"
+                href={whatsAppHref(MM_WHATSAPP, 'Hola, quiero verificar la iniciativa de web gratis')}
+                target="_blank"
+                rel="noopener"
+              >
+                WhatsApp {WG_LINE_DISPLAY}
+              </a>
+            </div>
+            <p className="mmv-wg-en" lang="en">{WG_EN}</p>
+            <p className="mmv-wg-fine">{WG_DISCLAIMER_ES}</p>
+            <p className="mmv-wg-fine" lang="en">{WG_DISCLAIMER_EN}</p>
+          </div>
         </section>
 
         <section className="mmv-sec mmv-reveal">
