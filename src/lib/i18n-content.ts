@@ -301,9 +301,9 @@ export const TRANSLATIONS: Record<Lang, SiteTranslations> = {
         { value: "$0", label: "Built for free", note: "We design and build your website at no cost." },
         { value: `${FREE_DAYS} days`, label: "Free online", note: "Your site live and working. Nothing to pay." },
         {
-          value: `$${MONTHLY_PRICE_USD}/mo`,
-          label: "After that, no contract",
-          note: "Hosting, support and changes included. Cancel anytime.",
+          value: `$${MONTHLY_PRICE_USD} USD/mo`,
+          label: "After that, you choose",
+          note: "We keep hosting it with full support, no contract. Or you host it yourself, without our assistance.",
         },
         {
           value: "Have a site?",
@@ -554,9 +554,9 @@ export const TRANSLATIONS: Record<Lang, SiteTranslations> = {
         { value: "$0", label: "Construcción gratis", note: "Diseñamos y armamos su web sin costo." },
         { value: `${FREE_DAYS} días`, label: "Gratis en línea", note: "Su web publicada y funcionando, sin pagar nada." },
         {
-          value: `$${MONTHLY_PRICE_USD}/mes`,
-          label: "Después, sin contrato",
-          note: "Hosting, soporte y cambios incluidos. Cancele cuando quiera.",
+          value: `$${MONTHLY_PRICE_USD} USD/mes`,
+          label: "Después, usted elige",
+          note: "La seguimos alojando con soporte completo, sin contrato. O la aloja usted mismo, sin nuestra asistencia.",
         },
         {
           value: "¿Ya tiene web?",

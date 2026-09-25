@@ -323,6 +323,7 @@
 
 .chips li::before {
   content: "";
+  flex: none;
   width: 6px;
   height: 6px;
   background: var(--wg-blue);

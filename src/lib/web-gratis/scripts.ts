@@ -12,6 +12,9 @@ export function waLink(e164: string, text: string): string {
 const payLine = (payLink: string | null) =>
   payLink ? `Acá la activa 👉 ${payLink}` : "Le paso el enlace para activarla por acá mismo.";
 
+/** Option B after the free days — stated honestly, never pushed, no help promised. */
+const selfHostLine = "Si prefiere alojarla usted mismo, le entregamos los archivos (el alojamiento propio no incluye nuestra asistencia).";
+
 export const scripts = {
   confirm: (business: string) =>
     `¡Recibido, ${business}! 🎉 Le saluda MachineMind. Ya empezamos a armar su web. Le confirmo por acá cuando esté lista (pocos días).`,
@@ -34,13 +37,13 @@ export const scripts = {
   day7: () => `¿Cómo le ha ido con la web? ¿Le han escrito clientes por ahí? 🙂`,
 
   day28: (payLink: string | null) =>
-    `Recordatorio amistoso: su mes gratis termina en 2 días. Su web sigue en línea por solo $${MONTHLY_PRICE_USD}/mes — soporte, actualizaciones y que nunca se caiga. ¿Se la dejo activa? ${payLine(payLink)}`,
+    `Recordatorio amistoso: su mes gratis termina en 2 días. Si quiere que se la sigamos alojando, es solo $${MONTHLY_PRICE_USD} USD/mes con soporte completo — cambios, actualizaciones y que nunca se caiga. ¿Se la dejo activa? ${payLine(payLink)}\n\n${selfHostLine}`,
 
   day30: (business: string, payLink: string | null) =>
-    `${business}, hoy se cumplen sus ${FREE_DAYS} días 🎉 Su web ya está trabajando para usted. Para mantenerla en línea con soporte y actualizaciones es solo $${MONTHLY_PRICE_USD}/mes, sin contrato, cancela cuando quiera. ${payLine(payLink)}\n\nY si quiere que además le agende citas sola por WhatsApp, le muestro cómo — es el siguiente paso 🙌`,
+    `${business}, hoy se cumplen sus ${FREE_DAYS} días 🎉 Su web ya está trabajando para usted. Si quiere que se la sigamos alojando, es solo $${MONTHLY_PRICE_USD} USD/mes con soporte completo (cambios, actualizaciones y ayuda), sin contrato, cancele cuando quiera. ${payLine(payLink)}\n\n${selfHostLine}\n\nY si quiere que además le agende citas sola por WhatsApp, le muestro cómo — es el siguiente paso 🙌`,
 
   lastCall: (payLink: string | null) =>
-    `Su web se pausa mañana si no la activamos — ¿se la dejo en línea? ${payLine(payLink)}`,
+    `Su web se pausa mañana si no la activamos — ¿se la dejo en línea? ${payLine(payLink)}\n\n${selfHostLine}`,
 };
 
 export type ScriptKey = keyof typeof scripts;

@@ -8,6 +8,11 @@
  * a government program or that any government sponsors it. Every page that
  * shows the framing also shows `disclaimer`. Prices and the share ask are
  * stated plainly before submit — the ad promised "sin trampas".
+ *
+ * After the free days the business CHOOSES (Phil, 2026-09-24): MachineMind keeps
+ * hosting it for MONTHLY_PRICE_USD a month with full support (the primary path),
+ * or they host it themselves — we hand over the files and self-hosting includes
+ * no assistance from us. Every line that explains the price states both options.
  */
 import {
   FREE_DAYS,
@@ -161,7 +166,7 @@ const es: Copy = {
     SV: {
       name: SV.name,
       align: "Nos alineamos con la visión del Gobierno de El Salvador de digitalizar a los negocios del país.",
-      mission: `Queremos que cada negocio de El Salvador esté en internet. Por eso diseñamos su página web gratis y solo cobramos $${MONTHLY_PRICE_USD} USD al mes por mantenerla en línea, si decide quedarse.`,
+      mission: `Queremos que cada negocio de El Salvador esté en internet. Por eso diseñamos su página web gratis. Después de los ${FREE_DAYS} días gratis, usted decide: la seguimos alojando por $${MONTHLY_PRICE_USD} USD al mes con soporte completo, o la aloja usted mismo.`,
       cityPlaceholder: "Ej: San Salvador, colonia Escalón",
       phonePlaceholder: SV.phoneExample,
       shareText: (business, link) =>
@@ -170,7 +175,7 @@ const es: Copy = {
     CO: {
       name: CO.name,
       align: "Nos alineamos con la visión de transformación digital del Gobierno de Colombia.",
-      mission: `Queremos que cada negocio de Colombia esté en internet. Por eso diseñamos su página web gratis y solo cobramos $${MONTHLY_PRICE_USD} USD al mes por mantenerla en línea, si decide quedarse.`,
+      mission: `Queremos que cada negocio de Colombia esté en internet. Por eso diseñamos su página web gratis. Después de los ${FREE_DAYS} días gratis, usted decide: la seguimos alojando por $${MONTHLY_PRICE_USD} USD al mes con soporte completo, o la aloja usted mismo.`,
       cityPlaceholder: "Ej: Medellín, El Poblado",
       phonePlaceholder: CO.phoneExample,
       shareText: (business, link) =>
@@ -181,8 +186,13 @@ const es: Copy = {
     "MachineMind es una empresa privada. Esta iniciativa no es un programa del gobierno ni cuenta con su patrocinio; compartimos su visión de digitalizar los negocios.",
   titleA: "Su página web,",
   titleB: "gratis.",
-  lede: "Cuéntenos de su negocio y se la armamos. Lista en pocos días, sin costo para empezar y sin letra pequeña.",
-  chips: ["Diseño $0", "Lista en días", `${FREE_DAYS} días gratis`, `Luego $${MONTHLY_PRICE_USD} USD/mes · sin contrato`],
+  lede: `Cuéntenos de su negocio y se la armamos. Lista en pocos días, sin costo para empezar y sin letra pequeña. Después de los ${FREE_DAYS} días gratis, usted decide cómo seguir.`,
+  chips: [
+    "Diseño $0",
+    "Lista en días",
+    `${FREE_DAYS} días gratis`,
+    `Luego: $${MONTHLY_PRICE_USD} USD/mes con hosting y soporte completo, o alójela usted mismo`,
+  ],
   heroCta: "Quiero mi web gratis",
   referredBy: (name) => `${name} le recomendó esta iniciativa.`,
   initiativeTitle: "La iniciativa",
@@ -193,7 +203,7 @@ const es: Copy = {
     { title: "La comparte", body: `En su historia de Instagram o Facebook, etiquetando a @${MM_INSTAGRAM}.` },
     {
       title: `${FREE_DAYS} días gratis`,
-      body: `Después, $${MONTHLY_PRICE_USD} USD al mes para mantenerla en línea: hosting, soporte y cambios. Sin contrato.`,
+      body: `Después, usted decide: nosotros la seguimos alojando por $${MONTHLY_PRICE_USD} USD al mes, con soporte completo de su web (cambios, actualizaciones y ayuda cuando la necesite), o la aloja usted mismo: le entregamos los archivos y el alojamiento propio no incluye nuestra asistencia. Sin contrato.`,
     },
   ],
   howCta: "Empezar ahora",
@@ -294,13 +304,14 @@ const es: Copy = {
     lines: [
       "Diseño y construcción de su web: $0.",
       `Primeros ${FREE_DAYS} días con su web en línea: $0.`,
-      `Después: $${MONTHLY_PRICE_USD} USD al mes para mantenerla en línea, con hosting, soporte y cambios. Sin contrato: cancele cuando quiera.`,
+      `Después, usted decide. Si quiere que la sigamos alojando: $${MONTHLY_PRICE_USD} USD al mes, con soporte completo de su web (cambios, actualizaciones y ayuda cuando la necesite). Sin contrato: cancele cuando quiera.`,
+      "Si prefiere alojarla usted mismo: le entregamos los archivos de su web. El alojamiento propio no incluye nuestra asistencia.",
       `Lo único que le pedimos: cuando esté lista, compártala en su historia de Instagram o Facebook y etiquete a @${MM_INSTAGRAM}.`,
     ],
-    acceptTerms: `Entiendo: la web es gratis, los primeros ${FREE_DAYS} días en línea son gratis y después cuesta $${MONTHLY_PRICE_USD} USD al mes mantenerla, sin contrato.`,
+    acceptTerms: `Entiendo: la web es gratis, los primeros ${FREE_DAYS} días en línea son gratis y después elijo: que MachineMind la siga alojando por $${MONTHLY_PRICE_USD} USD al mes con soporte completo, o alojarla yo mismo (me entregan los archivos, sin asistencia de MachineMind). Sin contrato.`,
     acceptShare: `Cuando mi web esté lista, la comparto en mi historia y etiqueto a @${MM_INSTAGRAM}.`,
   },
-  priceLine: `Hoy $0 · ${FREE_DAYS} días gratis · luego $${MONTHLY_PRICE_USD} USD/mes, sin contrato`,
+  priceLine: `Hoy $0 · ${FREE_DAYS} días gratis · luego $${MONTHLY_PRICE_USD} USD/mes con hosting y soporte completo, o alójela usted mismo`,
   submit: "Enviar y empezar mi web",
   submitting: "Enviando…",
   waitingUploads: "Esperando que terminen de subir sus archivos…",
@@ -349,7 +360,7 @@ const es: Copy = {
       "Hoy revisamos su información.",
       "En pocos días su web queda lista y se la mandamos por WhatsApp.",
       `La comparte en su historia y etiqueta a @${MM_INSTAGRAM}.`,
-      `${FREE_DAYS} días gratis con su web en línea. Después, $${MONTHLY_PRICE_USD} USD al mes si quiere mantenerla.`,
+      `${FREE_DAYS} días gratis con su web en línea. Después usted decide: $${MONTHLY_PRICE_USD} USD al mes con hosting y soporte completo, o la aloja usted mismo.`,
     ],
     confirm: "Confirmar por WhatsApp",
     moreTitle: "¿Se le olvidó algo?",
@@ -399,7 +410,7 @@ const en: Copy = {
     SV: {
       name: SV.name,
       align: "We are aligned with the Government of El Salvador's vision of bringing every business online.",
-      mission: `We want every business in El Salvador to be online. That's why we design your website for free and only charge $${MONTHLY_PRICE_USD} USD a month to keep it online, if you decide to stay.`,
+      mission: `We want every business in El Salvador to be online. That's why we design your website for free. After the ${FREE_DAYS} free days, you decide: we keep hosting it for $${MONTHLY_PRICE_USD} USD a month with full support, or you host it yourself.`,
       cityPlaceholder: "e.g. San Salvador, Escalón",
       phonePlaceholder: SV.phoneExample,
       shareText: (business, link) =>
@@ -408,7 +419,7 @@ const en: Copy = {
     CO: {
       name: CO.name,
       align: "We are aligned with the Government of Colombia's digital-transformation vision.",
-      mission: `We want every business in Colombia to be online. That's why we design your website for free and only charge $${MONTHLY_PRICE_USD} USD a month to keep it online, if you decide to stay.`,
+      mission: `We want every business in Colombia to be online. That's why we design your website for free. After the ${FREE_DAYS} free days, you decide: we keep hosting it for $${MONTHLY_PRICE_USD} USD a month with full support, or you host it yourself.`,
       cityPlaceholder: "e.g. Medellín, El Poblado",
       phonePlaceholder: CO.phoneExample,
       shareText: (business, link) =>
@@ -419,8 +430,13 @@ const en: Copy = {
     "MachineMind is a private company. This initiative is not a government program and is not sponsored by any government; we share its vision of bringing businesses online.",
   titleA: "Your website,",
   titleB: "free.",
-  lede: "Tell us about your business and we'll build it. Ready in a few days, nothing to pay to start, no fine print.",
-  chips: ["$0 design", "Ready in days", `${FREE_DAYS} days free`, `Then $${MONTHLY_PRICE_USD} USD/mo · no contract`],
+  lede: `Tell us about your business and we'll build it. Ready in a few days, nothing to pay to start, no fine print. After the ${FREE_DAYS} free days, you decide what's next.`,
+  chips: [
+    "$0 design",
+    "Ready in days",
+    `${FREE_DAYS} days free`,
+    `Then: $${MONTHLY_PRICE_USD} USD/mo with hosting and full support, or host it yourself`,
+  ],
   heroCta: "I want my free website",
   referredBy: (name) => `${name} recommended this initiative to you.`,
   initiativeTitle: "The initiative",
@@ -431,7 +447,7 @@ const en: Copy = {
     { title: "You share it", body: `On your Instagram or Facebook story, tagging @${MM_INSTAGRAM}.` },
     {
       title: `${FREE_DAYS} days free`,
-      body: `After that, $${MONTHLY_PRICE_USD} USD a month to keep it online: hosting, support and changes. No contract.`,
+      body: `After that, you decide: we keep hosting it for $${MONTHLY_PRICE_USD} USD a month with full support for your website (changes, updates and help whenever you need it), or you host it yourself: we hand you the files, and self-hosting doesn't include our assistance. No contract.`,
     },
   ],
   howCta: "Start now",
@@ -532,13 +548,14 @@ const en: Copy = {
     lines: [
       "Designing and building your website: $0.",
       `First ${FREE_DAYS} days with your site online: $0.`,
-      `After that: $${MONTHLY_PRICE_USD} USD a month to keep it online, with hosting, support and changes. No contract: cancel anytime.`,
+      `After that, you decide. If you want us to keep hosting it: $${MONTHLY_PRICE_USD} USD a month, with full support for your website (changes, updates and help whenever you need it). No contract: cancel anytime.`,
+      "If you'd rather host it yourself: we hand you your website files. Self-hosting doesn't include our assistance.",
       `All we ask: when it's ready, share it on your Instagram or Facebook story and tag @${MM_INSTAGRAM}.`,
     ],
-    acceptTerms: `I understand: the website is free, the first ${FREE_DAYS} days online are free, and after that it costs $${MONTHLY_PRICE_USD} USD a month to keep it, no contract.`,
+    acceptTerms: `I understand: the website is free, the first ${FREE_DAYS} days online are free, and after that I choose: MachineMind keeps hosting it for $${MONTHLY_PRICE_USD} USD a month with full support, or I host it myself (I get the files, with no assistance from MachineMind). No contract.`,
     acceptShare: `When my website is ready, I'll share it on my story and tag @${MM_INSTAGRAM}.`,
   },
-  priceLine: `$0 today · ${FREE_DAYS} days free · then $${MONTHLY_PRICE_USD} USD/mo, no contract`,
+  priceLine: `$0 today · ${FREE_DAYS} days free · then $${MONTHLY_PRICE_USD} USD/mo with hosting and full support, or host it yourself`,
   submit: "Send and start my website",
   submitting: "Sending…",
   waitingUploads: "Waiting for your files to finish uploading…",
@@ -587,7 +604,7 @@ const en: Copy = {
       "Today we review your information.",
       "In a few days your site is ready and we send it to you on WhatsApp.",
       `You share it on your story and tag @${MM_INSTAGRAM}.`,
-      `${FREE_DAYS} days free with your site online. After that, $${MONTHLY_PRICE_USD} USD a month if you want to keep it.`,
+      `${FREE_DAYS} days free with your site online. Then you decide: $${MONTHLY_PRICE_USD} USD a month with hosting and full support, or you host it yourself.`,
     ],
     confirm: "Confirm on WhatsApp",
     moreTitle: "Forgot something?",

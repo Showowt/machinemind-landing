@@ -1,5 +1,8 @@
 /**
  * /pagar/<code> — keep the free website online for MONTHLY_PRICE_USD a month.
+ * The buttons are option A (we keep hosting it, with full support); option B
+ * (self-hosting: we hand over the files, no assistance) is one line with a
+ * WhatsApp link — deliberately not a button, so it never reads as a second plan.
  *
  * The day-28 / day-30 / pause-notice WhatsApp templates link here. "Pagar con
  * tarjeta" opens the Stripe Payment Link from the ops board with
@@ -23,7 +26,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Mantenga su web en línea — MachineMind",
-  description: `Su página web en línea por $${MONTHLY_PRICE_USD} USD al mes, sin contrato.`,
+  description: `Su página web en línea por $${MONTHLY_PRICE_USD} USD al mes con hosting y soporte completo, sin contrato, o alójela usted mismo.`,
   robots: { index: false, follow: false },
 };
 
@@ -189,6 +192,12 @@ export default async function PayPage({ params, searchParams }: PageProps) {
           </a>
         </div>
         {card ? null : <p className={styles.note}>{t.cardSoon}</p>}
+        <p className={styles.alt}>
+          {t.selfHost}{" "}
+          <a href={waHref(t.waSelfHost(signup.referral_code))} target="_blank" rel="noopener noreferrer">
+            {t.selfHostCta}
+          </a>
+        </p>
 
         <p className={styles.kicker} style={{ marginTop: 26 }}>
           {t.paypalTitle}

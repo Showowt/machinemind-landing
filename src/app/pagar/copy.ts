@@ -4,6 +4,8 @@
  * promise as /web. Country-specific lines (the initiative tag and the alignment
  * with each government's vision) exist only for SV and CO; the footer
  * disclaimer is always shown, so it sits on every page that carries them.
+ * The pay page's buttons are option A (we keep hosting it, full support); option
+ * B (self-hosting: files handed over, no assistance) is one line + a WhatsApp link.
  */
 import { countryFromE164, FREE_DAYS, MONTHLY_PRICE_USD, type SignupCountry } from "@/lib/web-gratis/config";
 
@@ -37,12 +39,14 @@ export const PAY_COPY = {
     titleLead: "Mantenga su web",
     titleAccent: "en línea.",
     lede: (business: string) =>
-      `La web de ${business} sigue trabajando para usted: hosting, soporte y cambios cuando los necesite.`,
+      `Con nosotros, la web de ${business} sigue en línea con soporte completo: cambios, actualizaciones y ayuda cuando la necesite.`,
     per: "al mes",
-    chips: ["Sin contrato", "Cancela cuando quiera", "Soporte y cambios"],
+    chips: ["Hosting y soporte completo", "Sin contrato", "Cancele cuando quiera"],
     payCard: "Pagar con tarjeta",
     payPaypal: "Pagar con PayPal",
     cardSoon: "El pago con tarjeta estará disponible muy pronto. Mientras tanto puede pagar por PayPal o escribirnos por WhatsApp.",
+    selfHost: "¿Prefiere alojarla usted mismo? Le entregamos los archivos de su web; el alojamiento propio no incluye nuestra asistencia.",
+    selfHostCta: "Pedirlos por WhatsApp",
     paypalTitle: "Si paga por PayPal",
     paypalSteps: [
       `Pague $${MONTHLY_PRICE_USD} USD con el botón de PayPal.`,
@@ -53,7 +57,8 @@ export const PAY_COPY = {
     receiptText: (code: string) => `Pagué por PayPal — código ${code}`,
     secure: "Pago con tarjeta procesado por Stripe. MachineMind nunca ve ni guarda los datos de su tarjeta.",
     activeTitle: "Su web ya está activa ✓",
-    activeBody: (business: string) => `Gracias por confiar en nosotros. La web de ${business} sigue en línea con soporte incluido.`,
+    activeBody: (business: string) =>
+      `Gracias por confiar en nosotros. La web de ${business} sigue en línea con soporte completo: cambios, actualizaciones y ayuda cuando la necesite.`,
     activeHelp: "¿Necesita un cambio? Escríbanos",
     buildingTitle: "Su web aún está en construcción",
     buildingBody: (business: string) =>
@@ -65,7 +70,7 @@ export const PAY_COPY = {
     pausedTitleLead: "Reactive su web",
     pausedTitleAccent: "hoy.",
     pausedLede: (business: string) =>
-      `La web de ${business} está en pausa. Reactívela y vuelve a estar en línea, con hosting, soporte y cambios cuando los necesite.`,
+      `La web de ${business} está en pausa. Reactívela y vuelve a estar en línea, con hosting y soporte completo: cambios, actualizaciones y ayuda cuando la necesite.`,
     pausedLastStep: "Le confirmamos por WhatsApp y su web vuelve a estar en línea.",
     draftTitle: "Primero terminemos su solicitud",
     draftBody: "Todavía no recibimos el formulario completo de su web. Termínelo aquí (toma 2 minutos) y se la armamos gratis.",
@@ -77,7 +82,7 @@ export const PAY_COPY = {
     notFoundBody: "Revise que el enlace esté completo, o escríbanos por WhatsApp y le ayudamos con su web.",
     notFoundCta: "Pedir mi web gratis",
     thanksTitle: "¡Gracias! Recibimos su pago",
-    thanksBody: "Su web queda activa. Stripe le envía el recibo a su correo. Si tiene cualquier duda, escríbanos por WhatsApp y le respondemos ahí mismo.",
+    thanksBody: "Su web queda activa, con soporte completo. Stripe le envía el recibo a su correo. Para cualquier cambio o duda, escríbanos por WhatsApp y le respondemos ahí mismo.",
     thanksNext: "¿Quiere que su WhatsApp también agende citas solo? Pregúntenos por el chat — es el siguiente paso.",
     thanksCta: "Abrir el chat de WhatsApp",
     prontoTitle: "Su web está en camino",
@@ -88,6 +93,7 @@ export const PAY_COPY = {
     prontoCta: "Preguntar por WhatsApp",
     /** Pre-written WhatsApp messages (the business sends them to the funnel line). */
     waActivate: (code: string) => `Hola, quiero activar mi web. Código ${code}`,
+    waSelfHost: (code: string) => `Quiero alojar mi web por mi cuenta. Código ${code}`,
     waHello: (business: string, code: string) => `Hola, soy ${business} (código ${code}).`,
     waHowIsIt: (business: string, code: string) => `Hola, soy ${business} (código ${code}). ¿Cómo va mi web?`,
     waHowIsItAnon: "Hola, quiero saber cómo va mi web.",
@@ -111,12 +117,14 @@ export const PAY_COPY = {
     titleLead: "Keep your website",
     titleAccent: "online.",
     lede: (business: string) =>
-      `${business}'s website keeps working for you: hosting, support and changes whenever you need them.`,
+      `With us, ${business}'s website stays online with full support: changes, updates and help whenever you need it.`,
     per: "a month",
-    chips: ["No contract", "Cancel anytime", "Support and changes"],
+    chips: ["Hosting and full support", "No contract", "Cancel anytime"],
     payCard: "Pay by card",
     payPaypal: "Pay with PayPal",
     cardSoon: "Card payments will be available very soon. Meanwhile you can pay with PayPal or message us on WhatsApp.",
+    selfHost: "Prefer to host it yourself? We hand you your website files; self-hosting doesn't include our assistance.",
+    selfHostCta: "Ask for them on WhatsApp",
     paypalTitle: "If you pay with PayPal",
     paypalSteps: [
       `Pay $${MONTHLY_PRICE_USD} USD with the PayPal button.`,
@@ -127,7 +135,8 @@ export const PAY_COPY = {
     receiptText: (code: string) => `I paid with PayPal — code ${code}`,
     secure: "Card payments are processed by Stripe. MachineMind never sees or stores your card details.",
     activeTitle: "Your website is active ✓",
-    activeBody: (business: string) => `Thank you for trusting us. ${business}'s website stays online with support included.`,
+    activeBody: (business: string) =>
+      `Thank you for trusting us. ${business}'s website stays online with full support: changes, updates and help whenever you need it.`,
     activeHelp: "Need a change? Message us",
     buildingTitle: "Your website is still being built",
     buildingBody: (business: string) =>
@@ -139,7 +148,7 @@ export const PAY_COPY = {
     pausedTitleLead: "Reactivate your website",
     pausedTitleAccent: "today.",
     pausedLede: (business: string) =>
-      `${business}'s website is paused. Reactivate it and it's back online, with hosting, support and changes whenever you need them.`,
+      `${business}'s website is paused. Reactivate it and it's back online, with hosting and full support: changes, updates and help whenever you need it.`,
     pausedLastStep: "We confirm on WhatsApp and your site is back online.",
     draftTitle: "Let's finish your request first",
     draftBody: "We haven't received your complete website form yet. Finish it here (2 minutes) and we'll build it for free.",
@@ -151,7 +160,7 @@ export const PAY_COPY = {
     notFoundBody: "Check that the link is complete, or message us on WhatsApp and we'll help with your website.",
     notFoundCta: "Get my free website",
     thanksTitle: "Thank you! Payment received",
-    thanksBody: "Your website stays active. Stripe emails you the receipt. Any question, message us on WhatsApp and we'll answer right there.",
+    thanksBody: "Your website stays active, with full support. Stripe emails you the receipt. For any change or question, message us on WhatsApp and we'll answer right there.",
     thanksNext: "Want your WhatsApp to book appointments on its own too? Ask us in the chat — it's the next step.",
     thanksCta: "Open the WhatsApp chat",
     prontoTitle: "Your website is on its way",
@@ -161,6 +170,7 @@ export const PAY_COPY = {
         : "We're finishing this website. We'll message you on WhatsApp as soon as it's ready.",
     prontoCta: "Ask on WhatsApp",
     waActivate: (code: string) => `Hi, I'd like to activate my website. Code ${code}`,
+    waSelfHost: (code: string) => `I'd like to host my website on my own. Code ${code}`,
     waHello: (business: string, code: string) => `Hi, this is ${business} (code ${code}).`,
     waHowIsIt: (business: string, code: string) => `Hi, this is ${business} (code ${code}). How is my website coming along?`,
     waHowIsItAnon: "Hi, I'd like to know how my website is coming along.",

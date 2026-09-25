@@ -7,9 +7,11 @@
  * conversation history) shows what the business actually received.
  *
  * Names here are LOGICAL (DB, scheduler, board). Rewired maps the payment asks
- * to the Meta templates carrying the $19 price — cqv_web_day28 → cqv_web_day28_v19,
- * cqv_web_day30 → cqv_web_day30_v19, cqv_web_pause_notice → cqv_web_pause_v19 —
- * and never falls back to the retired $20 ones. The price and free days in the
+ * to the Meta templates carrying the $19 price and the hosting choice (we keep
+ * hosting with full support, or they self-host) — cqv_web_day28 → cqv_web_day28_c19,
+ * cqv_web_day30 → cqv_web_day30_c19, cqv_web_pause_notice → cqv_web_pause_c19 —
+ * falling back to the plain $19 versions (_v19) only until Meta approves the _c19
+ * ones, and never to the retired $20 ones. The previews below mirror _c19. The price and free days in the
  * previews come from config; Meta's copy is fixed text, so a price change means
  * submitting new templates too.
  */
@@ -143,11 +145,11 @@ export function templatePreview(name: TemplateName, s: TemplateSubject): string 
     case "cqv_web_ready":
       return `¡Su página web ya está lista! 🎉 ${a} — échele un ojo y dígame si quiere ajustar algo. [Botón: Ver mi web]`;
     case "cqv_web_day28":
-      return `Recordatorio amistoso, ${a}: su mes gratis termina en 2 días. Su web sigue en línea por solo $${MONTHLY_PRICE_USD}/mes — soporte, actualizaciones y que nunca se caiga. ¿Se la dejo activa? ${b} (sin contrato). [Botón: Activar mi web]`;
+      return `Recordatorio amistoso, ${a}: su mes gratis termina en 2 días. Si quiere que se la sigamos alojando, son $${MONTHLY_PRICE_USD} USD/mes con soporte completo, sin contrato: ${b}. Si prefiere alojarla usted mismo, respóndanos y le entregamos los archivos (sin nuestra asistencia). [Botón: Activar mi web]`;
     case "cqv_web_day30":
-      return `Hola ${a}, hoy se cumplen sus ${FREE_DAYS} días. Su web ya está trabajando para usted. Para mantenerla en línea con soporte es solo $${MONTHLY_PRICE_USD}/mes, sin contrato. Actívela aquí 👉 ${b} — cancela cuando quiera. [Botón: Activar mi web]`;
+      return `Hola ${a}, hoy se cumplen sus ${FREE_DAYS} días gratis. Para que se la sigamos alojando con soporte completo son $${MONTHLY_PRICE_USD} USD/mes, sin contrato: ${b}. Si prefiere alojarla usted mismo, respóndanos y le entregamos los archivos (sin nuestra asistencia). [Botón: Activar mi web]`;
     case "cqv_web_pause_notice":
-      return `Aviso sobre su página web, ${a}: se pausará mañana porque no se activó el plan de $${MONTHLY_PRICE_USD}/mes. Si quiere mantenerla en línea, actívela aquí: ${b} (sin contrato). [Botón: Activar mi web]`;
+      return `Aviso sobre su página web, ${a}: mañana pausamos su alojamiento porque no se activó el plan de $${MONTHLY_PRICE_USD} USD/mes con soporte completo. Actívelo aquí: ${b}. Si prefiere alojarla usted mismo, respóndanos y le entregamos los archivos. [Botón: Activar mi web]`;
     case "cqv_web_rescue":
       return `Hola ${a}, ¿sabía que su web puede AGENDAR las citas sola por WhatsApp, 24/7? Le muestro cómo se vería con su negocio 👉 ${b}. Responda NO para no recibir más mensajes.`;
   }

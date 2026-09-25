@@ -316,7 +316,7 @@ export async function sendSubmittedEmail(row: WebGratisSignup, ctx: LeadContext)
       ${rowHtml("Dice que lo recomendó", row.referred_by_text ? `${row.referred_by_text}${ctx.referrer ? "" : " — asigne el código en el tablero para darle el mes gratis"}` : null)}
       ${rowHtml("Su código", `${row.referral_code} — ${referralLink(row.referral_code)}`)}
       ${rowHtml("Fuente", sourceLabel(row))}
-      ${rowHtml("Aceptó", `Gratis ${FREE_DAYS} días en línea, luego $${MONTHLY_PRICE_USD}/mes · compartir y etiquetar @${MM_INSTAGRAM}`)}
+      ${rowHtml("Aceptó", `Gratis ${FREE_DAYS} días en línea; después elige: alojamiento con nosotros $${MONTHLY_PRICE_USD} USD/mes con soporte completo, o alojarla por su cuenta (se le entregan los archivos, sin asistencia) · compartir y etiquetar @${MM_INSTAGRAM}`)}
     </table>
     ${tiles ? `<h2 style="font-size:14px;margin:24px 0 10px;color:#1e9bf0">Logo, fotos y documentos (links válidos 7 días)</h2><div>${tiles}</div>` : `<p style="margin-top:20px;color:rgba(240,240,243,0.6)">Sin logo, fotos ni documentos — usar imágenes de su rubro y diseñar logo.</p>`}
     <p style="margin:24px 0 0;color:rgba(240,240,243,0.7);font-size:14px">${esc(AUTO_CONFIRM_TEXT)}</p>

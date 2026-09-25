@@ -103,8 +103,17 @@ export default function OGImage() {
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-          <div style={{ fontSize: 28, color: "rgba(240,240,243,0.78)", fontFamily: "sans-serif", display: "flex" }}>
-            {`${FREE_DAYS} días gratis · luego $${MONTHLY_PRICE_USD} USD/mes · sin contrato`}
+          <div
+            style={{
+              fontSize: 28,
+              lineHeight: 1.3,
+              maxWidth: 780,
+              color: "rgba(240,240,243,0.78)",
+              fontFamily: "sans-serif",
+              display: "flex",
+            }}
+          >
+            {`${FREE_DAYS} días gratis · luego $${MONTHLY_PRICE_USD} USD/mes con hosting y soporte completo, o alójela usted mismo · sin contrato`}
           </div>
           <div
             style={{

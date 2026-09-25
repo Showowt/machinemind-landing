@@ -6,7 +6,7 @@ import { FREE_DAYS, MONTHLY_PRICE_USD, parseMarket, type Market } from "@/lib/we
 // Neutral two-country framing: MachineMind's own initiative, no government claims.
 const TITLE = "Su página web, gratis — Iniciativa de Digitalización de Negocios 2026 · MachineMind";
 const SOCIAL_TITLE = "Su página web, gratis — Iniciativa de Digitalización 2026 · El Salvador y Colombia";
-const DESCRIPTION = `Iniciativa de Digitalización de Negocios 2026 en El Salvador y Colombia: le hacemos la página web de su negocio gratis. ${FREE_DAYS} días gratis en línea y después $${MONTHLY_PRICE_USD} USD al mes, sin contrato. MachineMind, empresa privada.`;
+const DESCRIPTION = `Iniciativa de Digitalización de Negocios 2026 en El Salvador y Colombia: le hacemos la página web de su negocio gratis. ${FREE_DAYS} días gratis en línea y después usted decide: la seguimos alojando por $${MONTHLY_PRICE_USD} USD al mes con soporte completo, o la aloja usted mismo. Sin contrato. MachineMind, empresa privada.`;
 
 export const metadata: Metadata = {
   title: TITLE,
