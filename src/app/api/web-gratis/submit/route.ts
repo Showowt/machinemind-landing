@@ -241,6 +241,25 @@ export async function POST(request: Request) {
         fbclid: saved.fbclid,
         request,
       });
+      // Cancel the Instagram 48h slot-hold (rewired-os) when this submission came from an IG DM
+      // lead. Sofia tags her onboarding link with utm_source=ig & utm_content=<IGSID>; here we drop
+      // a [form_submitted] marker into the SHARED outreach DB keyed by ig:<IGSID>, and the
+      // ig-slot-hold cron reads it to stop the clock + send CONFIRM. Honors "never nag a submitter".
+      const utm = saved as unknown as { utm_source?: string | null; utm_content?: string | null };
+      if (utm.utm_source === "ig" && utm.utm_content && /^\d{6,}$/.test(utm.utm_content)) {
+        try {
+          const ourl = process.env.OUTREACH_SUPABASE_URL, okey = process.env.OUTREACH_SUPABASE_KEY;
+          if (ourl && okey) {
+            const { createClient } = await import("@supabase/supabase-js");
+            await createClient(ourl, okey).from("conversations").insert({
+              phone: `ig:${utm.utm_content}`, role: "assistant", message: "[form_submitted]",
+              qualification: { channel: "instagram", form_submitted: true, business: saved.business_name },
+            });
+          }
+        } catch (e) {
+          console.error("[WebGratis:submit] IG slot-hold cancel marker failed", e);
+        }
+      }
     });
 
     return ok({ referralCode: saved.referral_code, businessName: saved.business_name });
