@@ -251,24 +251,33 @@ export async function POST(request: Request) {
       const igId = utm.utm_source === "ig" && utm.utm_content && /^\d{6,}$/.test(utm.utm_content) ? utm.utm_content : null;
       const igHandle = instagramHandle(saved.instagram);
       const markerKeys = [...(igId ? [`ig:${igId}`] : []), ...(igHandle ? [`ig:@${igHandle}`] : [])];
-      if (markerKeys.length) {
-        try {
-          const ourl = process.env.OUTREACH_SUPABASE_URL, okey = process.env.OUTREACH_SUPABASE_KEY;
-          if (ourl && okey) {
-            const { createClient } = await import("@supabase/supabase-js");
-            const { error: markerError } = await createClient(ourl, okey).from("conversations").insert(
+      // Also mirror EVERY completed signup into the outreach DB (web_gratis_signup_mirror) — this
+      // DB isn't readable from rewired-os, and its WhatsApp one-tap offer must never go to someone
+      // who already signed up.
+      try {
+        const ourl = process.env.OUTREACH_SUPABASE_URL, okey = process.env.OUTREACH_SUPABASE_KEY;
+        if (ourl && okey) {
+          const { createClient } = await import("@supabase/supabase-js");
+          const outreach = createClient(ourl, okey);
+          const { error: mirrorError } = await outreach.from("web_gratis_signup_mirror").upsert(
+            { signup_id: saved.id, phone: saved.whatsapp, business: saved.business_name, instagram: saved.instagram, utm_source: utm.utm_source ?? null },
+            { onConflict: "signup_id" },
+          );
+          if (mirrorError) console.error("[WebGratis:submit] signup mirror rejected", mirrorError.message);
+          if (markerKeys.length) {
+            const { error: markerError } = await outreach.from("conversations").insert(
               markerKeys.map((phone) => ({
                 phone, role: "assistant", message: "[form_submitted]",
                 qualification: { channel: "instagram", form_submitted: true, business: saved.business_name, signup_id: saved.id },
               })),
             );
             if (markerError) console.error("[WebGratis:submit] IG slot-hold cancel marker rejected", markerError.message);
-          } else {
-            console.error("[WebGratis:submit] IG slot-hold cancel marker skipped: OUTREACH_SUPABASE_URL/KEY not set");
           }
-        } catch (e) {
-          console.error("[WebGratis:submit] IG slot-hold cancel marker failed", e);
+        } else {
+          console.error("[WebGratis:submit] outreach mirror/markers skipped: OUTREACH_SUPABASE_URL/KEY not set");
         }
+      } catch (e) {
+        console.error("[WebGratis:submit] outreach mirror/markers failed", e);
       }
     });
 
