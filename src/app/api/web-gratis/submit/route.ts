@@ -242,19 +242,29 @@ export async function POST(request: Request) {
         request,
       });
       // Cancel the Instagram 48h slot-hold (rewired-os) when this submission came from an IG DM
-      // lead. Sofia tags her onboarding link with utm_source=ig & utm_content=<IGSID>; here we drop
-      // a [form_submitted] marker into the SHARED outreach DB keyed by ig:<IGSID>, and the
-      // ig-slot-hold cron reads it to stop the clock + send CONFIRM. Honors "never nag a submitter".
+      // lead: drop a [form_submitted] marker into the SHARED outreach DB, which the ig-slot-hold
+      // cron reads to stop the clock + confirm. Honors "never nag a submitter". Two keys:
+      //   ig:<IGSID>   — Sofia's / the cron's links carry utm_source=ig & utm_content=<IGSID>;
+      //   ig:@<handle> — the Instagram handle typed into the form, for a submit that lost the utm
+      //                  (bio link, typed URL, another browser); the cron matches it to the lead.
       const utm = saved as unknown as { utm_source?: string | null; utm_content?: string | null };
-      if (utm.utm_source === "ig" && utm.utm_content && /^\d{6,}$/.test(utm.utm_content)) {
+      const igId = utm.utm_source === "ig" && utm.utm_content && /^\d{6,}$/.test(utm.utm_content) ? utm.utm_content : null;
+      const igHandle = instagramHandle(saved.instagram);
+      const markerKeys = [...(igId ? [`ig:${igId}`] : []), ...(igHandle ? [`ig:@${igHandle}`] : [])];
+      if (markerKeys.length) {
         try {
           const ourl = process.env.OUTREACH_SUPABASE_URL, okey = process.env.OUTREACH_SUPABASE_KEY;
           if (ourl && okey) {
             const { createClient } = await import("@supabase/supabase-js");
-            await createClient(ourl, okey).from("conversations").insert({
-              phone: `ig:${utm.utm_content}`, role: "assistant", message: "[form_submitted]",
-              qualification: { channel: "instagram", form_submitted: true, business: saved.business_name },
-            });
+            const { error: markerError } = await createClient(ourl, okey).from("conversations").insert(
+              markerKeys.map((phone) => ({
+                phone, role: "assistant", message: "[form_submitted]",
+                qualification: { channel: "instagram", form_submitted: true, business: saved.business_name, signup_id: saved.id },
+              })),
+            );
+            if (markerError) console.error("[WebGratis:submit] IG slot-hold cancel marker rejected", markerError.message);
+          } else {
+            console.error("[WebGratis:submit] IG slot-hold cancel marker skipped: OUTREACH_SUPABASE_URL/KEY not set");
           }
         } catch (e) {
           console.error("[WebGratis:submit] IG slot-hold cancel marker failed", e);
@@ -292,4 +302,13 @@ export async function POST(request: Request) {
     }
     return fail(500, "save_failed");
   }
+}
+
+/** "@Name", "name", "instagram.com/name/?hl=es" → "name" (Instagram's own charset), else null. */
+function instagramHandle(raw: string | null | undefined): string | null {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (!v) return null;
+  const fromUrl = v.match(/instagram\.com\/([^/?#\s]+)/);
+  const handle = (fromUrl ? fromUrl[1] : v).replace(/^@+/, "");
+  return /^[a-z0-9._]{1,30}$/.test(handle) ? handle : null;
 }
