@@ -6,22 +6,37 @@
  *      window is open, so rows waiting for their window never block others),
  *   2. evaluates triggers T1–T7 in order and sends what's due,
  *   3. auto-pauses unpaid sites (T6, no message) — only after they were asked
- *      to pay, and a day after the pause notice when it went out.
+ *      to pay, and a day after the pause notice when it went out,
+ *   4. T8/T9: monthly renewals of PayPal / manual payers — a reminder 3 days
+ *      before paid_through, the pause notice 3 days after it if still unpaid,
+ *      and the same auto-pause rule a day later.
+ *
+ * Payment asks (day 28 / day 30 / pause notice / renewal) go out whenever
+ * /pagar can take a payment: a Stripe Payment Link OR PayPal (the board's link,
+ * else DEFAULT_PAYPAL_LINK). Only when neither exists are they held, with one
+ * "configure a payment method" alert a day.
  *
  * Idempotency lives in the database: a send is an INSERT into
- * web_gratis_messages, UNIQUE (signup_id, template) — a conflict means another
- * run already owns that template for that signup. Rows carry a short lease
- * (locked_until) while a sender is talking to Rewired, so overlapping cron runs
- * and a manual "reintentar" from the board can never send the same row twice.
- * A send whose outcome is unknown (Rewired timed out / 5xx after possibly
- * reaching Meta) is never re-sent automatically: a person checks the chat.
+ * web_gratis_messages, UNIQUE (signup_id, template, cycle) NULLS NOT DISTINCT —
+ * a conflict means another run already owns that template for that signup (and
+ * renewal cycle: cycle = the paid_through date the renewal asks about; null for
+ * everything else, so the free month keeps one row per template ever). Rows
+ * carry a short lease (locked_until) while a sender is talking to Rewired, so
+ * overlapping cron runs and a manual "reintentar" from the board can never send
+ * the same row twice. A send whose outcome is unknown (Rewired timed out / 5xx
+ * after possibly reaching Meta) is never re-sent automatically: a person checks
+ * the chat.
+ *
+ * The date rules (which day each ask goes out, when a site pauses) are the
+ * payment calendar in templates.ts — the same one billing.ts shows on the board.
  *
  * The site never calls Meta: sends go through Rewired OS (rewired.ts), which
  * owns the number, its health gates and the opt-out stores. Every failure is
  * either retried with backoff or ends as 'failed' + a team alert.
  *
+ * Test rows ("ZZ …", the D5 harness) are never acted on by a general sweep.
  * Time comes from deps.now() so the scheduler can be exercised with a fake
- * clock; alerts and sends are injectable for the same reason.
+ * clock; alerts, sends and site purges are injectable for the same reason.
  */
 import { randomBytes } from "crypto";
 import { MONTHLY_PRICE_USD } from "./config";
@@ -37,9 +52,21 @@ import {
   type SignupStatus,
   type WebGratisSettings,
 } from "./server";
+import { revalidateSignupSite } from "./sites/mm-sites";
 import {
+  addDays,
+  FREE_MONTH_FLOW,
+  formatDateEs,
+  GLOBAL_HOLD_CODES,
+  hasPaymentMethod,
+  inFlowRange,
+  isTemplateLevelCode,
   manualBlock,
+  pauseDecision,
+  REACHED_STATUSES,
   REMINDER_TEMPLATES,
+  RENEWAL_FLOW,
+  RENEWAL_TEMPLATES,
   TEMPLATE_LABEL,
   TEMPLATE_NAMES,
   TEMPLATE_WINDOW,
@@ -48,6 +75,8 @@ import {
   UNKNOWN_OUTCOME_CODE,
   windowOpen,
   WINDOW_LABEL,
+  type PauseDecision,
+  type PaymentFlow,
   type TemplateName,
 } from "./templates";
 
@@ -69,12 +98,14 @@ const T2_DELAY_MS = 10 * 60 * 1000;
 const T1_PER_IP_PER_HOUR = 3;
 /** Never auto-confirm the same phone twice within this period (whichever request it belongs to). */
 const T1_PHONE_COOLDOWN_MS = 7 * DAY_MS;
-/** Hours between the last payment reminder that reached the client and the auto-pause. */
-const PAUSE_AFTER_ASK_HOURS = 20;
+/** Paused sites are offered a re-contact after this many days. */
+const RECONTACT_AFTER_DAYS = 60;
 
 const LIVE_FREE = LIVE_FREE_STATUSES;
 const BUILDING = BUILDING_STATUSES;
-const REACHED: readonly MessageStatus[] = ["sent", "delivered", "read"];
+const REACHED = REACHED_STATUSES;
+/** Payers who pay one month at a time (Stripe renews on its own). */
+const MONTHLY_PAYERS = ["paypal", "manual"] as const;
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -105,6 +136,8 @@ export interface MessageRow {
   failed_at: string | null;
   last_error_code: string | null;
   last_error: string | null;
+  /** Renewal cycle (the paid_through date a renewal ask is about); null for every other send (migration 20260929). */
+  cycle: string | null;
   meta: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -136,11 +169,20 @@ export interface WaStateRow {
   last_touch_at: string | null;
 }
 
+/** A signup read straight from the table (not the view), with its payment columns. */
+export interface PayerRow extends WaStateRow {
+  paid_via: "stripe" | "paypal" | "manual" | null;
+  paid_through: string | null;
+  last_payment_at: string | null;
+}
+
 /** Signup columns that make up a WaStateRow (for signups the view doesn't cover, e.g. 'activa'). */
 const SUBJECT_COLUMNS =
   "id, status, business_name, whatsapp, referral_code, lang, site_url, submitted_at, delivered_at, free_until, activated_at, paused_at, opted_out_at, no_whatsapp_at, last_inbound_at, rung2_interest_at, declined_at, confirmed_at, last_touch_kind, last_touch_at";
+/** …plus what renewals need. */
+const PAYER_COLUMNS = `${SUBJECT_COLUMNS}, paid_via, paid_through, last_payment_at`;
 
-function asState(row: Omit<WaStateRow, "templates" | "last_template_at">): WaStateRow {
+function asPayer(row: Omit<PayerRow, "templates" | "last_template_at">): PayerRow {
   return { ...row, templates: [], last_template_at: null };
 }
 
@@ -150,6 +192,8 @@ export interface WaDeps {
   alert: (key: string, text: string) => Promise<boolean>;
   sleep: (ms: number) => Promise<void>;
   settings: () => Promise<WebGratisSettings>;
+  /** Purge a paused site's cached page so it actually goes offline (best effort; omitted in tests). */
+  purgeSite?: (signupId: string) => Promise<void>;
 }
 
 export function defaultWaDeps(): WaDeps {
@@ -159,6 +203,7 @@ export function defaultWaDeps(): WaDeps {
     alert: (key, text) => enqueueSystem(key, text),
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     settings: () => loadSettings(),
+    purgeSite: (signupId) => revalidateSignupSite(signupId),
   };
 }
 
@@ -171,6 +216,11 @@ export interface SchedulerOptions {
   deadline?: number;
   /** Restrict the run to these signups (manual actions, tests). */
   onlySignupIds?: string[];
+  /**
+   * PayPal fallback /pagar shows when the board has no PayPal link
+   * (default DEFAULT_PAYPAL_LINK). Tests pass null to simulate "no payment method".
+   */
+  defaultPaypalLink?: string | null;
 }
 
 export interface SchedulerReport {
@@ -210,13 +260,7 @@ function shortName(t: TemplateName): string {
   return t.replace(/^cqv_web_/, "");
 }
 
-const GLOBAL_STOP_CODES = new Set(["disabled", "kill_switch", "number_unhealthy", "not_configured", "unauthorized", "130429"]);
-/** Global holds: nothing can go out until someone fixes the line/bridge — due rows wait an hour instead of being probed every minute. */
-const GLOBAL_HOLD_CODES = new Set(["disabled", "kill_switch", "number_unhealthy", "not_configured", "unauthorized"]);
-
-function isTemplateLevel(code: string): boolean {
-  return code === "template_not_approved" || (/^1320(0[1-9]|1[0-6])$/.test(code) && code !== "132012");
-}
+const GLOBAL_STOP_CODES = new Set([...GLOBAL_HOLD_CODES, "130429"]);
 
 /**
  * System-level holds (sending switched off, number unhealthy, template not
@@ -225,7 +269,7 @@ function isTemplateLevel(code: string): boolean {
  * WEB_GRATIS_WA_ENABLED off must not turn every confirmation into 'failed'.
  */
 function isHold(code: string): boolean {
-  return GLOBAL_HOLD_CODES.has(code) || isTemplateLevel(code);
+  return GLOBAL_HOLD_CODES.has(code) || isTemplateLevelCode(code);
 }
 
 /** Seconds until the next try for a transient failure (attempts = tries so far, ≥ 1). */
@@ -233,9 +277,8 @@ export function backoffSeconds(code: string, attempts: number, retryAfterSec: nu
   let base: number;
   if (code === "130429") base = MIN;
   else if (code === "131049") base = 25 * HOUR;
-  else if (["disabled", "kill_switch", "number_unhealthy", "template_not_approved", "not_configured", "unauthorized"].includes(code) || isTemplateLevel(code)) {
-    base = HOUR;
-  } else base = Math.min(24 * HOUR, 15 * MIN * 2 ** Math.max(0, attempts - 1));
+  else if (code === "template_not_approved" || GLOBAL_HOLD_CODES.has(code) || isTemplateLevelCode(code)) base = HOUR;
+  else base = Math.min(24 * HOUR, 15 * MIN * 2 ** Math.max(0, attempts - 1));
   return Math.max(base, retryAfterSec ?? 0);
 }
 
@@ -253,6 +296,11 @@ export function freshKey(rowId: number, tag: string): string {
   return `wg-${rowId}-${tag}-${randomBytes(3).toString("hex")}`;
 }
 
+/** YYYY-MM-DD plus `days` (calendar arithmetic on a date string). Same as templates.ts addDays. */
+export function svDateOf(date: string, days: number): string {
+  return addDays(date, days);
+}
+
 // ─── Eligibility (shared by triggers, retries and manual sends) ─────────────
 
 export interface EligibilityInput {
@@ -266,9 +314,10 @@ export interface EligibilityInput {
 }
 
 /**
- * Whether a template still makes sense for this signup today. Reminder
- * templates are bounded to their own days so a backlog (e.g. no pay link for a
- * few days) never fires day-28, day-30 and the pause notice in one burst.
+ * Whether a (non-renewal) template still makes sense for this signup today.
+ * Reminder templates are bounded to their own days (FREE_MONTH_FLOW) so a
+ * backlog (e.g. no payment method for a few days) never fires day-28, day-30
+ * and the pause notice in one burst.
  */
 export function templateStillApplies(t: TemplateName, s: EligibilityInput, now: Date): boolean {
   const today = svDate(now);
@@ -286,11 +335,11 @@ export function templateStillApplies(t: TemplateName, s: EligibilityInput, now: 
         now.getTime() - Date.parse(s.delivered_at) <= READY_MAX_AGE_MS
       );
     case "cqv_web_day28":
-      return live && !s.declined_at && !!free && today >= svDateOf(free, -2) && today <= svDateOf(free, -1);
+      return live && !s.declined_at && !!free && inFlowRange(today, free, FREE_MONTH_FLOW.ask);
     case "cqv_web_day30":
-      return live && !s.declined_at && !!free && today >= free && today <= svDateOf(free, 1);
+      return live && !s.declined_at && !!free && !!FREE_MONTH_FLOW.dueAsk && inFlowRange(today, free, FREE_MONTH_FLOW.dueAsk);
     case "cqv_web_pause_notice":
-      return live && !s.declined_at && !!free && today >= svDateOf(free, 2) && today <= svDateOf(free, 4);
+      return live && !s.declined_at && !!free && inFlowRange(today, free, FREE_MONTH_FLOW.notice);
     case "cqv_web_rescue":
       return (
         !s.rung2_interest_at &&
@@ -298,14 +347,42 @@ export function templateStillApplies(t: TemplateName, s: EligibilityInput, now: 
         !s.activated_at &&
         (LIVE_FREE.includes(s.status) || s.status === "pausada")
       );
+    case "cqv_web_renewal":
+      // Only ever sent per cycle (renewalStillApplies).
+      return false;
   }
 }
 
-/** YYYY-MM-DD plus `days` (calendar arithmetic on a date string). */
-export function svDateOf(date: string, days: number): string {
-  const d = new Date(`${date}T12:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
+export interface RenewalInput {
+  status: SignupStatus;
+  paid_via: string | null;
+  paid_through: string | null;
+  activated_at: string | null;
+  last_payment_at?: string | null;
+  declined_at: string | null;
+  opted_out_at: string | null;
+  no_whatsapp_at: string | null;
+}
+
+/** An active payer we may ask to renew: not opted out, has WhatsApp, didn't say no since their last payment. */
+export function renewalMessageable(s: RenewalInput): boolean {
+  const paidSince = s.last_payment_at ?? s.activated_at ?? "";
+  return !s.opted_out_at && !s.no_whatsapp_at && !(s.declined_at && s.declined_at > paidSince);
+}
+
+/**
+ * Whether a renewal-cycle template (renewal reminder / pause notice) still
+ * makes sense: the client is still active, still pays by PayPal / by hand, the
+ * cycle is still their current month (a new payment starts a new cycle) and
+ * today is inside that ask's days (RENEWAL_FLOW).
+ */
+export function renewalStillApplies(t: TemplateName, s: RenewalInput, cycle: string | null, now: Date): boolean {
+  if (!cycle || s.status !== "activa" || !(MONTHLY_PAYERS as readonly string[]).includes(s.paid_via ?? "") || s.paid_through !== cycle) return false;
+  if (!renewalMessageable(s)) return false;
+  const today = svDate(now);
+  if (t === "cqv_web_renewal") return inFlowRange(today, cycle, RENEWAL_FLOW.ask);
+  if (t === "cqv_web_pause_notice") return inFlowRange(today, cycle, RENEWAL_FLOW.notice);
+  return false;
 }
 
 // ─── Core: one send attempt for one owned row ───────────────────────────────
@@ -329,9 +406,11 @@ export async function attemptTemplateSend(row: MessageRow, subject: Subject, dep
   const label = TEMPLATE_LABEL[template];
   const who = `${subject.business_name} (${subject.whatsapp})`;
   const now = deps.now();
-  const payload = templatePayload(template, subject);
+  const cycle = row.cycle ?? null;
+  const payload = templatePayload(template, subject, { cycle });
 
   if (!payload) {
+    const missing = template === "cqv_web_renewal" ? "la fecha de vencimiento (pagado hasta)" : "el link de su web";
     await db
       .from(MESSAGES_TABLE)
       .update({
@@ -340,10 +419,10 @@ export async function attemptTemplateSend(row: MessageRow, subject: Subject, dep
         locked_until: null,
         next_attempt_at: null,
         last_error_code: "missing_data",
-        last_error: "Falta el link de la web para enviar esta plantilla.",
+        last_error: `Falta ${missing} para enviar esta plantilla.`,
       })
       .eq("id", row.id);
-    await deps.alert(`wa-failed:${row.id}`, `❌ WhatsApp «${label}» no se envió a ${who}: falta el link de su web en el tablero.`);
+    await deps.alert(`wa-failed:${row.id}`, `❌ WhatsApp «${label}» no se envió a ${who}: falta ${missing} en el tablero.`);
     return { sent: false, stopRun: null, skipTemplate: false };
   }
 
@@ -371,7 +450,7 @@ export async function attemptTemplateSend(row: MessageRow, subject: Subject, dep
         locked_until: null,
         last_error_code: null,
         last_error: null,
-        body: templatePreview(template, subject),
+        body: templatePreview(template, subject, { cycle }),
       })
       .eq("id", row.id);
     if (error) console.error("[WebGratis:wa] sent but could not record wamid", row.id, outcome.wamid, error);
@@ -485,7 +564,7 @@ export async function attemptTemplateSend(row: MessageRow, subject: Subject, dep
     await deps.alert(`wa-unhealthy:${hour}`, "La línea +1 786-257-0284 no está sana (estado/calidad en Meta): mensajes en pausa, reintento cada hora.");
   } else if (code === "not_configured" || code === "unauthorized") {
     await deps.alert(`wa-bridge:${hour}`, `El puente con Rewired no funciona (${detail}). Los mensajes quedan en cola.`);
-  } else if (isTemplateLevel(code)) {
+  } else if (isTemplateLevelCode(code)) {
     await deps.alert(
       `wa-template:${template}:${day}`,
       `La plantilla ${template} aún no está aprobada/activa en Meta (${code}). Se reintenta cada hora; nada se pierde.`,
@@ -495,19 +574,20 @@ export async function attemptTemplateSend(row: MessageRow, subject: Subject, dep
   return {
     sent: false,
     stopRun: GLOBAL_STOP_CODES.has(code) ? code : null,
-    skipTemplate: isTemplateLevel(code),
+    skipTemplate: isTemplateLevelCode(code),
   };
 }
 
 // ─── Claiming rows ──────────────────────────────────────────────────────────
 
-/** Create the row for a new trigger (owned by us), or null when another run already has it. */
+/** Create the row for a new trigger (owned by us), or null when another run already has it (same template + cycle). */
 async function claimNew(
   subject: WaStateRow,
   template: TemplateName,
   source: MessageSource,
   now: Date,
   meta: Record<string, unknown> = {},
+  cycle: string | null = null,
 ): Promise<MessageRow | null> {
   const { data, error } = await getDb()
     .from(MESSAGES_TABLE)
@@ -522,7 +602,8 @@ async function claimNew(
       scheduled_for: iso(now),
       next_attempt_at: iso(now),
       locked_until: iso(new Date(now.getTime() + LEASE_MS)),
-      body: templatePreview(template, subject),
+      body: templatePreview(template, subject, { cycle }),
+      cycle,
       meta,
     })
     .select("*")
@@ -578,15 +659,16 @@ async function markSkipped(rowId: number, reason: string): Promise<void> {
 /**
  * Queue a template a person asked for (e.g. "Web lista" to a client who paid
  * before delivery). The retry pass sends it inside its window; `manual` rows skip
- * the scheduler's date rules but keep every opt-out / "no" / pay-link guard.
+ * the scheduler's date rules but keep every opt-out / "no" / payment-method guard.
  * False when that template already has a row for this signup.
  */
 export async function queueManualTemplate(signupId: string, template: TemplateName, now: Date, reason: string): Promise<boolean> {
   const db = getDb();
-  const { data: subject, error } = await db.from(SIGNUPS_TABLE).select(SUBJECT_COLUMNS).eq("id", signupId).maybeSingle();
+  const { data: subject, error } = await db.from(SIGNUPS_TABLE).select(PAYER_COLUMNS).eq("id", signupId).maybeSingle();
   if (error) throw error;
   if (!subject) return false;
-  const s = asState(subject as unknown as Omit<WaStateRow, "templates" | "last_template_at">);
+  const s = asPayer(subject as unknown as Omit<PayerRow, "templates" | "last_template_at">);
+  const cycle = template === "cqv_web_renewal" ? s.paid_through : null;
   const { error: insertError } = await db.from(MESSAGES_TABLE).insert({
     signup_id: s.id,
     phone: s.whatsapp,
@@ -597,7 +679,8 @@ export async function queueManualTemplate(signupId: string, template: TemplateNa
     attempts: 0,
     scheduled_for: iso(now),
     next_attempt_at: iso(now),
-    body: templatePreview(template, s),
+    body: templatePreview(template, s, { cycle }),
+    cycle,
     meta: { manual: true, reason },
   });
   if (insertError) {
@@ -712,6 +795,37 @@ async function t1Guard(candidates: WaStateRow[], now: Date): Promise<{ send: WaS
   return { send, held };
 }
 
+/**
+ * Template rows of these signups, grouped by signup: the free-month / one-off rows (cycle null), or
+ * the rows of the given renewal cycles only (every past month would otherwise pile up past
+ * PostgREST's 1000-row page).
+ */
+async function templateRowsOf(ids: string[], templates: readonly TemplateName[], cycles: string[] | null): Promise<Map<string, MessageRow[]>> {
+  const out = new Map<string, MessageRow[]>();
+  if (cycles && cycles.length === 0) return out;
+  for (const group of chunks(ids, 100)) {
+    let q = getDb().from(MESSAGES_TABLE).select("*").in("signup_id", group).in("template", templates as TemplateName[]);
+    q = cycles ? q.in("cycle", cycles) : q.is("cycle", null);
+    const { data, error } = await q;
+    if (error) throw error;
+    for (const m of (data ?? []) as MessageRow[]) {
+      if (!m.signup_id) continue;
+      const list = out.get(m.signup_id) ?? [];
+      list.push(m);
+      out.set(m.signup_id, list);
+    }
+  }
+  return out;
+}
+
+/** The pause notice that reached them and the latest ask that did (for pauseDecision). */
+function asksOf(list: MessageRow[]): { noticeSentAt: string | null; lastAskAt: string | null } {
+  const reached = list.filter((m) => REACHED.includes(m.status) && !!m.sent_at);
+  const notice = reached.find((m) => m.template === "cqv_web_pause_notice");
+  const lastAskAt = reached.reduce<string | null>((latest, m) => (!latest || (m.sent_at as string) > latest ? (m.sent_at as string) : latest), null);
+  return { noticeSentAt: notice?.sent_at ?? null, lastAskAt };
+}
+
 // ─── The run ────────────────────────────────────────────────────────────────
 
 export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptions = {}): Promise<SchedulerReport> {
@@ -774,48 +888,78 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
   } catch (error) {
     report.errors.push(`settings: ${errText(error)}`);
   }
+  // Stripe OR PayPal on /pagar (unknown settings → assume the default PayPal link, like /pagar does).
+  const canCharge = hasPaymentMethod(settings, options.defaultPaypalLink);
+  const waitingForPayMethod: string[] = [];
 
   // ── 1. Retries of queued rows that are due (only templates whose window is open) ──
   const openTemplates = TEMPLATE_NAMES.filter((t) => windowOpen(TEMPLATE_WINDOW[t], now));
   if (openTemplates.length) {
     try {
+      // A general sweep reads only real clients' rows (a harness run's queued rows must neither be
+      // touched nor take the batch's 60 slots); a scoped run reads its own signups' rows.
+      const columns: string = only ? "*" : "*, signup:web_gratis_signups!inner(business_name)";
       let q = db
         .from(MESSAGES_TABLE)
-        .select("*")
+        .select(columns)
         .eq("status", "queued")
         .in("template", openTemplates)
         .lte("next_attempt_at", nowIso)
         .or(`locked_until.is.null,locked_until.lt.${nowIso}`)
         .order("next_attempt_at", { ascending: true })
         .limit(60);
-      if (only) q = q.in("signup_id", only.length ? only : [NO_ID]);
+      q = only ? q.in("signup_id", only.length ? only : [NO_ID]) : q.not("signup.business_name", "like", "ZZ %");
       const { data, error } = await q;
       if (error) throw error;
-      const due = (data ?? []) as MessageRow[];
+      const due = (data ?? []) as unknown as MessageRow[];
       const ids = [...new Set(due.map((r) => r.signup_id).filter((id): id is string => !!id))];
+      // Belt and braces (the harness prefix check the rest of the scheduler uses): a general sweep
+      // leaves test rows' queued messages exactly as they are — not even 'skipped'.
+      const testIds = new Set<string>();
+      if (!only && ids.length) {
+        const { data: names, error: namesError } = await db.from(SIGNUPS_TABLE).select("id, business_name").in("id", ids);
+        if (namesError) throw namesError;
+        for (const n of (names ?? []) as { id: string; business_name: string }[]) if (isTestSignupName(n.business_name)) testIds.add(n.id);
+      }
       const states = new Map<string, WaStateRow>();
       if (ids.length) {
         for (const s of await liveRows(db.from(STATE_VIEW).select("*").in("id", ids))) states.set(s.id, s);
       }
-      // Rows a person queued can be for signups outside the view (e.g. 'activa').
-      const missingManual = [
-        ...new Set(due.filter((r) => r.meta?.manual === true && r.signup_id && !states.has(r.signup_id)).map((r) => r.signup_id as string)),
+      // Renewal-cycle rows are for active payers (outside the view) and need their payment
+      // columns; rows a person queued can be for signups outside the view too (e.g. 'activa').
+      const direct = new Map<string, PayerRow>();
+      const directIds = [
+        ...new Set(
+          due
+            .filter((r) => r.signup_id && (r.cycle || (r.meta?.manual === true && !states.has(r.signup_id))))
+            .map((r) => r.signup_id as string),
+        ),
       ];
-      if (missingManual.length) {
-        const { data: direct, error: directError } = await db.from(SIGNUPS_TABLE).select(SUBJECT_COLUMNS).in("id", missingManual);
+      for (const group of chunks(directIds, 100)) {
+        const { data: found, error: directError } = await db.from(SIGNUPS_TABLE).select(PAYER_COLUMNS).in("id", group);
         if (directError) throw directError;
-        for (const d of (direct ?? []) as unknown as Omit<WaStateRow, "templates" | "last_template_at">[]) {
+        for (const d of (found ?? []) as unknown as Omit<PayerRow, "templates" | "last_template_at">[]) {
           if (!only && isTestSignupName(d.business_name)) continue;
-          states.set(d.id, asState(d));
+          direct.set(d.id, asPayer(d));
         }
       }
       for (const row of due) {
+        if (row.signup_id && testIds.has(row.signup_id)) continue;
         const template = row.template as TemplateName;
         const manual = row.meta?.manual === true;
-        const s = row.signup_id ? states.get(row.signup_id) : undefined;
+        const payer = row.signup_id ? direct.get(row.signup_id) : undefined;
+        const s: WaStateRow | undefined = row.cycle ? payer : row.signup_id ? (states.get(row.signup_id) ?? payer) : undefined;
         let block: string | null;
         if (!s) block = "ya no aplica (cliente pagó, se cerró o se borró)";
-        else if (manual) block = manualBlock(template, s, settings);
+        else if (row.cycle) {
+          // A renewal ask belongs to one month: once they pay (new paid_through) it's moot.
+          const p = s as PayerRow;
+          if (p.paid_through !== row.cycle) block = "ya no aplica (renovó o cambió su «pagado hasta»)";
+          else if (manual) block = manualBlock(template, p, settings);
+          else if (!renewalStillApplies(template, p, row.cycle, now)) block = "ya no aplica a su etapa";
+          else if (!canCharge) block = "sin forma de pago en /pagar";
+          else block = null;
+        } else if (manual) block = manualBlock(template, s, settings);
         else if (s.opted_out_at) block = "se dio de baja";
         else if (s.no_whatsapp_at) block = "el número no tiene WhatsApp";
         else if (!templateStillApplies(template, s, now)) block = "ya no aplica a su etapa";
@@ -935,29 +1079,29 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
     report.errors.push(`T2: ${errText(error)}`);
   }
 
-  // T3–T5 — payment reminders (need a Stripe pay link on the /pagar page).
-  const reminders: { template: TemplateName; from: number; to: number }[] = [
-    { template: "cqv_web_day28", from: 1, to: 2 }, // free_until between today+1 and today+2
-    { template: "cqv_web_day30", from: -1, to: 0 }, // free_until between today-1 and today
-    { template: "cqv_web_pause_notice", from: -4, to: -2 }, // free_until between today-4 and today-2
+  // T3–T5 — free-month payment reminders (need a way to pay on /pagar: Stripe or PayPal).
+  // free_until relative to today, from FREE_MONTH_FLOW (an ask on due+k means free_until = today−k).
+  const freeReminders: { template: TemplateName; range: readonly [number, number] }[] = [
+    { template: "cqv_web_day28", range: FREE_MONTH_FLOW.ask },
+    ...(FREE_MONTH_FLOW.dueAsk ? [{ template: "cqv_web_day30" as TemplateName, range: FREE_MONTH_FLOW.dueAsk }] : []),
+    { template: "cqv_web_pause_notice", range: FREE_MONTH_FLOW.notice },
   ];
-  const waitingForPayLink: string[] = [];
-  for (const r of reminders) {
+  for (const r of freeReminders) {
     try {
       const due = await liveRows(
         stateQuery(only)
           .in("status", LIVE_FREE)
           .is("activated_at", null)
           .is("declined_at", null)
-          .gte("free_until", svDate(now, r.from))
-          .lte("free_until", svDate(now, r.to))
+          .gte("free_until", svDate(now, -r.range[1]))
+          .lte("free_until", svDate(now, -r.range[0]))
           .not("templates", "cs", `{${r.template}}`)
           .order("free_until", { ascending: true })
           .limit(100),
       );
       if (due.length === 0) continue;
-      if (!settings?.pay_link) {
-        waitingForPayLink.push(`${due.length} × ${TEMPLATE_LABEL[r.template]}`);
+      if (!canCharge) {
+        waitingForPayMethod.push(`${due.length} × ${TEMPLATE_LABEL[r.template]}`);
         continue;
       }
       await fire(r.template, due);
@@ -965,16 +1109,26 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
       report.errors.push(`${r.template}: ${errText(error)}`);
     }
   }
-  // One alert a day, while reminders could actually go out.
-  if (waitingForPayLink.length && windowOpen("reminder", now)) {
-    await deps.alert(
-      `paylink-missing:${today}`,
-      `Configure el enlace de pago (Stripe) en el tablero → «Capacidad, pago y demo»: hay recordatorios de pago esperando (${waitingForPayLink.join(", ")}). Sin él no se le pide el pago a nadie y las webs vencidas no se pausan.`,
-    );
-  }
 
-  // T6 — auto-pause (no message). Only clients who were asked to pay: a day after the
-  // pause notice reached them; or, if the notice never could, at free_until+6 when an
+  const pausedAlert = async (s: WaStateRow, text: string) => {
+    report.paused++;
+    await deps.alert(`paused:${s.id}:${today}`, text);
+    if (deps.purgeSite) {
+      try {
+        await deps.purgeSite(s.id);
+      } catch (error) {
+        console.error("[WebGratis:wa] paused site purge failed", s.id, error);
+      }
+    }
+  };
+  const neverAsked: string[] = [];
+  const pauseReason = (d: Extract<PauseDecision, { action: "pause" }>, s: WaStateRow, flow: PaymentFlow): string => {
+    if (d.reason === "unreachable") return s.declined_at && flow === FREE_MONTH_FLOW ? "dijo que no" : "no se le puede escribir";
+    return d.reason === "notice" ? "se le avisó de la pausa" : "se le pidió el pago, pero el aviso de pausa no salió";
+  };
+
+  // T6 — auto-pause after the free month (no message). Only clients who were asked to pay: a day
+  // after the pause notice reached them; or, if the notice never could, at free_until+6 when an
   // earlier reminder did. Never-asked clients are held and reported once a day.
   // Clients we can't / mustn't message (opted out, no WhatsApp, said no) pause at +3.
   try {
@@ -983,51 +1137,24 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
         .in("status", LIVE_FREE)
         .is("activated_at", null)
         .is("paused_at", null)
-        .lte("free_until", svDate(now, -3))
+        .lte("free_until", svDate(now, -FREE_MONTH_FLOW.pauseFrom))
         .order("free_until", { ascending: true })
         .limit(300),
     );
-    const ids = candidates.map((c) => c.id);
-    const asks = new Map<string, MessageRow[]>();
-    for (const group of chunks(ids, 100)) {
-      const { data, error } = await db.from(MESSAGES_TABLE).select("*").in("signup_id", group).in("template", REMINDER_TEMPLATES);
-      if (error) throw error;
-      for (const m of (data ?? []) as MessageRow[]) {
-        if (!m.signup_id) continue;
-        const list = asks.get(m.signup_id) ?? [];
-        list.push(m);
-        asks.set(m.signup_id, list);
-      }
-    }
-    const hoursSince = (at: string) => (now.getTime() - Date.parse(at)) / 3_600_000;
-    const neverAsked: string[] = [];
+    const asks = await templateRowsOf(candidates.map((c) => c.id), REMINDER_TEMPLATES, null);
     for (const s of candidates) {
-      const mine = asks.get(s.id) ?? [];
-      const reached = mine.filter((m) => REACHED.includes(m.status) && !!m.sent_at);
-      const notice = reached.find((m) => m.template === "cqv_web_pause_notice");
-      const lastAsk = reached.reduce<string | null>((latest, m) => (!latest || (m.sent_at as string) > latest ? (m.sent_at as string) : latest), null);
-      const graceOver = !!s.free_until && today >= svDateOf(s.free_until, 6);
+      if (!s.free_until) continue;
       const messageable = !s.opted_out_at && !s.no_whatsapp_at && !s.declined_at;
-      let how: string;
-      if (!messageable) {
-        how = s.declined_at ? "dijo que no" : "no se le puede escribir";
-      } else if (notice) {
-        if (hoursSince(notice.sent_at as string) < PAUSE_AFTER_ASK_HOURS) continue; // "se pausa mañana" stays true
-        how = "se le avisó de la pausa";
-      } else if (!graceOver) {
-        continue; // the pause notice can still go out (its window runs to free_until+4)
-      } else if (!lastAsk) {
+      const decision = pauseDecision(FREE_MONTH_FLOW, { due: s.free_until, messageable, ...asksOf(asks.get(s.id) ?? []) }, now);
+      if (decision.action === "held") {
         neverAsked.push(`${s.business_name} (${s.whatsapp}, venció ${s.free_until})`);
         report.pauseHeld++;
         continue;
-      } else if (hoursSince(lastAsk) < PAUSE_AFTER_ASK_HOURS) {
-        continue;
-      } else {
-        how = "se le pidió el pago, pero el aviso de pausa no salió";
       }
+      if (decision.action !== "pause") continue;
       const { data: paused, error } = await db
         .from(SIGNUPS_TABLE)
-        .update({ status: "pausada", paused_at: nowIso, recontact_after: svDate(now, 60), last_touch_at: nowIso, last_touch_kind: "auto_pausa" })
+        .update({ status: "pausada", paused_at: nowIso, recontact_after: svDate(now, RECONTACT_AFTER_DAYS), last_touch_at: nowIso, last_touch_kind: "auto_pausa" })
         .eq("id", s.id)
         .in("status", LIVE_FREE)
         .is("activated_at", null)
@@ -1039,16 +1166,9 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
         continue;
       }
       if (!paused) continue;
-      report.paused++;
-      await deps.alert(
-        `paused:${s.id}:${today}`,
-        `⏸ pausada — archivar su web: ${s.business_name} (${s.whatsapp}) no activó los $${MONTHLY_PRICE_USD}/mes (${how}). ${s.site_url ? `Web: ${s.site_url}. ` : ""}Pásela a un estado archivado (no borrarla). Recontactar desde ${svDate(now, 60)}.`,
-      );
-    }
-    if (neverAsked.length && windowOpen("transactional", now)) {
-      await deps.alert(
-        `pause-held:${today}`,
-        `⏸ NO se pausan solas (nunca se les pidió el pago — ningún recordatorio les llegó): ${neverAsked.slice(0, 10).join("; ")}${neverAsked.length > 10 ? ` y ${neverAsked.length - 10} más` : ""}. Revise el enlace de pago y el WhatsApp automático; luego envíeles «Día 30» o «Aviso de pausa» desde su tarjeta (se pausan solas ~1 día después), o use «Pausar».`,
+      await pausedAlert(
+        s,
+        `⏸ PAUSADA por falta de pago — ${s.business_name} (${s.whatsapp}): terminó su mes gratis (${formatDateEs(s.free_until)}) y no activó los $${MONTHLY_PRICE_USD}/mes (${pauseReason(decision, s, FREE_MONTH_FLOW)}). ${s.site_url ? `Web: ${s.site_url}. ` : ""}Revise que su web quede fuera de línea (archivada, no borrada). Recontactar desde ${svDate(now, RECONTACT_AFTER_DAYS)}.`,
       );
     }
   } catch (error) {
@@ -1082,6 +1202,108 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
     await fire("cqv_web_rescue", [...live, ...paused]);
   } catch (error) {
     report.errors.push(`T7: ${errText(error)}`);
+  }
+
+  // T8 + T9 — monthly renewals of PayPal / manual payers (Stripe renews on its own). The cycle is
+  // the paid_through date: a reminder in its RENEWAL_FLOW.ask days, the pause notice in its
+  // notice days if still unpaid, then the same auto-pause rule as the free month. "Pagó otro mes"
+  // moves paid_through, which starts a new cycle (new rows allowed, old queued ones skipped).
+  try {
+    let q = db
+      .from(SIGNUPS_TABLE)
+      .select(PAYER_COLUMNS)
+      .eq("status", "activa")
+      .in("paid_via", [...MONTHLY_PAYERS])
+      .not("paid_through", "is", null)
+      .lte("paid_through", svDate(now, -RENEWAL_FLOW.ask[0]))
+      .order("paid_through", { ascending: true })
+      .limit(500);
+    q = only ? q.in("id", only.length ? only : [NO_ID]) : q.not("business_name", "like", "ZZ %");
+    const { data, error } = await q;
+    if (error) throw error;
+    const payers = ((data ?? []) as unknown as Omit<PayerRow, "templates" | "last_template_at">[])
+      .map(asPayer)
+      .filter((p) => only || !isTestSignupName(p.business_name));
+    const currentCycles = [...new Set(payers.map((p) => p.paid_through as string))];
+    const cycleRows = await templateRowsOf(payers.map((p) => p.id), RENEWAL_TEMPLATES, currentCycles);
+
+    for (const p of payers) {
+      const cycle = p.paid_through as string;
+      const mine = (cycleRows.get(p.id) ?? []).filter((m) => m.cycle === cycle);
+
+      // T8 — the asks of this cycle.
+      for (const template of RENEWAL_TEMPLATES) {
+        if (mine.some((m) => m.template === template)) continue;
+        if (!renewalStillApplies(template, p, cycle, now)) continue;
+        if (!canCharge) {
+          waitingForPayMethod.push(`${p.business_name} × ${TEMPLATE_LABEL[template]} (renovación)`);
+          continue;
+        }
+        if (!windowOpen(TEMPLATE_WINDOW[template], now)) {
+          report.deferred++;
+          continue;
+        }
+        if (!canSend() || skipTemplates.has(template)) continue;
+        try {
+          const row = await claimNew(p, template, "scheduler", now, {}, cycle);
+          if (!row) continue;
+          mine.push(row);
+          await run(row, p, false);
+        } catch (sendError) {
+          report.errors.push(`T8 ${template} ${p.id}: ${errText(sendError)}`);
+          console.error("[WebGratis:wa] renewal trigger failed", template, p.id, sendError);
+        }
+      }
+
+      // T9 — auto-pause once the renewal is RENEWAL_FLOW.pauseFrom days late.
+      if (p.paused_at || cycle > svDate(now, -RENEWAL_FLOW.pauseFrom)) continue;
+      const { data: fresh, error: freshError } = await db.from(MESSAGES_TABLE).select("*").eq("signup_id", p.id).eq("cycle", cycle);
+      if (freshError) {
+        report.errors.push(`T9 ${p.id}: ${errText(freshError)}`);
+        continue;
+      }
+      const decision = pauseDecision(RENEWAL_FLOW, { due: cycle, messageable: renewalMessageable(p), ...asksOf((fresh ?? []) as MessageRow[]) }, now);
+      if (decision.action === "held") {
+        neverAsked.push(`${p.business_name} (${p.whatsapp}, renovación vencida ${cycle})`);
+        report.pauseHeld++;
+        continue;
+      }
+      if (decision.action !== "pause") continue;
+      const { data: paused, error: pauseError } = await db
+        .from(SIGNUPS_TABLE)
+        .update({ status: "pausada", paused_at: nowIso, recontact_after: svDate(now, RECONTACT_AFTER_DAYS), last_touch_at: nowIso, last_touch_kind: "auto_pausa" })
+        .eq("id", p.id)
+        .eq("status", "activa")
+        .eq("paid_through", cycle)
+        .is("paused_at", null)
+        .select("id")
+        .maybeSingle();
+      if (pauseError) {
+        report.errors.push(`T9 ${p.id}: ${errText(pauseError)}`);
+        continue;
+      }
+      if (!paused) continue;
+      await pausedAlert(
+        p,
+        `⏸ PAUSADA por falta de pago — ${p.business_name} (${p.whatsapp}): no renovó su mes de $${MONTHLY_PRICE_USD} (${p.paid_via === "paypal" ? "PayPal" : "pago a mano"}, pagado hasta ${formatDateEs(cycle)}; ${pauseReason(decision, p, RENEWAL_FLOW)}). ${p.site_url ? `Web: ${p.site_url}. ` : ""}Revise que su web quede fuera de línea (archivada, no borrada). Si paga, «→ Activa» la reactiva. Recontactar desde ${svDate(now, RECONTACT_AFTER_DAYS)}.`,
+      );
+    }
+  } catch (error) {
+    report.errors.push(`T8: ${errText(error)}`);
+  }
+
+  // One "configure a payment method" alert a day, while payment asks could actually go out.
+  if (waitingForPayMethod.length && windowOpen("reminder", now)) {
+    await deps.alert(
+      `paylink-missing:${today}`,
+      `Configure el enlace de pago (Stripe o PayPal) en el tablero → «Capacidad, pago y demo»: hay recordatorios de pago esperando (${waitingForPayMethod.slice(0, 12).join(", ")}${waitingForPayMethod.length > 12 ? "…" : ""}). Sin una forma de pago en /pagar no se le pide el pago a nadie y las webs vencidas no se pausan.`,
+    );
+  }
+  if (neverAsked.length && windowOpen("transactional", now)) {
+    await deps.alert(
+      `pause-held:${today}`,
+      `⏸ NO se pausan solas (nunca se les pidió el pago — ningún recordatorio les llegó): ${neverAsked.slice(0, 10).join("; ")}${neverAsked.length > 10 ? ` y ${neverAsked.length - 10} más` : ""}. Revise la forma de pago y el WhatsApp automático; luego envíeles «Día 30», «Aviso de pausa» o «Renovación» desde su tarjeta (se pausan solas ~1 día después), o use «Pausar».`,
+    );
   }
 
   // ── 3. Holds: rows that can't go out right now wait an hour instead of sitting at the
@@ -1119,12 +1341,13 @@ export type ManualResult =
     };
 
 /**
- * One template to one signup, now. Respects opt-out, "no", missing pay link and
- * the send window; a template already delivered is never sent twice, and one
- * whose last outcome is unknown is only resent when the person confirms
- * (`force`) after checking the chat. A queued/failed/skipped row is reused (same
- * ledger row, never-used idempotency key) and marked manual, so if it has to
- * wait for a retry the scheduler keeps it even outside its automatic dates.
+ * One template to one signup, now. Respects opt-out, "no", no payment method
+ * and the send window; a template already delivered is never sent twice (a
+ * renewal: never twice in the same cycle), and one whose last outcome is
+ * unknown is only resent when the person confirms (`force`) after checking the
+ * chat. A queued/failed/skipped row is reused (same ledger row, never-used
+ * idempotency key) and marked manual, so if it has to wait for a retry the
+ * scheduler keeps it even outside its automatic dates.
  */
 export async function sendTemplateManually(
   signupId: string,
@@ -1134,10 +1357,10 @@ export async function sendTemplateManually(
 ): Promise<ManualResult> {
   const db = getDb();
   const now = deps.now();
-  const { data: subject, error } = await db.from(SIGNUPS_TABLE).select(SUBJECT_COLUMNS).eq("id", signupId).maybeSingle();
+  const { data: subject, error } = await db.from(SIGNUPS_TABLE).select(PAYER_COLUMNS).eq("id", signupId).maybeSingle();
   if (error) throw error;
   if (!subject) return { ok: false, error: "not_found", message: "No existe esa solicitud." };
-  const s = asState(subject as unknown as Omit<WaStateRow, "templates" | "last_template_at">);
+  const s = asPayer(subject as unknown as Omit<PayerRow, "templates" | "last_template_at">);
 
   let settings: WebGratisSettings | null = null;
   try {
@@ -1151,17 +1374,15 @@ export async function sendTemplateManually(
     return { ok: false, error: "window_closed", message: `Fuera del horario de envío (${WINDOW_LABEL[TEMPLATE_WINDOW[template]]}). Inténtelo dentro del horario.` };
   }
 
-  const { data: existing, error: readError } = await db
-    .from(MESSAGES_TABLE)
-    .select("*")
-    .eq("signup_id", signupId)
-    .eq("template", template)
-    .maybeSingle();
+  const cycle = template === "cqv_web_renewal" ? s.paid_through : null;
+  let lookup = db.from(MESSAGES_TABLE).select("*").eq("signup_id", signupId).eq("template", template);
+  lookup = cycle ? lookup.eq("cycle", cycle) : lookup.is("cycle", null);
+  const { data: existing, error: readError } = await lookup.maybeSingle();
   if (readError) throw readError;
 
   let row: MessageRow | null;
   if (!existing) {
-    row = await claimNew(s, template, "admin", now, { manual: true, manual_at: iso(now) });
+    row = await claimNew(s, template, "admin", now, { manual: true, manual_at: iso(now) }, cycle);
     if (!row) return { ok: false, error: "already_sent", message: "Otro proceso lo está enviando en este momento." };
   } else {
     const current = existing as MessageRow;

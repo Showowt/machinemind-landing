@@ -251,7 +251,7 @@ export async function runInProcess(): Promise<void> {
     }
 
     // ────────────────────────────────────────────────────────────────────
-    section("T3 day-28: pay link gate, reminder window");
+    section("T3 day-28: payment-method gate (Stripe OR PayPal), reminder window");
     {
       const e = await seed("T3 dia28", {
         status: "entregada",
@@ -264,15 +264,16 @@ export async function runInProcess(): Promise<void> {
         { signup_id: e.id, phone: e.whatsapp, direction: "outbound", template: "cqv_web_rescue", source: "scheduler", status: "read", sent_at: iso(new Date(sv(MON, 10).getTime() - 7 * D)) },
       ]);
       const saved = settings;
-      settings = { ...settings, pay_link: null };
+      // Neither Stripe nor PayPal (and no default PayPal link): nothing to pay with on /pagar.
+      settings = { ...settings, pay_link: null, paypal_link: null };
       clock = sv(MON, 10);
       const n0 = alerts.length;
-      let r = await run([e.id]);
-      check("no pay link → no day28 send", callsFor(e.whatsapp).length === 0 && !(await templateRow(e.id, "cqv_web_day28")), r);
+      let r = await run([e.id], { defaultPaypalLink: null });
+      check("no payment method at all → no day28 send", callsFor(e.whatsapp).length === 0 && !(await templateRow(e.id, "cqv_web_day28")), r);
       check("… and one 'configure pay link' alert a day, naming what waits", alertsSince(n0).some((a) => a.key === `paylink-missing:${MON}` && a.text.includes("Configure el enlace de pago") && a.text.includes("Día 28")), alertsSince(n0));
       clock = sv(MON, 23);
       const n1 = alerts.length;
-      await run([e.id]);
+      await run([e.id], { defaultPaypalLink: null });
       check("no pay-link alert at night (outside the reminder window)", !alertsSince(n1).some((a) => a.key.startsWith("paylink-missing:")), alertsSince(n1));
       clock = sv(MON, 10);
       settings = saved;
@@ -342,7 +343,7 @@ export async function runInProcess(): Promise<void> {
       check("opted-out client (can't be messaged) still auto-paused at +3, no message", s4.status === "pausada" && callsFor(h4.whatsapp).length === 0);
       check("notice FAILED (never reached them), +4 → not paused yet", s5.status === "entregada");
       check("report.paused = 3", r.paused === 3, r);
-      check("alert '⏸ pausada — archivar su web' per paused client", alertsSince(n0).filter((a) => a.key.startsWith("paused:") && a.text.includes("⏸ pausada — archivar su web")).length === 3, alertsSince(n0).map((a) => a.key));
+      check("alert '⏸ PAUSADA por falta de pago — <business>' per paused client", alertsSince(n0).filter((a) => a.key.startsWith("paused:") && a.text.startsWith("⏸ PAUSADA por falta de pago — ZZ ")).length === 3, alertsSince(n0).map((a) => a.key));
       await run([h3.id]);
       check("never re-paused / re-alerted", alertsSince(n0).filter((a) => a.key.startsWith(`paused:${h3.id}:`)).length === 1);
     }
@@ -423,7 +424,7 @@ export async function runInProcess(): Promise<void> {
       settings = { ...settings, pay_link: null };
       res = await site.wa.sendTemplateManually(noLink.id, "cqv_web_day28", deps);
       settings = saved;
-      check("board: reminder with no Stripe pay link → refused", !res.ok && res.error === "not_eligible" && res.message.includes("enlace de pago") && callsFor(noLink.whatsapp).length === 0, res);
+      check("board: reminder with no Stripe link but PayPal on /pagar → allowed (sent)", res.ok && res.status === "sent" && callsFor(noLink.whatsapp).length === 1, res);
       res = await site.wa.sendTemplateManually(o4.id, "cqv_web_day30", deps);
       check("board: paying client → reminder refused", !res.ok && res.error === "not_eligible", res);
     }
@@ -805,7 +806,9 @@ export async function runInProcess(): Promise<void> {
       const res = await site.payments.handleStripeEvent(event, pd);
       const s = await signup(payer.id);
       check("checkout.session.completed → activa + paid_via stripe + ids", res.handled === "activated" && s.status === "activa" && s.paid_via === "stripe" && s.stripe_customer_id === "cus_ZZtest" && s.stripe_subscription_id === "sub_ZZtest" && !!s.activated_at, s);
-      check("💰 PAGÓ alert (says the WhatsApp confirmation went out)", alertsSince(n0).some((a) => a.key === `paid:${evtId}` && a.text.startsWith("💰 PAGÓ") && a.text.includes("$20.00 USD") && a.text.includes("✅ Se le confirmó por WhatsApp")), alertsSince(n0));
+      check("💰 PAGO RECIBIDO alert (· amount · Stripe · pagado hasta; says the WhatsApp confirmation went out)", alertsSince(n0).some((a) => a.key === `paid:${evtId}` && a.text.startsWith(`💰 PAGO RECIBIDO — ${payer.business_name} · $20.00 USD · Stripe · pagado hasta `) && a.text.includes("✅ Se le confirmó por WhatsApp")), alertsSince(n0));
+      const { data: ledgerPaid } = await db.from("web_gratis_payments").select("*").eq("external_id", evtId).maybeSingle();
+      check("checkout → payments ledger row (stripe, first, $20.00, born alerted)", ledgerPaid?.signup_id === payer.id && ledgerPaid?.via === "stripe" && ledgerPaid?.kind === "first" && ledgerPaid?.amount_cents === 2000 && !!ledgerPaid?.alerted_at && !!s.paid_through, { ledgerPaid, pt: s.paid_through });
       const { data: credit } = await db.from("web_gratis_referral_credits").select("*").eq("referred_id", payer.id).maybeSingle();
       check("referral credit row (referrer → payer, 1 month)", credit?.referrer_id === referrer.id && credit?.months === 1, credit);
       check("🤝 REFERIDO ACTIVÓ alert names the referrer", alertsSince(n0).some((a) => a.text.startsWith("🤝 REFERIDO ACTIVÓ") && a.text.includes(referrer.business_name)));

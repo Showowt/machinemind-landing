@@ -1,11 +1,22 @@
 /**
- * Free-website funnel — payments (MONTHLY_PRICE_USD a month, $19) and referral credits.
+ * Free-website funnel — payments (MONTHLY_PRICE_USD a month, $19), the payments
+ * ledger and its team alerts, and referral credits.
  *
  * Stripe: the /pagar/<code> button opens the Payment Link with
  * client_reference_id = signup id. The webhook (verified by hand — no Stripe
  * SDK) flips the signup to 'activa', which stops the day-28/30/pause reminders
  * because every trigger requires activated_at IS NULL. Events are claimed by id
- * first, so a Stripe retry never double-activates or double-alerts.
+ * first, so a Stripe retry never double-activates or double-alerts. Monthly
+ * renewals (invoice.paid) extend paid_through to the new period's end; a failed
+ * charge or a cancelled subscription is recorded on the signup (billing_issue)
+ * so the board and the billing timeline show it until a payment clears it.
+ *
+ * Every payment lands in web_gratis_payments (the ledger): Stripe ones here
+ * (idempotent on the Stripe event / invoice id), board ones (→ Activa, «Pagó
+ * otro mes») through a database trigger. alertNewPayments() turns unalerted
+ * ledger rows into "💰 PAGO RECIBIDO" team alerts; runCobrosDigest() sends the
+ * daily "💳 COBROS" digest at 08:00 SV from the same billing timeline the board
+ * shows (billing.ts).
  *
  * The webhook endpoint receives these event types for the WHOLE Stripe account
  * (shared with Rewired's own checkouts), so only the monthly-plan funnel's
@@ -21,14 +32,20 @@
  * 'paypal' or 'manual' and the month it covers (paid_through).
  */
 import { z } from "zod";
+import { billingSummary, billingTimeline, type BillingTimeline } from "./billing";
 import { verifySignedBody, type SignatureCheck } from "./bridge-auth";
-import { MONTHLY_PRICE_USD } from "./config";
+import { DEFAULT_PAYPAL_LINK, MONTHLY_PRICE_USD } from "./config";
+import { amountLabel, cobrosDigestMessages, cobrosHasNews, paymentReceivedText, type CobrosDigestPart, type DigestPayment } from "./notify";
+import { enqueueBillingDigest, enqueueSystem, outboxHasKey } from "./outbox";
 import type { RewiredSendRequest, SendOutcome } from "./rewired";
-import { getDb, SIGNUPS_TABLE, type SignupStatus, type WebGratisSignup } from "./server";
-import { MESSAGES_TABLE } from "./whatsapp";
+import { getDb, loadSettings, SIGNUPS_TABLE, type SignupStatus, type WebGratisSettings, type WebGratisSignup } from "./server";
+import { addDays, hasPaymentMethod, PAYMENT_TEMPLATES, svClock, svDay, svDayStart } from "./templates";
+import { isTestSignupName, MESSAGES_TABLE, type MessageRow } from "./whatsapp";
 
 export const STRIPE_EVENTS_TABLE = "web_gratis_stripe_events";
 export const CREDITS_TABLE = "web_gratis_referral_credits";
+/** One row per payment received (migration 20260929). */
+export const PAYMENTS_TABLE = "web_gratis_payments";
 
 /** metadata.program on the web-gratis Payment Link, its sessions and subscriptions. */
 export const STRIPE_PROGRAM = "web_gratis";
@@ -106,6 +123,41 @@ export function isFunnelCheckout(o: Record<string, unknown>): boolean {
   return !!ref && UUID_RE.test(ref) && str(o.currency) === "usd" && (num(o.amount_total) ?? 0) >= PLAN_CENTS;
 }
 
+/** "2026-09-25" + 1 month → "2026-10-25" (clamped: Jan 31 → Feb 28), like Stripe's monthly anchor. */
+export function addMonths(date: string, months = 1): string {
+  const [y, m, d] = date.split("-").map(Number);
+  const first = new Date(Date.UTC(y, m - 1 + months, 1));
+  const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+  first.setUTCDate(Math.min(d, last));
+  return first.toISOString().slice(0, 10);
+}
+
+/** The invoice fields invoice.paid acts on (Stripe sends many more; they pass through untouched). */
+const paidInvoiceSchema = z
+  .object({
+    id: z.string().min(1).max(200).optional(),
+    billing_reason: z.string().max(60).nullable().optional(),
+    amount_paid: z.number().int().nonnegative().optional(),
+    currency: z.string().regex(/^[A-Za-z]{3}$/).optional(),
+    lines: z
+      .object({
+        data: z.array(z.object({ period: z.object({ end: z.number().int().positive().optional() }).passthrough().optional() }).passthrough()).optional(),
+      })
+      .passthrough()
+      .optional(),
+  })
+  .passthrough();
+
+/** End of the service period an invoice pays for (latest line period end), as an SV date. */
+function invoicePeriodEnd(invoice: z.infer<typeof paidInvoiceSchema>): string | null {
+  let end: number | null = null;
+  for (const line of invoice.lines?.data ?? []) {
+    const e = line.period?.end ?? null;
+    if (e !== null && (end === null || e > end)) end = e;
+  }
+  return end !== null ? svDay(new Date(end * 1000)) : null;
+}
+
 /** Subscription id + program metadata of an invoice (old and new Stripe API shapes). */
 function invoiceSubscription(o: Record<string, unknown>): { subscriptionId: string | null; program: unknown } {
   const details = obj(obj(o.parent).subscription_details);
@@ -114,6 +166,22 @@ function invoiceSubscription(o: Record<string, unknown>): { subscriptionId: stri
     subscriptionId: idOf(o.subscription) ?? idOf(details.subscription),
     program: obj(details.metadata).program ?? obj(legacy.metadata).program,
   };
+}
+
+const hasProgram = (program: unknown): boolean => program !== undefined && program !== null && program !== "";
+
+/**
+ * Whether a failed charge / a cancellation is about THIS signup's monthly-plan
+ * subscription. The Stripe account is shared (Rewired's own products) and a
+ * signup is also found by its customer id, so another subscription or a one-off
+ * invoice of the same customer must never mark the plan as failed / cancelled.
+ * A signup whose current subscription id is known only reacts to that one (an
+ * older web-gratis subscription ending after a re-subscription is not news).
+ */
+function isCurrentPlanSubscription(s: WebGratisSignup, subscriptionId: string | null, program: unknown): boolean {
+  if (hasProgram(program) && program !== STRIPE_PROGRAM) return false;
+  if (!subscriptionId) return false;
+  return !s.stripe_subscription_id || s.stripe_subscription_id === subscriptionId;
 }
 
 // ─── Activation + referral credit (shared with the ops board) ───────────────
@@ -134,7 +202,7 @@ const KEEP_STATUS_ON_PAYMENT: readonly SignupStatus[] = ["borrador", "nuevo", "e
 export async function activateSignup(
   signupId: string,
   paidVia: "stripe" | "paypal" | "manual",
-  extras: { stripeCustomerId?: string | null; stripeSubscriptionId?: string | null },
+  extras: { stripeCustomerId?: string | null; stripeSubscriptionId?: string | null; paidThrough?: string | null },
   now: Date,
 ): Promise<ActivationResult | null> {
   const db = getDb();
@@ -152,7 +220,11 @@ export async function activateSignup(
     paused_at: null,
     last_touch_at: nowIso,
     last_touch_kind: `pago_${paidVia}`,
+    last_payment_at: nowIso,
+    billing_issue: null,
+    billing_issue_at: null,
   };
+  if (extras.paidThrough && (!before.paid_through || extras.paidThrough > before.paid_through)) update.paid_through = extras.paidThrough;
   if (extras.stripeCustomerId) update.stripe_customer_id = extras.stripeCustomerId;
   if (extras.stripeSubscriptionId) update.stripe_subscription_id = extras.stripeSubscriptionId;
   if (!keep) update.status = "activa";
@@ -238,6 +310,57 @@ export async function reconcileReferralCredits(alert: (key: string, text: string
     }
   }
   return granted;
+}
+
+// ─── Payments ledger ────────────────────────────────────────────────────────
+
+export interface PaymentRow {
+  id: number;
+  signup_id: string;
+  paid_at: string;
+  via: "stripe" | "paypal" | "manual";
+  kind: "first" | "reactivation" | "renewal";
+  amount_cents: number | null;
+  currency: string | null;
+  paid_through: string | null;
+  source: "stripe_checkout" | "stripe_invoice" | "board";
+  external_id: string | null;
+  alerted_at: string | null;
+  created_at: string;
+}
+
+/**
+ * Record a Stripe payment (idempotent on the Stripe id). The webhook alerts it
+ * itself, so the row is born alerted. False when it was already recorded. A
+ * ledger failure never fails the webhook: the payment is on the signup either way.
+ */
+async function recordStripePayment(p: {
+  signupId: string;
+  kind: PaymentRow["kind"];
+  amountCents: number | null;
+  currency: string | null;
+  paidThrough: string | null;
+  source: "stripe_checkout" | "stripe_invoice";
+  externalId: string;
+  now: Date;
+}): Promise<boolean> {
+  const { error } = await getDb()
+    .from(PAYMENTS_TABLE)
+    .insert({
+      signup_id: p.signupId,
+      paid_at: p.now.toISOString(),
+      via: "stripe",
+      kind: p.kind,
+      amount_cents: p.amountCents,
+      currency: p.currency?.toLowerCase() ?? null,
+      paid_through: p.paidThrough,
+      source: p.source,
+      external_id: p.externalId.slice(0, 200),
+      alerted_at: p.now.toISOString(),
+    });
+  if (!error) return true;
+  if (error.code !== "23505") console.error("[WebGratis:payments] ledger insert failed", p.signupId, p.externalId, error);
+  return false;
 }
 
 // ─── Event claim (idempotency) ──────────────────────────────────────────────
@@ -379,7 +502,10 @@ async function onPaid(event: StripeEvent, deps: PaymentDeps): Promise<StripeHand
 
   // Read before activating: was it already paid (another subscription = possible double charge)?
   const { data: prior } = await getDb().from(SIGNUPS_TABLE).select("activated_at, paid_via, stripe_subscription_id").eq("id", ref).maybeSingle();
-  const result = await activateSignup(ref, "stripe", { stripeCustomerId: customerId, stripeSubscriptionId: subscriptionId }, deps.now());
+  const now = deps.now();
+  // Stripe bills monthly from today; invoice.paid corrects it to the exact period end.
+  const paidThrough = addMonths(svDay(now));
+  const result = await activateSignup(ref, "stripe", { stripeCustomerId: customerId, stripeSubscriptionId: subscriptionId, paidThrough }, now);
   if (!result) {
     await deps.alert(
       `paid-orphan:${event.id}`,
@@ -388,6 +514,16 @@ async function onPaid(event: StripeEvent, deps: PaymentDeps): Promise<StripeHand
     return { duplicate: false, handled: "unknown_signup", signupId: null };
   }
   const s = result.signup;
+  await recordStripePayment({
+    signupId: s.id,
+    kind: result.newlyActive ? "first" : result.previousStatus === "pausada" || result.previousStatus === "cancelada" || result.previousStatus === "descartada" ? "reactivation" : "renewal",
+    amountCents: num(o.amount_total),
+    currency: str(o.currency),
+    paidThrough: s.paid_through,
+    source: "stripe_checkout",
+    externalId: event.id,
+    now,
+  });
 
   // D4 — idempotent, so a Stripe retry that finds the signup already active still grants it.
   let creditNote = "";
@@ -428,9 +564,111 @@ async function onPaid(event: StripeEvent, deps: PaymentDeps): Promise<StripeHand
   );
   await deps.alert(
     `paid:${event.id}`,
-    `💰 PAGÓ — ${s.business_name} (${s.whatsapp}) activó su web: ${amount} por Stripe.${creditNote} ${notes.join(" ")}`,
+    `${paymentReceivedText({ business: s.business_name, amount: amount || amountLabel(null, null), via: "stripe", paidThrough: s.paid_through })} (se renueva sola)\n${s.whatsapp} activó su web.${creditNote} ${notes.join(" ")}`,
   );
   return { duplicate: false, handled: "activated", signupId: s.id, thankYou: thanks.status };
+}
+
+/** Stripe subscription trouble shown on the board / billing timeline until a payment clears it. */
+async function setBillingIssue(signupId: string, issue: "payment_failed" | "subscription_canceled", now: Date): Promise<void> {
+  const { error } = await getDb()
+    .from(SIGNUPS_TABLE)
+    .update({ billing_issue: issue, billing_issue_at: now.toISOString() })
+    .eq("id", signupId);
+  if (error) console.error("[WebGratis:stripe] billing_issue not recorded", signupId, issue, error);
+}
+
+/**
+ * A subscription invoice was paid. The first one (billing_reason
+ * subscription_create) belongs to the checkout that activated the site — it
+ * only corrects paid_through to the exact period end. Every later one is a
+ * monthly renewal: paid_through moves to the new period's end, any billing
+ * issue clears, the ledger records it and the team gets "💰 PAGO RECIBIDO". A $0
+ * invoice (a referral-credit coupon month) moves the date without an alert.
+ */
+async function onInvoicePaid(event: StripeEvent, deps: PaymentDeps): Promise<StripeHandleResult> {
+  const o = event.data.object;
+  const { subscriptionId, program } = invoiceSubscription(o);
+  // The Stripe account is shared: another product's invoice (tagged with its own program, or for a
+  // different subscription of the same customer) is never a web-gratis payment.
+  if (hasProgram(program) && program !== STRIPE_PROGRAM) return IGNORED;
+  const s = await signupByStripe(subscriptionId, idOf(o.customer));
+  if (s && subscriptionId && s.stripe_subscription_id && s.stripe_subscription_id !== subscriptionId && program !== STRIPE_PROGRAM) return IGNORED;
+  // A one-off invoice of the same customer (no subscription, not tagged) is another product's sale.
+  if (s && !subscriptionId && program !== STRIPE_PROGRAM) return IGNORED;
+  const parsed = paidInvoiceSchema.safeParse(o);
+  if (!parsed.success) {
+    if (!s && program !== STRIPE_PROGRAM) return IGNORED;
+    console.error("[WebGratis:stripe] invoice.paid with an unexpected shape", event.id, parsed.error.issues.slice(0, 3));
+    await deps.alert(
+      `paid-shape:${event.id}`,
+      `⚠️ Stripe avisó un cobro mensual${s ? ` de ${s.business_name} (${s.whatsapp})` : ""} con un formato que no reconocemos (${event.id}). Revíselo en Stripe y registre el mes a mano en el tablero.`,
+    );
+    return { duplicate: false, handled: "invoice_unreadable", signupId: s?.id ?? null };
+  }
+  const invoice = parsed.data;
+  const reason = invoice.billing_reason ?? null;
+  if (!s) {
+    if (program !== STRIPE_PROGRAM || reason === "subscription_create") return IGNORED; // the checkout handles the first one
+    await deps.alert(
+      `paid-orphan:${event.id}`,
+      `💰 Cobro mensual por Stripe (${money(invoice.amount_paid ?? null, invoice.currency ?? null)}) de un cliente que no encontramos (cliente Stripe ${idOf(o.customer) ?? "?"}). Revise en Stripe y asígnelo en el tablero.`,
+    );
+    return { duplicate: false, handled: "orphan_payment", signupId: null };
+  }
+  const now = deps.now();
+  const periodEnd = invoicePeriodEnd(invoice) ?? addMonths(svDay(now));
+  const cents = invoice.amount_paid ?? null;
+
+  if (reason === "subscription_create" || cents === 0) {
+    const update: Record<string, unknown> = { billing_issue: null, billing_issue_at: null };
+    if (!s.paid_through || periodEnd > s.paid_through) update.paid_through = periodEnd;
+    const { error } = await getDb().from(SIGNUPS_TABLE).update(update).eq("id", s.id);
+    if (error) throw error;
+    return { duplicate: false, handled: cents === 0 && reason !== "subscription_create" ? "invoice_free_month" : "invoice_first", signupId: s.id };
+  }
+
+  const wasPaused = s.status === "pausada" || s.status === "cancelada" || s.status === "descartada";
+  let current: WebGratisSignup = s;
+  if (wasPaused) {
+    const result = await activateSignup(s.id, "stripe", { paidThrough: periodEnd }, now);
+    if (result) current = result.signup;
+  } else {
+    const { data, error } = await getDb()
+      .from(SIGNUPS_TABLE)
+      .update({
+        paid_through: !s.paid_through || periodEnd > s.paid_through ? periodEnd : s.paid_through,
+        last_payment_at: now.toISOString(),
+        billing_issue: null,
+        billing_issue_at: null,
+        last_touch_at: now.toISOString(),
+        last_touch_kind: "pago_stripe_mes",
+      })
+      .eq("id", s.id)
+      .select("*")
+      .single();
+    if (error) throw error;
+    current = data as WebGratisSignup;
+  }
+  const invoiceId = invoice.id ?? event.id;
+  const fresh = await recordStripePayment({
+    signupId: s.id,
+    kind: wasPaused ? "reactivation" : "renewal",
+    amountCents: cents,
+    currency: invoice.currency ?? null,
+    paidThrough: current.paid_through,
+    source: "stripe_invoice",
+    externalId: invoiceId,
+    now,
+  });
+  if (fresh || wasPaused) {
+    const notes = wasPaused ? " ⚠️ Estaba PAUSADA: restaure su web (sáquela del archivo) hoy." : "";
+    await deps.alert(
+      `paid-invoice:${invoiceId}`,
+      `${paymentReceivedText({ business: current.business_name, amount: money(cents, invoice.currency ?? null), via: "stripe", paidThrough: current.paid_through })}\nCobro mensual automático · ${current.whatsapp}.${notes}`,
+    );
+  }
+  return { duplicate: false, handled: "invoice_paid", signupId: s.id };
 }
 
 async function processEvent(event: StripeEvent, deps: PaymentDeps): Promise<StripeHandleResult> {
@@ -463,24 +701,43 @@ async function processEvent(event: StripeEvent, deps: PaymentDeps): Promise<Stri
       await deps.alert(`paid-failed:${event.id}`, `⚠️ Un pago iniciado por Stripe falló (${str(o.client_reference_id) ?? "sin código"}). Nada cambió.`);
       return { duplicate: false, handled: "async_failed", signupId: null };
     }
+    case "invoice.paid":
+      return onInvoicePaid(event, deps);
     case "invoice.payment_failed": {
       const { subscriptionId, program } = invoiceSubscription(o);
-      const s = await signupByStripe(subscriptionId, idOf(o.customer));
+      if (hasProgram(program) && program !== STRIPE_PROGRAM) return IGNORED;
+      const found = await signupByStripe(subscriptionId, idOf(o.customer));
+      // Found by customer id but it's another subscription / a one-off invoice of that customer: not the plan.
+      if (found && !isCurrentPlanSubscription(found, subscriptionId, program)) return IGNORED;
+      const s = found;
       if (!s && program !== STRIPE_PROGRAM) return IGNORED;
+      // The subscription's very first charge failing = a card declined while subscribing: nothing was
+      // activated and nothing is overdue, so the signup's billing state is left alone.
+      const atSignup = str(o.billing_reason) === "subscription_create";
+      if (s && !atSignup) await setBillingIssue(s.id, "payment_failed", deps.now());
       const who = s ? `${s.business_name} (${s.whatsapp})` : `cliente Stripe ${idOf(o.customer) ?? "?"}`;
       await deps.alert(
         `payfail:${event.id}`,
-        `⚠️ Falló el cobro mensual de ${who}: ${money(num(o.amount_due), str(o.currency))}, intento ${num(o.attempt_count) ?? "?"}. Stripe reintenta solo; decidan si escribirle o pausar.`,
+        atSignup
+          ? `⚠️ El primer cobro por Stripe de ${who} no pasó (${money(num(o.amount_due), str(o.currency))}): no se activó nada. Si le interesa, escríbale para que pruebe otra tarjeta o PayPal.`
+          : `⚠️ Falló el cobro mensual de ${who}: ${money(num(o.amount_due), str(o.currency))}, intento ${num(o.attempt_count) ?? "?"}. Stripe reintenta solo; decidan si escribirle o pausar. En «Cobros» aparece como vencido hasta que pague.`,
       );
       return { duplicate: false, handled: "payment_failed_alert", signupId: s?.id ?? null };
     }
     case "customer.subscription.deleted": {
-      const s = await signupByStripe(idOf(o.id), idOf(o.customer));
-      if (!s && obj(o.metadata).program !== STRIPE_PROGRAM) return IGNORED;
+      const program = obj(o.metadata).program;
+      if (hasProgram(program) && program !== STRIPE_PROGRAM) return IGNORED;
+      const subscriptionId = idOf(o.id);
+      const found = await signupByStripe(subscriptionId, idOf(o.customer));
+      // Another subscription of the same customer (or an older one already replaced) ending is not the plan.
+      if (found && !isCurrentPlanSubscription(found, subscriptionId, program)) return IGNORED;
+      const s = found;
+      if (!s && program !== STRIPE_PROGRAM) return IGNORED;
+      if (s) await setBillingIssue(s.id, "subscription_canceled", deps.now());
       const who = s ? `${s.business_name} (${s.whatsapp})` : `cliente Stripe ${idOf(o.customer) ?? "?"}`;
       await deps.alert(
         `subdel:${event.id}`,
-        `⚠️ ${who} canceló su suscripción de $${MONTHLY_PRICE_USD}/mes en Stripe. Su web sigue "activa" en el tablero: decidan si pausarla o contactarlo.`,
+        `⚠️ ${who} canceló su suscripción de $${MONTHLY_PRICE_USD}/mes en Stripe. Su web sigue "activa" en el tablero (en «Cobros»: cancelada): decidan si pausarla o contactarlo.`,
       );
       return { duplicate: false, handled: "subscription_deleted_alert", signupId: s?.id ?? null };
     }
@@ -499,4 +756,254 @@ export async function handleStripeEvent(event: StripeEvent, deps: PaymentDeps): 
     await finishEvent(event.id, "failed", null, error instanceof Error ? error.message : String(error));
     throw error;
   }
+}
+
+// ─── "💰 PAGO RECIBIDO" for board payments (ledger rows not alerted yet) ────
+
+export interface BillingRunDeps {
+  now: () => Date;
+  /** Plain team alert (outbox system alert). */
+  alert: (key: string, text: string) => Promise<boolean>;
+  /** One part of the daily digest (Telegram HTML + e-mail), under an exact outbox key. */
+  digest: (key: string, part: CobrosDigestPart) => Promise<boolean>;
+  /** An outbox row with this key already exists (the digest went out today). */
+  alreadyQueued: (key: string) => Promise<boolean>;
+  settings: () => Promise<Pick<WebGratisSettings, "pay_link" | "paypal_link">>;
+}
+
+export function defaultBillingDeps(): BillingRunDeps {
+  return {
+    now: () => new Date(),
+    alert: (key, text) => enqueueSystem(key, text),
+    digest: (key, part) => enqueueBillingDigest(key, part),
+    alreadyQueued: (key) => outboxHasKey(key),
+    settings: () => loadSettings(),
+  };
+}
+
+type LedgerRowWithSignup = PaymentRow & {
+  signup: { business_name: string; whatsapp: string; referral_code: string } | null;
+};
+
+const KIND_NOTE: Record<PaymentRow["kind"], string> = {
+  first: "Primer pago",
+  reactivation: "Reactivó su web (estaba pausada: restáurela hoy)",
+  renewal: "Pagó otro mes",
+};
+
+/**
+ * "💰 PAGO RECIBIDO" for every ledger row nobody was told about yet (board
+ * payments: → Activa, «Pagó otro mes»). Idempotent: the outbox key is the ledger
+ * id and the row is marked alerted. A general sweep never alerts test rows.
+ */
+export async function alertNewPayments(
+  deps: Pick<BillingRunDeps, "alert">,
+  options: { onlySignupIds?: string[] } = {},
+): Promise<{ alerted: number; errors: string[] }> {
+  const db = getDb();
+  const out = { alerted: 0, errors: [] as string[] };
+  let q = db
+    .from(PAYMENTS_TABLE)
+    .select("*, signup:web_gratis_signups!inner(business_name, whatsapp, referral_code)")
+    .is("alerted_at", null)
+    .order("id", { ascending: true })
+    .limit(50);
+  if (options.onlySignupIds) q = q.in("signup_id", options.onlySignupIds.length ? options.onlySignupIds : ["00000000-0000-0000-0000-000000000000"]);
+  else q = q.not("signup.business_name", "like", "ZZ %"); // test rows never crowd real payments out of the batch
+  const { data, error } = await q;
+  if (error) throw error;
+  for (const row of (data ?? []) as unknown as LedgerRowWithSignup[]) {
+    const business = row.signup?.business_name ?? "cliente";
+    if (!options.onlySignupIds && isTestSignupName(business)) continue;
+    try {
+      const text = `${paymentReceivedText({ business, amount: amountLabel(row.amount_cents, row.currency), via: row.via, paidThrough: row.paid_through })}\n${KIND_NOTE[row.kind]} · ${row.signup?.whatsapp ?? ""}. Los recordatorios de pago de este mes se detienen solos.`;
+      if (!(await deps.alert(`payment:${row.id}`, text))) {
+        out.errors.push(`payment ${row.id}: alert not queued`);
+        continue;
+      }
+      const { error: markError } = await db.from(PAYMENTS_TABLE).update({ alerted_at: new Date().toISOString() }).eq("id", row.id).is("alerted_at", null);
+      if (markError) throw markError;
+      out.alerted++;
+    } catch (alertError) {
+      out.errors.push(`payment ${row.id}: ${alertError instanceof Error ? alertError.message : String(alertError)}`);
+      console.error("[WebGratis:payments] payment alert failed", row.id, alertError);
+    }
+  }
+  return out;
+}
+
+// ─── Daily "💳 COBROS" digest (08:00 SV) ────────────────────────────────────
+
+/** Hour (SV) of the daily digest; the first cron run of that hour sends it. */
+export const COBROS_DIGEST_HOUR_SV = 8;
+/**
+ * Clients who can have something to collect — the same set as the board's «Cobros» view
+ * (admin/billing route): delivered / paying / paused sites, plus requests that paid before
+ * delivery, so the digest's "pagando N · MRR $X" is the board's number.
+ */
+const DIGEST_ROWS_FILTER =
+  "status.in.(entregada,compartida,activa,pausada),and(status.in.(nuevo,en_construccion),activated_at.not.is.null)";
+const PAGE = 1000;
+/** Signup ids per messages query (keeps the PostgREST URL short). */
+const ID_CHUNK = 100;
+/** Safety stop for one chunk's message pages. */
+const MAX_MESSAGE_ROWS = 100_000;
+
+export interface DigestReport {
+  ran: boolean;
+  reason: "sent" | "not_digest_hour" | "already_sent" | "nothing_to_report";
+  key: string;
+  /** Clients whose timeline was computed. */
+  considered: number;
+  /** Test rows ("ZZ …") left out of a general sweep. */
+  testRowsExcluded: number;
+  parts: number;
+}
+
+async function loadDigestSignups(only: string[] | undefined): Promise<WebGratisSignup[]> {
+  const db = getDb();
+  if (only) {
+    const { data, error } = await db.from(SIGNUPS_TABLE).select("*").in("id", only.length ? only : ["00000000-0000-0000-0000-000000000000"]).or(DIGEST_ROWS_FILTER);
+    if (error) throw error;
+    return (data ?? []) as WebGratisSignup[];
+  }
+  const all: WebGratisSignup[] = [];
+  for (let from = 0; from < 50_000; from += PAGE) {
+    const { data, error } = await db
+      .from(SIGNUPS_TABLE)
+      .select("*")
+      .or(DIGEST_ROWS_FILTER)
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const page = (data ?? []) as WebGratisSignup[];
+    all.push(...page);
+    if (page.length < PAGE) break;
+  }
+  return all;
+}
+
+/**
+ * The payment asks of these signups, grouped by signup. Paged like the board's: PostgREST caps a
+ * response at 1000 rows, and a cut (months of renewals × 100 signups) would drop the NEWEST rows —
+ * the current cycle's — and the digest would call reminders that already went out "próximos".
+ */
+async function loadPaymentSends(ids: string[]): Promise<Map<string, MessageRow[]>> {
+  const out = new Map<string, MessageRow[]>();
+  for (let i = 0; i < ids.length; i += ID_CHUNK) {
+    const group = ids.slice(i, i + ID_CHUNK);
+    for (let from = 0; from < MAX_MESSAGE_ROWS; from += PAGE) {
+      const { data, error } = await getDb()
+        .from(MESSAGES_TABLE)
+        .select("*")
+        .in("signup_id", group)
+        .in("template", [...PAYMENT_TEMPLATES])
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      const page = (data ?? []) as MessageRow[];
+      for (const m of page) {
+        if (!m.signup_id) continue;
+        const list = out.get(m.signup_id) ?? [];
+        list.push(m);
+        out.set(m.signup_id, list);
+      }
+      if (page.length < PAGE) break;
+    }
+  }
+  return out;
+}
+
+const byDueThenName = (a: BillingTimeline, b: BillingTimeline) =>
+  (a.dueDate ?? "9999") === (b.dueDate ?? "9999") ? a.business.localeCompare(b.business, "es") : (a.dueDate ?? "9999") < (b.dueDate ?? "9999") ? -1 : 1;
+
+/**
+ * "💳 COBROS — <día>" once a day at 08:00 SV (outbox key cobros:<SV date>),
+ * only when there's something to report: due today, due in 1–3 days (day N of
+ * the free month), overdue, PayPal renewals coming up, paused in the last 24 h,
+ * payments received yesterday — and the one-line total. Built from billing.ts,
+ * the same timeline the board shows. A general sweep never includes test rows.
+ */
+export async function runCobrosDigest(deps: BillingRunDeps, options: { onlySignupIds?: string[]; force?: boolean } = {}): Promise<DigestReport> {
+  const now = deps.now();
+  const day = svDay(now);
+  const key = `cobros:${day}`;
+  const report: DigestReport = { ran: false, reason: "not_digest_hour", key, considered: 0, testRowsExcluded: 0, parts: 0 };
+  if (!options.force && svClock(now).hour !== COBROS_DIGEST_HOUR_SV) return report;
+  if (await deps.alreadyQueued(key)) return { ...report, reason: "already_sent" };
+
+  let settings: Pick<WebGratisSettings, "pay_link" | "paypal_link"> | null = null;
+  try {
+    settings = await deps.settings();
+  } catch (settingsError) {
+    console.error("[WebGratis:cobros] settings unavailable", settingsError);
+  }
+  const paypalLink = settings?.paypal_link?.trim() || DEFAULT_PAYPAL_LINK;
+  const payable = hasPaymentMethod(settings);
+
+  const only = options.onlySignupIds;
+  const loaded = await loadDigestSignups(only);
+  const signups = only ? loaded : loaded.filter((s) => !isTestSignupName(s.business_name));
+  report.testRowsExcluded = loaded.length - signups.length;
+  const sends = await loadPaymentSends(signups.map((s) => s.id));
+
+  const timelines: BillingTimeline[] = [];
+  const pausedAt = new Map<string, string>();
+  for (const s of signups) {
+    try {
+      timelines.push(billingTimeline(s, sends.get(s.id) ?? [], now, { hasPaymentMethod: payable }));
+      if (s.paused_at) pausedAt.set(s.id, s.paused_at);
+    } catch (rowError) {
+      console.error("[WebGratis:cobros] timeline", s.id, rowError);
+    }
+  }
+  report.considered = timelines.length;
+  const summary = billingSummary(timelines, now);
+  const since = now.getTime() - 24 * 3_600_000;
+
+  // Payments received yesterday (SV calendar day).
+  const yesterday = addDays(day, -1);
+  let pq = getDb()
+    .from(PAYMENTS_TABLE)
+    .select("*, signup:web_gratis_signups!inner(business_name, whatsapp, referral_code)")
+    .gte("paid_at", svDayStart(yesterday).toISOString())
+    .lt("paid_at", svDayStart(day).toISOString())
+    .order("paid_at", { ascending: true });
+  if (only) pq = pq.in("signup_id", only.length ? only : ["00000000-0000-0000-0000-000000000000"]);
+  else pq = pq.not("signup.business_name", "like", "ZZ %");
+  const { data: paid, error: paidError } = await pq;
+  if (paidError) throw paidError;
+  const paymentsYesterday: DigestPayment[] = ((paid ?? []) as unknown as LedgerRowWithSignup[])
+    .filter((p) => only || !isTestSignupName(p.signup?.business_name))
+    .map((p) => ({ business: p.signup?.business_name ?? "cliente", amount: amountLabel(p.amount_cents, p.currency), via: p.via, paidThrough: p.paid_through }));
+
+  const sorted = [...timelines].sort(byDueThenName);
+  const input = {
+    day,
+    dueToday: sorted.filter((t) => t.dueDate === day && (t.state === "due_today" || t.state === "renewal_due")),
+    dueSoon: sorted.filter((t) => t.state === "due_soon" && !t.paidVia),
+    overdue: sorted.filter((t) => t.state === "overdue" || (t.state === "renewal_due" && (t.daysLeft ?? 0) < 0)),
+    renewals: sorted.filter((t) => t.state === "due_soon" && !!t.paidVia && t.paidVia !== "stripe"),
+    paused: sorted
+      .filter((t) => t.state === "paused" && Date.parse(pausedAt.get(t.signupId) ?? "") >= since)
+      .map((t) => ({ t, pausedAt: svDay(new Date(pausedAt.get(t.signupId) as string)) })),
+    paymentsYesterday,
+    totals: { paying: summary.paying, mrr: summary.mrr, dueThisWeek: summary.dueThisWeek },
+    paypalLink,
+  };
+  if (!cobrosHasNews(input)) return { ...report, reason: "nothing_to_report" };
+
+  const parts = cobrosDigestMessages(input);
+  let queued = 0;
+  for (let k = 0; k < parts.length; k++) {
+    const partKey = k === 0 ? key : `${key}:${k + 1}`;
+    if (await deps.digest(partKey, parts[k])) queued++;
+    else console.error("[WebGratis:cobros] digest part not queued", partKey);
+  }
+  // Part 1 carries the once-a-day key: if it didn't make it, the next minute builds the digest again
+  // (parts already queued are deduplicated by their own keys).
+  if (queued === 0) throw new Error(`cobros digest ${key}: no part could be queued`);
+  return { ...report, ran: true, reason: "sent", parts: queued };
 }

@@ -9,7 +9,10 @@
  * (C3/C4) → auto-pause only after asking → a payment stops every reminder →
  * an opt-out stops every send; plus the Rewired bridge protocol (HMAC), Stripe
  * webhook (signature, product filter, idempotency, referral credits), abuse
- * brakes, retries/holds and the board's HTTP routes.
+ * brakes, retries/holds and the board's HTTP routes; plus billing (billing.mts):
+ * the billing timeline, PayPal-only payment asks, PayPal renewals per cycle,
+ * the payments ledger + "💰 PAGO RECIBIDO", Stripe invoice state and the daily
+ * "💳 COBROS" digest.
  *
  * Safety: never talks to Meta or the real Rewired — sends go to a local mock
  * that verifies the bridge HMAC. It uses the real site database from .env.local
@@ -20,6 +23,7 @@
  */
 import { cleanup, db, results, RUN } from "./lib.mts";
 import { runInProcess } from "./inproc.mts";
+import { runBilling } from "./billing.mts";
 import { runSites } from "./sites.mts";
 import { runHttp } from "./http.mts";
 
@@ -28,6 +32,7 @@ console.log(`RUN ${RUN} — outbox rows before: ${outboxBefore.count}`);
 let crashed: unknown = null;
 try {
   await runInProcess();
+  await runBilling();
   await runSites();
   await runHttp();
 } catch (error) {

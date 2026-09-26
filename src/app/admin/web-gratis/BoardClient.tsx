@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import styles from "./board.module.css";
-// Type-only: admin.ts is server code (erased from the client bundle).
+// Type-only: admin.ts, billing.ts and the billing route are server code (erased from the client bundle).
 import type { BoardCountry, OpsSignup } from "@/lib/web-gratis/admin";
+import type { BillingEvent, BillingState, BillingTimeline } from "@/lib/web-gratis/billing";
+import type { BillingClientInfo, BillingCounts, BillingPayload } from "@/app/api/web-gratis/admin/billing/route";
 import { countryFromE164, DEFAULT_PAYPAL_LINK, footerSnippet, MONTHLY_PRICE_USD, payUrl, referralLink } from "@/lib/web-gratis/config";
 import { scripts, waLink } from "@/lib/web-gratis/scripts";
-import { manualBlock, TEMPLATE_LABEL, UNKNOWN_OUTCOME_CODE, type TemplateName } from "@/lib/web-gratis/templates";
+import { addDays, DUE_SOON_DAYS, formatDateEs, manualBlock, svDay, TEMPLATE_LABEL, UNKNOWN_OUTCOME_CODE, WINDOW_LABEL, type TemplateName } from "@/lib/web-gratis/templates";
 import type { SiteContentV1 } from "@/lib/web-gratis/site-content";
 import { contrastRatio, fixPalette, isHex, paletteReport, type PaletteColors } from "@/lib/web-gratis/sites/contrast";
 import {
@@ -116,6 +118,8 @@ interface ListResponse {
   /** Generated website per signup id (absent = no site yet). */
   sites?: Record<string, SiteSummary>;
   sitesConfig?: SitesConfig;
+  /** Payment timeline per signup id (same source as the "Cobros" view). */
+  billing?: Record<string, BillingTimeline>;
 }
 
 /** One board call to a site route, already unwrapped from the {data,error,message} envelope. */
@@ -140,6 +144,8 @@ interface SettingsDraft {
 const TOKEN_KEY = "mm-wg-admin-token";
 /** The country filter this device last used (a Colombia operator keeps seeing Colombia). */
 const COUNTRY_KEY = "mm-wg-admin-country";
+/** Whether this device last looked at the pipeline list or at "Cobros". */
+const MODE_KEY = "mm-wg-admin-mode";
 
 const COUNTRIES: readonly BoardCountry[] = ["SV", "CO", "OTHER"];
 
@@ -211,6 +217,47 @@ const MSG_STATUS_LABEL: Record<string, string> = {
 const REACHED = ["sent", "delivered", "read"];
 const PAID_VIA_LABEL: Record<string, string> = { stripe: "Stripe", paypal: "PayPal", manual: "a mano" };
 
+// ─── Cobros (billing) labels ────────────────────────────────────────────────
+
+type Mode = "lista" | "cobros";
+
+const BILLING_STATE_LABEL: Record<BillingState, string> = {
+  building: "En construcción",
+  free: "Mes gratis",
+  due_soon: "Vence pronto",
+  due_today: "Vence hoy",
+  overdue: "Vencido",
+  paused: "Pausada",
+  paid: "Pagando",
+  renewal_due: "Renovar mes",
+  cancelled: "Cancelada",
+};
+
+const EVENT_STATUS_LABEL: Record<BillingEvent["status"], string> = {
+  scheduled: "programado",
+  queued: "en cola",
+  sent: "enviado",
+  delivered: "entregado",
+  read: "leído",
+  failed: "falló",
+  skipped: "omitido",
+  held: "retenido",
+};
+
+/** Chip filters of the Cobros view; each maps to one counter of billingSummary. */
+type BillFilter = "todos" | "hoy" | "semana" | "vencidos" | "renovar" | "pausadas" | "pagando";
+
+const BILL_FILTER_COUNT: Record<Exclude<BillFilter, "todos">, keyof Omit<BillingCounts, "mrr">> = {
+  hoy: "dueToday",
+  semana: "dueThisWeek",
+  vencidos: "overdue",
+  renovar: "renewalsDue",
+  pausadas: "paused",
+  pagando: "paying",
+};
+
+const ZERO_COUNTS: BillingCounts = { dueToday: 0, dueThisWeek: 0, overdue: 0, paused: 0, paying: 0, mrr: 0, renewalsDue: 0 };
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 function ago(iso: string | null): string {
@@ -251,6 +298,203 @@ function withinHours(iso: string | null, hours: number): boolean {
 
 function leftLabel(days: number): string {
   return days >= 0 ? `faltan ${days} d` : `venció hace ${-days} d`;
+}
+
+/** "2026-10-25" → "25 oct" (short) or "25 de octubre" (long). Calendar dates, so no time zone shift. */
+function billDate(date: string | null, style: "short" | "long" = "short"): string {
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return "—";
+  const d = new Date(`${date}T12:00:00Z`);
+  if (Number.isNaN(d.getTime())) return date;
+  return d.toLocaleDateString("es", { day: "numeric", month: style === "long" ? "long" : "short", timeZone: "UTC" });
+}
+
+/** daysLeft → "en 3 días" / "hoy" / "vencido hace 2 días". */
+function dueRelative(daysLeft: number | null): string {
+  if (daysLeft === null) return "";
+  if (daysLeft === 0) return "hoy";
+  const n = Math.abs(daysLeft);
+  const unit = `${n} día${n === 1 ? "" : "s"}`;
+  return daysLeft > 0 ? `en ${unit}` : `vencido hace ${unit}`;
+}
+
+/** "por PayPal" / "por Stripe" / "cobro a mano". */
+function viaPhrase(via: string | null): string | null {
+  if (!via) return null;
+  return via === "manual" ? "cobro a mano" : `por ${PAID_VIA_LABEL[via] ?? via}`;
+}
+
+function lowerFirst(text: string): string {
+  return text ? text.charAt(0).toLowerCase() + text.slice(1) : text;
+}
+
+/** Status word of an event: a payment or a pause that already happened is "hecho", not "enviado". */
+function eventStatusText(e: BillingEvent): string {
+  if (e.template === null && e.status === "sent") return "hecho";
+  return EVENT_STATUS_LABEL[e.status] ?? e.status;
+}
+
+function eventStatusClass(e: BillingEvent): string {
+  const key = e.template === null && e.status === "sent" ? "delivered" : e.status;
+  return `${styles.evt} ${styles[`evt_${key}`] ?? ""}`;
+}
+
+/** "Recordatorio día 28 · 23 oct · programado" (the next automatic reminder), or null. */
+function nextEventText(event: BillingEvent | null): string | null {
+  if (!event) return null;
+  return `${event.label} · ${billDate(event.date)} · ${eventStatusText(event)}`;
+}
+
+/**
+ * A timeline in a paying client's monthly cycle (renewal, a lapsed month, a
+ * failed Stripe charge) rather than the free month: billing.ts reuses the
+ * due_soon / renewal_due / overdue states for both.
+ */
+function isRenewalCycle(t: BillingTimeline): boolean {
+  return !!t.paidVia;
+}
+
+/**
+ * A Stripe subscriber whose subscription ended (billing.ts: "cancelled") while
+ * the site is still 'activa': it stays online and nothing charges it any more,
+ * so someone has to ask for the payment (PayPal) or pause it.
+ */
+function stripeLapsed(t: BillingTimeline, status: Status | null): boolean {
+  return t.state === "cancelled" && t.paidVia === "stripe" && status === "activa";
+}
+
+/** A free month with no due date (free_until empty): the scheduler never reminds nor pauses it. */
+function noDueDate(t: BillingTimeline): boolean {
+  return (t.state === "free" || t.state === "due_soon") && !t.freeUntil && !t.paidVia;
+}
+
+/** How the client's month stands, for the "Mes" cell and the card line. */
+function monthStanding(t: BillingTimeline, status: Status | null): { main: string; sub: string | null } {
+  const stripe = t.paidVia === "stripe";
+  switch (t.state) {
+    case "building":
+      return { main: "Aún sin entregar", sub: `${t.freeDays} días gratis desde que se publica` };
+    case "cancelled":
+      return stripeLapsed(t, status)
+        ? { main: "Suscripción cancelada", sub: "sigue en línea sin cobro: pida el pago o pause la web" }
+        : { main: "Cancelada", sub: stripe ? "canceló la suscripción de Stripe" : null };
+    case "paused":
+      return { main: "Pausada", sub: isRenewalCycle(t) ? "no renovó la mensualidad" : "no activó el plan" };
+    default:
+      break;
+  }
+  if (isRenewalCycle(t)) {
+    if (stripe && t.state === "overdue") return { main: "Falló el cobro", sub: "Stripe reintenta solo" };
+    return {
+      main: t.paidThrough ? `Pagado hasta ${billDate(t.paidThrough)}` : "Pagando",
+      sub: stripe ? "Stripe cobra solo cada mes" : "cobro a mano cada mes",
+    };
+  }
+  if (noDueDate(t)) return { main: t.day !== null ? `Día ${t.day}` : "Mes gratis", sub: "sin fecha de vencimiento: no salen recordatorios" };
+  if (t.day !== null) return { main: `Día ${t.day} de ${t.freeDays}`, sub: "mes gratis" };
+  // free_until is the first day that is due (the "día 30" template: "hoy se cumplen sus 30 días gratis").
+  if (t.state === "due_today") return { main: `Se cumplieron los ${t.freeDays} días`, sub: "hoy vence el pago" };
+  if (t.state === "overdue") return { main: "Mes gratis terminado", sub: "no ha pagado" };
+  return { main: BILLING_STATE_LABEL[t.state], sub: null };
+}
+
+/** Compact payment line for a signup card, e.g. "Día 1 de 30 · vence 25 oct · próximo: recordatorio día 28 el 23 oct". */
+function payLineParts(t: BillingTimeline, status: Status | null): { lead: string; rest: string[] } | null {
+  const next = t.next ? `próximo: ${lowerFirst(t.next.label)} el ${billDate(t.next.date)}` : null;
+  const rest = (items: (string | null)[]) => items.filter((s): s is string => !!s);
+  const due = t.dueDate ? billDate(t.dueDate) : null;
+  switch (t.state) {
+    case "building":
+      return null;
+    case "cancelled":
+      if (stripeLapsed(t, status)) return { lead: "Suscripción de Stripe cancelada", rest: ["sigue en línea sin cobro: pida el pago o pause la web"] };
+      return { lead: "Cancelada", rest: rest([t.paidVia === "stripe" ? "canceló la suscripción de Stripe" : null]) };
+    case "paused":
+      return { lead: "Pausada", rest: rest([isRenewalCycle(t) ? "no renovó" : "no activó el plan", due ? `venció ${due}` : null, next]) };
+    default:
+      break;
+  }
+  if (isRenewalCycle(t)) {
+    if (t.paidVia === "stripe" && t.state === "overdue") return { lead: "Falló el cobro de Stripe", rest: rest(["Stripe reintenta solo", next]) };
+    if (t.state === "paid") {
+      return {
+        lead: t.paidThrough ? `Pagado hasta ${billDate(t.paidThrough)}` : `Pagando (${PAID_VIA_LABEL[t.paidVia ?? ""] ?? t.paidVia})`,
+        rest: rest([t.paidVia === "stripe" ? "Stripe cobra solo cada mes" : viaPhrase(t.paidVia), next]),
+      };
+    }
+    if (t.daysLeft !== null && t.daysLeft < 0) {
+      const n = Math.abs(t.daysLeft);
+      return { lead: `Renovación vencida hace ${n} día${n === 1 ? "" : "s"}`, rest: rest([due ? `venció ${due}` : null, viaPhrase(t.paidVia), next]) };
+    }
+    return {
+      lead: `Renovar: vence ${due ?? "—"}`,
+      rest: rest([t.daysLeft !== null ? dueRelative(t.daysLeft) : null, viaPhrase(t.paidVia), next]),
+    };
+  }
+  if (t.state === "overdue") {
+    return { lead: `Vencido hace ${Math.abs(t.daysLeft ?? 0)} día${Math.abs(t.daysLeft ?? 0) === 1 ? "" : "s"}`, rest: rest([due ? `venció ${due}` : null, next]) };
+  }
+  if (t.state === "due_today") return { lead: "Vence hoy", rest: rest([`se cumplieron los ${t.freeDays} días gratis`, next]) };
+  if (noDueDate(t)) return { lead: t.day !== null ? `Día ${t.day} del mes gratis` : "Mes gratis", rest: ["sin fecha de vencimiento: no salen recordatorios automáticos"] };
+  return {
+    lead: t.day !== null ? `Día ${t.day} de ${t.freeDays}` : "Mes gratis",
+    rest: rest([due ? `vence ${due}` : null, next]),
+  };
+}
+
+/**
+ * The polite payment message a person sends from their own WhatsApp (usted).
+ * Renewals of PayPal / manual payers go straight to PayPal: /pagar shows its
+ * pay buttons only to unpaid (or paused) sites. A failed Stripe charge never
+ * offers PayPal: the subscription is still alive and Stripe retries the card, so
+ * a PayPal payment on top would charge the client twice.
+ */
+function paymentMessage(t: BillingTimeline, paypalLink: string, status: Status | null): string {
+  const price = `$${t.monthly} USD al mes`;
+  const selfHost = "Si prefiere alojarla usted mismo, con gusto le entregamos los archivos (sin nuestra asistencia).";
+  const due = t.dueDate ? formatDateEs(t.dueDate) : null;
+  const hello = `Hola ${t.business}, le saluda MachineMind.`;
+  if (t.state === "paused") {
+    return isRenewalCycle(t)
+      ? `${hello} Su página web está pausada porque no se renovó la mensualidad. Si quiere tenerla de nuevo en línea (${price}, hosting y soporte completo, sin contrato), renuévela aquí: ${t.payUrl} y se la reactivamos el mismo día.`
+      : `${hello} Su página web está pausada porque no se activó el plan. Si quiere tenerla de nuevo en línea (${price}, hosting y soporte completo, sin contrato), actívela aquí: ${t.payUrl} y se la reactivamos el mismo día.`;
+  }
+  if (stripeLapsed(t, status)) {
+    return `${hello} Su suscripción mensual con tarjeta de la página web (${price}) quedó cancelada, así que ya no se cobra sola. Para mantenerla en línea con hosting y soporte completo, puede renovarla por PayPal aquí: ${paypalLink} (sin contrato) y nos envía el comprobante por este chat. ${selfHost} ¡Muchas gracias!`;
+  }
+  if (isRenewalCycle(t)) {
+    if (t.paidVia === "stripe") {
+      return `${hello} No pudimos procesar el cobro mensual de su página web (${price}) con su tarjeta. ¿Nos ayuda revisando que esté vigente y con fondos? El cobro se vuelve a intentar automáticamente en los próximos días. Si necesita cambiar la tarjeta, respóndanos por aquí y le ayudamos. ¡Muchas gracias!`;
+    }
+    const when = t.daysLeft === 0 ? "vence hoy" : t.daysLeft !== null && t.daysLeft < 0 ? `venció el ${due}` : due ? `vence el ${due}` : "vence pronto";
+    return `${hello} La mensualidad de su página web (${price}, hosting y soporte completo) ${when}. Para mantenerla en línea, renuévela aquí: ${paypalLink} (sin contrato). Cuando pague, envíenos el comprobante por aquí. ¡Gracias por su confianza!`;
+  }
+  const end =
+    t.state === "overdue" ? `terminó${due ? ` el ${due}` : ""}` : t.state === "due_today" ? "termina hoy" : `termina${due ? ` el ${due}` : " pronto"}`;
+  return `${hello} Su mes gratis de la página web ${end}. Para mantenerla en línea con hosting y soporte completo son ${price}, sin contrato. Puede activarla aquí: ${t.payUrl}\n\n${selfHost} ¡Muchas gracias!`;
+}
+
+/** Add up per-client counters (the server sends billingSummary() of each client alone). */
+function addCounts(list: (BillingCounts | undefined)[]): BillingCounts {
+  const out: BillingCounts = { ...ZERO_COUNTS };
+  for (const c of list) {
+    if (!c) continue;
+    out.dueToday += c.dueToday;
+    out.dueThisWeek += c.dueThisWeek;
+    out.overdue += c.overdue;
+    out.paused += c.paused;
+    out.paying += c.paying;
+    out.mrr += c.mrr;
+    out.renewalsDue += c.renewalsDue;
+  }
+  return out;
+}
+
+/** Lowercase, no accents — for the Cobros search. */
+function fold(text: string): string {
+  return text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 /** Market of a row (the API resolves it; the phone prefix covers an older payload). */
@@ -1117,9 +1361,11 @@ interface CardProps {
   siteApi: SiteApi;
   onSite: (signupId: string, site: SiteSummary) => void;
   onReload: () => void;
+  /** Payment timeline (due date, day N, next automatic reminder); absent while it loads. */
+  billing: BillingTimeline | undefined;
 }
 
-function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch, onSend, onApplyCredit, site, sitesConfig, siteApi, onSite, onReload }: CardProps) {
+function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch, onSend, onApplyCredit, site, sitesConfig, siteApi, onSite, onReload, billing }: CardProps) {
   const [siteUrl, setSiteUrl] = useState(row.site_url ?? "");
   // Publishing sets site_url on the server: follow it, so blurring a stale field can never erase it.
   const [seenSiteUrl, setSeenSiteUrl] = useState(row.site_url);
@@ -1135,7 +1381,9 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
   const [busy, setBusy] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
 
-  const payLink = settings?.pay_link ?? null;
+  // /pagar always offers PayPal (and the card when Stripe is set), so the scripts always link it.
+  const payPage = payUrl(row.referral_code);
+  const payLine = billing ? payLineParts(billing, row.status) : null;
   const files = [...row.logo_paths, ...row.photo_paths];
   const docs = rowDocs(row);
   const country = rowCountry(row);
@@ -1283,6 +1531,16 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
             </span>
           ))}
         </div>
+      ) : null}
+
+      {billing && payLine ? (
+        <p
+          className={`${styles.payLine} ${styles[`tone_${stripeLapsed(billing, row.status) ? "overdue" : billing.state}`] ?? ""}`}
+          title={nextEventText(billing.next) ?? undefined}
+        >
+          <b>{payLine.lead}</b>
+          {payLine.rest.length ? ` · ${payLine.rest.join(" · ")}` : ""}
+        </p>
       ) : null}
 
       <dl className={styles.meta}>
@@ -1633,17 +1891,17 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
               : wa("shared_thanks", scripts.sharedThanks(row.referral_code), "Gracias + referidos", { className: styles.waBtn, blocked: blockedAll })}
             {wa("seed_upsell", scripts.seedUpsell(), "Sembrar citas", { className: styles.waGhost, blocked: blockedPush })}
             {wa("day7", scripts.day7(), "Día 7", { className: dayN !== null && dayN >= 7 && dayN < 14 ? styles.waDue : styles.waGhost, blocked: blockedPush })}
-            {wa("day28", scripts.day28(payLink ? payUrl(row.referral_code) : null), "Día 28", {
+            {wa("day28", scripts.day28(payPage), "Día 28", {
               className: freeLeft !== null && freeLeft <= 2 && freeLeft >= 1 ? styles.waDue : styles.waGhost,
               blocked: blockedPush,
               auto: "cqv_web_day28",
             })}
-            {wa("day30", scripts.day30(row.business_name, payLink ? payUrl(row.referral_code) : null), "Día 30", {
+            {wa("day30", scripts.day30(row.business_name, payPage), "Día 30", {
               className: freeLeft !== null && freeLeft <= 0 ? styles.waDue : styles.waGhost,
               blocked: blockedPush,
               auto: "cqv_web_day30",
             })}
-            {wa("last_call", scripts.lastCall(payLink ? payUrl(row.referral_code) : null), "Último aviso", {
+            {wa("last_call", scripts.lastCall(payPage), "Último aviso", {
               className: styles.waGhost,
               blocked: blockedPush,
               auto: "cqv_web_pause_notice",
@@ -1669,7 +1927,7 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
           <>
             {wa("referral_ask", scripts.referralAsk(row.referral_code), "Pedir referidos", { className: styles.waBtn, blocked: blockedPush })}
             {manualPayer ? (
-              <button type="button" className={styles.primary} disabled={busy} onClick={() => void patch({ renew: true }, "Mes registrado")}>
+              <button type="button" className={styles.primary} disabled={busy} onClick={() => void patch({ renew: true, expectedPaidThrough: row.paid_through }, "Mes registrado")}>
                 Pagó otro mes
               </button>
             ) : null}
@@ -1769,6 +2027,351 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
   );
 }
 
+// ─── Cobros: one client's payment row (module scope) ────────────────────────
+
+interface BillingRowProps {
+  t: BillingTimeline;
+  info: BillingClientInfo | undefined;
+  paypalLink: string;
+  /** Today in El Salvador (YYYY-MM-DD), from the server. */
+  today: string;
+  /** Saves the change; a payment or status change also refreshes Cobros (BoardClient.onPatch). */
+  onPatch: (id: string, body: Record<string, unknown>) => Promise<boolean>;
+}
+
+/** paid_through after a board payment — the PATCH route's rule: 30 days from the later of paid_through and today. */
+function paidThroughAfterPayment(paidThrough: string | null, today: string): string {
+  return addDays(paidThrough && paidThrough > today ? paidThrough : today, 30);
+}
+
+function BillingRow({ t, info, paypalLink, today, onPatch }: BillingRowProps) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [flash, setFlash] = useState<string | null>(null);
+
+  const status = info?.status ?? null;
+  const lapsed = stripeLapsed(t, status);
+  const manualPayer = status === "activa" && t.paidVia !== "stripe";
+  // Owes the plan: a free month (never paid — an 'entregada' row that already paid must not get a
+  // second, unpaid month added), a paused site, or a Stripe subscription that ended while still online.
+  const unpaid = status === "pausada" || ((status === "entregada" || status === "compartida") && !t.paidVia) || lapsed;
+  const blocked = info?.optedOut
+    ? "Se dio de baja de WhatsApp: no se le escribe."
+    : info?.noWhatsapp
+      ? "Su número no tiene WhatsApp: corríjalo en su tarjeta."
+      : info?.declined && unpaid
+        ? "Dijo que no: no se le insiste."
+        : null;
+  // Stripe clients renew on their own: their date is informative, never "due".
+  const tracked = t.paidVia !== "stripe" || t.state === "overdue" || lapsed;
+  const dueClass =
+    t.daysLeft === null || !tracked || t.state === "paused" ? "" : t.daysLeft < 0 ? styles.dueLate : t.daysLeft <= DUE_SOON_DAYS ? styles.dueSoon : "";
+  const urgent = t.state === "due_today" || t.state === "overdue" || t.state === "renewal_due" || t.state === "due_soon" || lapsed;
+  const renewal = isRenewalCycle(t);
+  const stripeFailed = t.paidVia === "stripe" && t.state === "overdue";
+  // Stripe charges its subscribers by itself (unless a charge failed) and an unfinished request
+  // owes nothing yet: neither gets a "please pay" message or the /pagar link.
+  const autoCharged = t.paidVia === "stripe" && t.state !== "overdue" && t.state !== "paused" && !lapsed;
+  const asksForPayment = !autoCharged && t.state !== "building" && (t.state !== "cancelled" || lapsed);
+  // Where the client can pay: /pagar for unpaid / paused sites; PayPal for a client who already pays
+  // (an active site's /pagar only says "ya está activa"); none for a failed Stripe charge (Stripe
+  // retries the card — a PayPal payment on top would charge twice).
+  const payTarget: { href: string; label: string } | null = stripeFailed
+    ? null
+    : status !== "pausada" && (status === "activa" || !!t.paidVia)
+      ? { href: paypalLink, label: "PayPal" }
+      : { href: t.payUrl, label: "/pagar" };
+  // Paid before delivery: billing.ts counts it as paying; the team still has to deliver the site.
+  const month =
+    status === "nuevo" || status === "en_construccion" ? { main: "Pagó antes de la entrega", sub: "falta entregar su web" } : monthStanding(t, status);
+  // What already happened, then what the scheduler does next.
+  const events: { e: BillingEvent; upcoming: boolean }[] = [
+    ...t.history.map((e) => ({ e, upcoming: false })),
+    ...(t.next ? [{ e: t.next, upcoming: true }] : []),
+  ];
+
+  function say(text: string, ms = 4000) {
+    setFlash(text);
+    window.setTimeout(() => setFlash(null), ms);
+  }
+
+  async function run(body: Record<string, unknown>, okText: string) {
+    setBusy(true);
+    const ok = await onPatch(t.signupId, body);
+    setBusy(false);
+    if (ok) say(okText);
+    else say("No se guardó: revise el aviso de arriba.", 6000);
+  }
+
+  async function renew() {
+    const from = t.paidThrough && t.paidThrough > today ? billDate(t.paidThrough, "long") : "hoy";
+    const until = billDate(paidThroughAfterPayment(t.paidThrough, today), "long");
+    if (!window.confirm(`¿${t.business} pagó otro mes ($${t.monthly} USD)?\n\nSe suman 30 días desde ${from}: queda pagado hasta el ${until}.`)) return;
+    await run({ renew: true, expectedPaidThrough: t.paidThrough }, "Mes registrado ✓");
+  }
+
+  async function registerPayment(via: "paypal" | "manual") {
+    const how = via === "paypal" ? "por PayPal" : "a mano (efectivo / transferencia)";
+    const until = billDate(paidThroughAfterPayment(t.paidThrough, today), "long");
+    // Paying inside the free month: the paid month starts today (PATCH rule), not at the end of the free month.
+    const freeLeft = !t.paidVia && t.daysLeft !== null && t.daysLeft > 0 ? t.daysLeft : 0;
+    const notes = [
+      `Queda «Activa», pagado hasta el ${until}, y se detienen los recordatorios automáticos.`,
+      freeLeft ? `Ojo: aún le quedan ${freeLeft} día${freeLeft === 1 ? "" : "s"} del mes gratis; el mes pagado cuenta desde hoy.` : null,
+      lapsed ? "Su suscripción de Stripe ya no cobra: queda como pago mensual (se renueva aquí con «Pagó otro mes»)." : null,
+      status === "pausada" ? "Estaba pausada: revise que su web vuelva a estar en línea." : null,
+    ].filter((n): n is string => !!n);
+    if (!window.confirm(`¿Registrar que ${t.business} pagó $${t.monthly} USD ${how}?\n\n${notes.join("\n")}`)) return;
+    // A client who already paid once (a lapsed Stripe subscription) is recorded as a monthly renewal,
+    // so the payments ledger gets the row and the Stripe issue is cleared.
+    await run(lapsed ? { status: "activa", paidVia: via, renew: true, expectedPaidThrough: t.paidThrough } : { status: "activa", paidVia: via }, "Pago registrado ✓");
+  }
+
+  async function copyPayLink(href: string) {
+    say((await copyText(href)) ? "Enlace de pago copiado" : "No se pudo copiar — selecciónelo a mano");
+  }
+
+  return (
+    <li className={`${styles.billRow} ${styles[`tone_${lapsed ? "overdue" : t.state}`] ?? ""}`}>
+      <div className={styles.billTop}>
+        <div className={styles.billName}>
+          <h3>{t.business}</h3>
+          <p>
+            <span className={styles.mono}>{t.code}</span> · {t.whatsapp}
+          </p>
+        </div>
+        <span className={styles.stateBadge}>{lapsed ? "Sin cobro" : BILLING_STATE_LABEL[t.state]}</span>
+      </div>
+
+      <dl className={styles.billCells}>
+        <div>
+          <dt>Mes</dt>
+          <dd>
+            {month.main}
+            {month.sub ? <small>{month.sub}</small> : null}
+          </dd>
+        </div>
+        <div>
+          <dt>Vence</dt>
+          <dd className={dueClass}>
+            {t.dueDate ? billDate(t.dueDate) : "—"}
+            {t.paidVia === "stripe" && t.state === "paid" ? (
+              <small>Stripe renueva solo</small>
+            ) : t.dueDate && t.daysLeft !== null && t.state !== "paused" ? (
+              <small>{dueRelative(t.daysLeft)}</small>
+            ) : null}
+          </dd>
+        </div>
+        <div className={styles.billWide}>
+          <dt>Próximo automático</dt>
+          <dd>
+            {t.next ? (
+              <>
+                {t.next.label} · {billDate(t.next.date)}
+                <span className={eventStatusClass(t.next)}>{eventStatusText(t.next)}</span>
+              </>
+            ) : (
+              <span className={styles.dim}>Nada programado</span>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt>Método</dt>
+          <dd>{t.paidVia ? (PAID_VIA_LABEL[t.paidVia] ?? t.paidVia) : <span className={styles.dim}>sin pagar</span>}</dd>
+        </div>
+      </dl>
+
+      <div className={styles.billActions}>
+        {asksForPayment ? (
+          <WaAction
+            href={waLink(t.whatsapp, paymentMessage(t, paypalLink, status))}
+            className={urgent ? styles.waDue : t.state === "paid" || t.state === "free" ? styles.waGhost : styles.waBtn}
+            label={
+              renewal && t.state !== "paused" && !lapsed ? (stripeFailed ? "WhatsApp: cobro fallido" : "WhatsApp: renovar") : "WhatsApp: pedir el pago"
+            }
+            blocked={blocked}
+            confirmText={null}
+            onOpen={() => void onPatch(t.signupId, { touch: "cobro_wa" })}
+          />
+        ) : null}
+        {asksForPayment && payTarget ? (
+          <a href={payTarget.href} target="_blank" rel="noopener noreferrer">
+            Abrir {payTarget.label}
+          </a>
+        ) : null}
+        {manualPayer ? (
+          <button type="button" className={urgent ? styles.primary : undefined} disabled={busy} onClick={() => void renew()}>
+            Pagó otro mes
+          </button>
+        ) : null}
+        {unpaid ? (
+          <>
+            <button type="button" className={urgent || t.state === "paused" ? styles.primary : undefined} disabled={busy} onClick={() => void registerPayment("paypal")}>
+              Pagó (PayPal)
+            </button>
+            <button type="button" disabled={busy} onClick={() => void registerPayment("manual")}>
+              Pagó (a mano)
+            </button>
+          </>
+        ) : null}
+        {asksForPayment && payTarget ? (
+          <button type="button" className={styles.linkBtn} onClick={() => void copyPayLink(payTarget.href)}>
+            Copiar enlace de pago
+          </button>
+        ) : null}
+        <button type="button" className={styles.linkBtn} aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? "Ocultar historial" : `Historial (${events.length})`}
+        </button>
+      </div>
+
+      {open ? (
+        <div className={styles.billHistory}>
+          {events.length ? (
+            <ol>
+              {events.map(({ e, upcoming }, i) => (
+                <li key={`${e.kind}-${e.date}-${i}`} className={upcoming ? styles.evtFuture : undefined}>
+                  <span>{billDate(e.date)}</span>
+                  <span>
+                    {upcoming ? "Próximo: " : ""}
+                    {e.label}
+                    <span className={eventStatusClass(e)}>{eventStatusText(e)}</span>
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className={styles.dim}>Todavía no hay pagos ni recordatorios de pago.</p>
+          )}
+        </div>
+      ) : null}
+      {flash ? <p className={styles.flash}>{flash}</p> : null}
+    </li>
+  );
+}
+
+// ─── Cobros view (module scope) ─────────────────────────────────────────────
+
+interface BillingPanelProps {
+  payload: BillingPayload | null;
+  loading: boolean;
+  error: string | null;
+  country: BoardCountry | null;
+  query: string;
+  onReload: () => void;
+  onPatch: (id: string, body: Record<string, unknown>) => Promise<boolean>;
+}
+
+const BILL_CHIPS: { filter: Exclude<BillFilter, "todos">; label: string; tone: string }[] = [
+  { filter: "hoy", label: "vencen hoy", tone: "chipAmber" },
+  { filter: "semana", label: "vencen esta semana", tone: "chipAmber" },
+  { filter: "vencidos", label: "vencidos", tone: "chipRed" },
+  { filter: "renovar", label: "renovaciones a cobrar", tone: "chipAmber" },
+  { filter: "pausadas", label: "pausadas", tone: "" },
+  { filter: "pagando", label: "pagando", tone: "chipGreen" },
+];
+
+/** Every delivered client: when their payment is due, where they are in the month, and the next automatic reminder. */
+function BillingPanel({ payload, loading, error, country, query, onReload, onPatch }: BillingPanelProps) {
+  const [filter, setFilter] = useState<BillFilter>("todos");
+
+  if (!payload) {
+    if (loading) {
+      return (
+        <section className={styles.billing} aria-busy="true" aria-label="Cobros">
+          {Array.from({ length: 3 }, (_, i) => (
+            <div key={i} className={styles.skeletonSmall} />
+          ))}
+        </section>
+      );
+    }
+    return (
+      <section className={styles.billing} aria-label="Cobros">
+        <p className={styles.error}>{error ?? "No se pudieron cargar los cobros."}</p>
+        <button type="button" className={styles.linkBtn} onClick={onReload}>
+          Reintentar
+        </button>
+      </section>
+    );
+  }
+
+  const q = fold(query.trim());
+  // "7123 4567" / "+503 7123-4567" must find "+50371234567": numbers are compared digits-only.
+  const qDigits = query.replace(/\D/g, "");
+  const scoped = payload.timelines.filter((t) => {
+    const info = payload.clients[t.signupId];
+    if (country && (info?.country ?? countryFromE164(t.whatsapp)) !== country) return false;
+    if (!q) return true;
+    return fold(`${t.business} ${t.whatsapp} ${t.code}`).includes(q) || (qDigits.length >= 4 && t.whatsapp.replace(/\D/g, "").includes(qDigits));
+  });
+  const counts = addCounts(scoped.map((t) => payload.clients[t.signupId]?.counts));
+  const shown =
+    filter === "todos" ? scoped : scoped.filter((t) => (payload.clients[t.signupId]?.counts[BILL_FILTER_COUNT[filter]] ?? 0) > 0);
+
+  return (
+    <section className={styles.billing} aria-label="Cobros">
+      <div className={styles.billChips} role="group" aria-label="Filtrar cobros">
+        <button
+          type="button"
+          aria-pressed={filter === "todos"}
+          className={filter === "todos" ? styles.billChipOn : styles.billChip}
+          onClick={() => setFilter("todos")}
+        >
+          <b>{scoped.length}</b>
+          <span>clientes con web</span>
+        </button>
+        {BILL_CHIPS.map((c) => {
+          const n = counts[BILL_FILTER_COUNT[c.filter]];
+          return (
+            <button
+              key={c.filter}
+              type="button"
+              aria-pressed={filter === c.filter}
+              className={`${filter === c.filter ? styles.billChipOn : styles.billChip} ${n && c.tone ? (styles[c.tone] ?? "") : ""}`}
+              onClick={() => setFilter(filter === c.filter ? "todos" : c.filter)}
+            >
+              <b>{n}</b>
+              <span>{c.label}</span>
+            </button>
+          );
+        })}
+        <div className={`${styles.billChipStatic} ${counts.mrr ? styles.chipGreen : ""}`}>
+          <b>${counts.mrr}</b>
+          <span>MRR (USD/mes)</span>
+        </div>
+      </div>
+
+      {!payload.hasPaymentMethod ? (
+        <p className={styles.billAlert}>
+          No hay forma de pago configurada: los recordatorios automáticos de pago están retenidos. Agregue el enlace de Stripe o de PayPal en «Capacidad, pago y demo».
+        </p>
+      ) : null}
+
+      <p className={styles.billInfo}>
+        Hoy en El Salvador: <b>{billDate(payload.today, "long")}</b> · ${payload.monthly} USD/mes · {payload.freeDays} días gratis desde que se publica · recordatorios
+        automáticos {WINDOW_LABEL.reminder} · pago: {payload.stripe ? "tarjeta (Stripe) y PayPal" : "PayPal (falta el enlace de Stripe para tarjeta)"}
+        {loading ? " · actualizando…" : ""}
+      </p>
+      {error ? <p className={styles.error}>{error}</p> : null}
+
+      {payload.timelines.length === 0 ? (
+        <p className={styles.billEmpty}>
+          Todavía no hay webs entregadas. Al publicar la primera empieza su mes gratis y aparece aquí con su fecha de cobro y sus recordatorios.
+        </p>
+      ) : shown.length === 0 ? (
+        <p className={styles.billEmpty}>
+          Nada en este filtro{country ? ` para ${COUNTRY_LABEL[country]}` : ""}{q ? ` con «${query.trim()}»` : ""}.
+        </p>
+      ) : (
+        <ul className={styles.billList}>
+          {shown.map((t) => (
+            <BillingRow key={t.signupId} t={t} info={payload.clients[t.signupId]} paypalLink={payload.paypalLink} today={payload.today} onPatch={onPatch} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 // ─── Board ──────────────────────────────────────────────────────────────────
 
 export default function BoardClient() {
@@ -1785,24 +2388,40 @@ export default function BoardClient() {
   const [error, setError] = useState<string | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<SettingsDraft | null>(null);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
+  const [mode, setMode] = useState<Mode>("lista");
+  const [billing, setBilling] = useState<BillingPayload | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
   const qRef = useRef(q);
   /** Only the newest list request may paint (switching tab/country mid-load). */
   const loadSeq = useRef(0);
+  /** Same for the Cobros request. */
+  const billingSeq = useRef(0);
   useEffect(() => {
     qRef.current = q;
   }, [q]);
 
-  // Token + country filter live in localStorage on this device only (restored after hydration).
+  // Token, country filter and list/Cobros live in localStorage on this device only (restored after hydration).
   useEffect(() => {
     try {
       setToken(window.localStorage.getItem(TOKEN_KEY));
       const saved = window.localStorage.getItem(COUNTRY_KEY);
       if (saved === "SV" || saved === "CO" || saved === "OTHER") setCountry(saved);
+      if (window.localStorage.getItem(MODE_KEY) === "cobros") setMode("cobros");
     } catch {
       setToken(null);
     }
     setReady(true);
   }, []);
+
+  function pickMode(next: Mode) {
+    try {
+      window.localStorage.setItem(MODE_KEY, next);
+    } catch {
+      // Not remembered on this device; the view still switches now.
+    }
+    setMode(next);
+  }
 
   function pickCountry(next: BoardCountry | null) {
     if (next === country) return;
@@ -1867,6 +2486,7 @@ export default function BoardClient() {
                 messages: { ...prev.messages, ...payload.messages },
                 credits: [...prev.credits, ...payload.credits.filter((c) => !prev.credits.some((p) => p.id === c.id))],
                 sites: { ...(prev.sites ?? {}), ...(payload.sites ?? {}) },
+                billing: { ...(prev.billing ?? {}), ...(payload.billing ?? {}) },
               }
             : payload,
         );
@@ -1892,6 +2512,48 @@ export default function BoardClient() {
     [api, token, view, country],
   );
 
+  /** Cobros: every delivered client's due date + automatic reminder timeline. */
+  const loadBilling = useCallback(async () => {
+    if (!token) return;
+    const seq = ++billingSeq.current;
+    setBillingLoading(true);
+    try {
+      const res = await api("/api/web-gratis/admin/billing");
+      const json = (await res.json().catch(() => null)) as { data: BillingPayload | null; error: string | null; message: string | null } | null;
+      if (seq !== billingSeq.current) return;
+      if (!res.ok || !json?.data) {
+        if (res.status !== 401) setBillingError(json?.message ?? "No se pudieron cargar los cobros.");
+        return;
+      }
+      setBilling(json.data);
+      setBillingError(null);
+    } catch (err) {
+      console.error("[WebGratis:board] billing", err);
+      if (seq === billingSeq.current) setBillingError("Sin conexión con el servidor: los cobros pueden estar desactualizados.");
+    } finally {
+      if (seq === billingSeq.current) setBillingLoading(false);
+    }
+  }, [api, token]);
+
+  // Load Cobros once per token (the tab shows how many are due), then every 45s while it's open and
+  // every 3 min behind the list, so the tab's count follows the day (due today, overdue…).
+  useEffect(() => {
+    if (!token) return;
+    void loadBilling();
+  }, [token, loadBilling]);
+
+  useEffect(() => {
+    if (!token) return;
+    const timer = window.setInterval(
+      () => {
+        const typing = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement;
+        if (document.visibilityState === "visible" && !typing) void loadBilling();
+      },
+      mode === "cobros" ? 45_000 : 180_000,
+    );
+    return () => window.clearInterval(timer);
+  }, [token, mode, loadBilling]);
+
   // A website being generated on this page → refresh faster so "Lista para revisar" shows up soon.
   const anyGenerating = Object.values(data?.sites ?? {}).some((s) => s.status === "generating");
 
@@ -1902,7 +2564,8 @@ export default function BoardClient() {
   }, [token, view, country, load]);
 
   useEffect(() => {
-    if (!token) return;
+    // Hidden behind Cobros the list isn't polled (Cobros polls its own route); it reloads on return.
+    if (!token || mode !== "lista") return;
     const timer = window.setInterval(
       () => {
         const typing = document.activeElement instanceof HTMLInputElement || document.activeElement instanceof HTMLTextAreaElement;
@@ -1911,7 +2574,7 @@ export default function BoardClient() {
       anyGenerating ? 15_000 : 45_000,
     );
     return () => window.clearInterval(timer);
-  }, [token, load, anyGenerating]);
+  }, [token, mode, load, anyGenerating]);
 
   /** Site routes: same token, unwrapped envelope, never throws. */
   const siteApi = useCallback<SiteApi>(
@@ -1955,6 +2618,17 @@ export default function BoardClient() {
               return (!tab?.statuses || tab.statuses.includes(r.status)) && (!country || rowCountry(r) === country);
             }),
         );
+      }
+      // A status / payment change moves the due date: drop the card's (now stale) payment line until
+      // the next list load, and refresh Cobros (its rows and the tab's count) right away.
+      if ("status" in body || "renew" in body || "paidVia" in body || "whatsapp" in body) {
+        setData((prev) => {
+          if (!prev?.billing?.[id]) return prev;
+          const rest = { ...prev.billing };
+          delete rest[id];
+          return { ...prev, billing: rest };
+        });
+        void loadBilling();
       }
       return true;
     } catch (err) {
@@ -2006,12 +2680,18 @@ export default function BoardClient() {
     const json = (await res.json()) as { message: string | null };
     setSettingsMsg(res.ok ? "Guardado. La página /web lo muestra en ~1 min." : (json.message ?? "No se pudo guardar."));
     window.setTimeout(() => setSettingsMsg(null), 3500);
-    if (res.ok) void load(0);
+    if (res.ok) {
+      void load(0);
+      // The payment links decide whether reminders can go out (and what Cobros offers).
+      void loadBilling();
+    }
   }
 
   async function exportCsv() {
+    // In Cobros the export is every delivered client, soonest due first (same set as the view).
+    const exportView = mode === "cobros" ? "cobros" : view;
     try {
-      const params = new URLSearchParams({ view });
+      const params = new URLSearchParams({ view: exportView });
       if (country) params.set("country", country);
       const res = await api(`/api/web-gratis/admin/export?${params}`);
       if (!res.ok) {
@@ -2022,7 +2702,7 @@ export default function BoardClient() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `web-gratis-${view}${country ? `-${country.toLowerCase()}` : ""}-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `web-gratis-${exportView}${country ? `-${country.toLowerCase()}` : ""}-${svDay(new Date())}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -2054,6 +2734,8 @@ export default function BoardClient() {
     setToken(null);
     setData(null);
     setRows([]);
+    setBilling(null);
+    setBillingError(null);
   }
 
   if (!ready) return <main className={styles.page} />;
@@ -2087,6 +2769,26 @@ export default function BoardClient() {
   const count = (statuses: Status[] | null) =>
     stats ? (statuses ? statuses.reduce((n, s) => n + (stats.by_status[s] ?? 0), 0) : Object.values(stats.by_status).reduce((a, b) => a + b, 0)) : 0;
   const rateToday = stats && stats.started_today ? Math.round((stats.submitted_today / stats.started_today) * 100) : 0;
+  // The Cobros tab shows how many clients need a payment action (due today, overdue or a manual renewal).
+  // Counted per client: a lapsed renewal is both "overdue" and "renewal due" in billingSummary.
+  const billUrgent = billing
+    ? billing.timelines.filter((t) => {
+        const info = billing.clients[t.signupId];
+        const c = info?.counts;
+        return (!!c && (c.dueToday > 0 || c.overdue > 0 || c.renewalsDue > 0)) || stripeLapsed(t, info?.status ?? null);
+      }).length
+    : null;
+  const busyNow = mode === "cobros" ? billingLoading : loading;
+  // Country chips count what's on screen: the list tab, or the clients in Cobros.
+  const countryCounts: Record<BoardCountry, number> | null =
+    mode === "cobros"
+      ? billing
+        ? COUNTRIES.reduce<Record<BoardCountry, number>>(
+            (acc, c) => ({ ...acc, [c]: billing.timelines.filter((t) => (billing.clients[t.signupId]?.country ?? countryFromE164(t.whatsapp)) === c).length }),
+            { SV: 0, CO: 0, OTHER: 0 },
+          )
+        : null
+      : (data?.countryCounts ?? null);
 
   return (
     <main className={styles.page}>
@@ -2096,8 +2798,15 @@ export default function BoardClient() {
           <h1>Tablero</h1>
         </div>
         <div className={styles.topActions}>
-          <button type="button" onClick={() => void load(0)} disabled={loading}>
-            {loading ? "Cargando…" : "Actualizar"}
+          <button
+            type="button"
+            onClick={() => {
+              void load(0);
+              if (mode === "cobros") void loadBilling();
+            }}
+            disabled={busyNow}
+          >
+            {busyNow ? "Cargando…" : "Actualizar"}
           </button>
           <button type="button" onClick={() => void exportCsv()}>
             Exportar CSV
@@ -2111,7 +2820,7 @@ export default function BoardClient() {
         </div>
       </header>
 
-      {stats ? (
+      {stats && mode === "lista" ? (
         <section className={styles.kpis}>
           <div>
             <b>{stats.started_today}</b>
@@ -2191,7 +2900,7 @@ export default function BoardClient() {
               Alta demanda: /web avisa que hay fila (nunca deja de recibir)
             </label>
             <label>
-              Enlace de pago Stripe ${MONTHLY_PRICE_USD}/mes (botón «Pagar con tarjeta» de /pagar; sin él no salen los recordatorios de día 28/30 ni se pausan solas las webs vencidas)
+              Enlace de pago Stripe ${MONTHLY_PRICE_USD}/mes (botón «Pagar con tarjeta» de /pagar, se cobra solo cada mes; sin él /pagar ofrece solo PayPal y los recordatorios de pago salen igual)
               <input
                 value={settingsDraft.payLink}
                 placeholder="https://buy.stripe.com/…"
@@ -2223,14 +2932,36 @@ export default function BoardClient() {
       ) : null}
 
       <nav className={styles.tabs} aria-label="Estados">
+        <button
+          type="button"
+          aria-pressed={mode === "cobros"}
+          className={mode === "cobros" ? styles.tabMoneyOn : styles.tabMoney}
+          onClick={() => {
+            pickMode("cobros");
+            void loadBilling();
+          }}
+        >
+          Cobros
+          {billUrgent !== null ? (
+            <span className={billUrgent ? styles.tabUrgent : undefined} title="Clientes que vencen hoy, vencidos, con renovación por cobrar o con la suscripción de Stripe cancelada">
+              {billUrgent}
+            </span>
+          ) : null}
+        </button>
         {TABS.map((tab) => (
           <button
             key={tab.view}
             type="button"
-            className={tab.view === view ? styles.tabOn : styles.tab}
+            className={mode === "lista" && tab.view === view ? styles.tabOn : styles.tab}
             onClick={() => {
-              setRows([]);
-              setView(tab.view);
+              if (tab.view !== view) {
+                setRows([]);
+                setView(tab.view);
+              } else if (mode === "cobros") {
+                // Same tab as before Cobros: it wasn't polled meanwhile, so fetch it fresh.
+                void load(0);
+              }
+              pickMode("lista");
             }}
           >
             {tab.label}
@@ -2247,7 +2978,7 @@ export default function BoardClient() {
           onClick={() => pickCountry(null)}
         >
           Todos los países
-          {data?.countryCounts ? <span>{data.countryCounts.SV + data.countryCounts.CO + data.countryCounts.OTHER}</span> : null}
+          {countryCounts ? <span>{countryCounts.SV + countryCounts.CO + countryCounts.OTHER}</span> : null}
         </button>
         {COUNTRIES.map((c) => (
           <button
@@ -2259,13 +2990,14 @@ export default function BoardClient() {
           >
             {c === "OTHER" ? null : <span className={`${styles.flag} ${styles[`flag_${c}`] ?? ""}`} aria-hidden="true" />}
             {COUNTRY_LABEL[c]}
-            {data?.countryCounts ? <span>{data.countryCounts[c]}</span> : null}
+            {countryCounts ? <span>{countryCounts[c]}</span> : null}
           </button>
         ))}
       </div>
       {country ? (
         <p className={styles.dim}>
-          Mostrando solo {COUNTRY_LABEL[country]}. Los números de las pestañas cuentan todos los países.
+          Mostrando solo {COUNTRY_LABEL[country]}.{" "}
+          {mode === "cobros" ? "Los totales de arriba (Cobros) son solo de este país." : "Los números de las pestañas cuentan todos los países."}
         </p>
       ) : null}
 
@@ -2273,53 +3005,75 @@ export default function BoardClient() {
         className={styles.search}
         onSubmit={(e) => {
           e.preventDefault();
-          void load(0);
+          // Cobros filters as you type; the pipeline list asks the server.
+          if (mode === "lista") void load(0);
         }}
       >
-        <input value={q} placeholder="Buscar negocio, WhatsApp, ciudad, correo o código" onChange={(e) => setQ(e.target.value)} />
+        <input
+          value={q}
+          placeholder={mode === "cobros" ? "Buscar negocio, WhatsApp o código" : "Buscar negocio, WhatsApp, ciudad, correo o código"}
+          onChange={(e) => setQ(e.target.value)}
+        />
         <button type="submit">Buscar</button>
       </form>
 
       {error ? <p className={styles.error}>{error}</p> : null}
 
-      {stats && stats.top_referrers.length && (view === "activa" || view === "todas") ? (
+      {mode === "cobros" ? (
+        <BillingPanel
+          payload={billing}
+          loading={billingLoading}
+          error={billingError}
+          country={country}
+          query={q}
+          onReload={() => void loadBilling()}
+          onPatch={onPatch}
+        />
+      ) : null}
+
+      {mode === "lista" && stats && stats.top_referrers.length && (view === "activa" || view === "todas") ? (
         <p className={styles.dim}>
           Top referidores: {stats.top_referrers.map((r) => `${r.business_name} (${r.n})`).join(" · ")}
         </p>
       ) : null}
 
-      <section className={styles.list}>
-        {!data && loading
-          ? Array.from({ length: 4 }, (_, i) => <div key={i} className={styles.skeleton} />)
-          : rows.map((row) => (
-              <Card
-                key={row.id}
-                row={row}
-                links={data?.links ?? {}}
-                fileInfo={data?.fileInfo ?? {}}
-                referrer={row.referred_by_id ? data?.referrers[row.referred_by_id] : undefined}
-                settings={data?.settings ?? null}
-                log={data?.messages?.[row.id] ?? []}
-                credits={data?.credits ?? []}
-                onPatch={onPatch}
-                onSend={onSend}
-                onApplyCredit={onApplyCredit}
-                site={data?.sites?.[row.id]}
-                sitesConfig={data?.sitesConfig ?? null}
-                siteApi={siteApi}
-                onSite={onSite}
-                onReload={reloadNow}
-              />
-            ))}
-        {data && rows.length === 0 && !loading ? (
-          <p className={styles.empty}>{country ? `Nada en esta pestaña para ${COUNTRY_LABEL[country]}.` : "Nada en esta pestaña."}</p>
-        ) : null}
-      </section>
+      {mode === "lista" ? (
+        <>
+          <section className={styles.list}>
+            {!data && loading
+              ? Array.from({ length: 4 }, (_, i) => <div key={i} className={styles.skeleton} />)
+              : rows.map((row) => (
+                  <Card
+                    key={row.id}
+                    row={row}
+                    links={data?.links ?? {}}
+                    fileInfo={data?.fileInfo ?? {}}
+                    referrer={row.referred_by_id ? data?.referrers[row.referred_by_id] : undefined}
+                    settings={data?.settings ?? null}
+                    log={data?.messages?.[row.id] ?? []}
+                    credits={data?.credits ?? []}
+                    onPatch={onPatch}
+                    onSend={onSend}
+                    onApplyCredit={onApplyCredit}
+                    site={data?.sites?.[row.id]}
+                    sitesConfig={data?.sitesConfig ?? null}
+                    siteApi={siteApi}
+                    onSite={onSite}
+                    onReload={reloadNow}
+                    billing={data?.billing?.[row.id]}
+                  />
+                ))}
+            {data && rows.length === 0 && !loading ? (
+              <p className={styles.empty}>{country ? `Nada en esta pestaña para ${COUNTRY_LABEL[country]}.` : "Nada en esta pestaña."}</p>
+            ) : null}
+          </section>
 
-      {data && rows.length < data.total ? (
-        <button type="button" className={styles.more} disabled={loading} onClick={() => void load(page + 1, true)}>
-          Cargar más ({data.total - rows.length} restantes)
-        </button>
+          {data && rows.length < data.total ? (
+            <button type="button" className={styles.more} disabled={loading} onClick={() => void load(page + 1, true)}>
+              Cargar más ({data.total - rows.length} restantes)
+            </button>
+          ) : null}
+        </>
       ) : null}
     </main>
   );

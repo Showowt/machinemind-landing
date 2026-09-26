@@ -1298,3 +1298,466 @@ button:disabled {
   background-size: 200% 100%;
   animation: shimmer 1.4s linear infinite;
 }
+
+/* ─── Cobros: payment due dates + automatic reminders (2026-09-25) ───────── */
+
+/* One colour per billing state, inherited by the row, its badge and the card's payment line. */
+.tone_building,
+.tone_paused,
+.tone_cancelled {
+  --tone: rgba(240, 240, 243, 0.45);
+}
+
+.tone_free {
+  --tone: #00e5ff;
+}
+
+.tone_due_soon,
+.tone_due_today,
+.tone_renewal_due {
+  --tone: var(--b-amber);
+}
+
+.tone_overdue {
+  --tone: var(--b-red);
+}
+
+.tone_paid {
+  --tone: var(--b-wa);
+}
+
+.tabMoney,
+.tabMoneyOn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid rgba(37, 211, 102, 0.45);
+  background: transparent;
+  color: var(--b-fg);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tabMoneyOn {
+  border-color: var(--b-wa);
+  background: rgba(37, 211, 102, 0.12);
+}
+
+.tabMoney span,
+.tabMoneyOn span {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.tabMoney .tabUrgent,
+.tabMoneyOn .tabUrgent {
+  background: var(--b-red);
+  color: #06060a;
+  font-weight: 700;
+}
+
+.billing {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.billChips {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+@media (min-width: 900px) {
+  .billChips {
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
+
+.billChip,
+.billChipOn,
+.billChipStatic {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+  min-height: 60px;
+  padding: 8px;
+  border: 1px solid var(--b-line);
+  background: var(--b-card);
+  color: var(--b-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.billChipStatic {
+  cursor: default;
+}
+
+.billChipOn {
+  border-color: var(--b-blue);
+  background: rgba(30, 155, 240, 0.12);
+}
+
+.billChip:hover {
+  border-color: rgba(30, 155, 240, 0.6);
+}
+
+.billChip b,
+.billChipOn b,
+.billChipStatic b {
+  font-family: var(--font-clash), system-ui, sans-serif;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.billChip span,
+.billChipOn span,
+.billChipStatic span {
+  font-size: 11.5px;
+  line-height: 1.25;
+  color: var(--b-dim);
+}
+
+@media (min-width: 560px) {
+  .billChip,
+  .billChipOn,
+  .billChipStatic {
+    padding: 10px 12px;
+  }
+
+  .billChip b,
+  .billChipOn b,
+  .billChipStatic b {
+    font-size: 24px;
+  }
+
+  .billChip span,
+  .billChipOn span,
+  .billChipStatic span {
+    font-size: 12.5px;
+  }
+}
+
+.chipRed b {
+  color: var(--b-red);
+}
+
+.chipAmber b {
+  color: var(--b-amber);
+}
+
+.chipGreen b {
+  color: var(--b-wa);
+}
+
+.billInfo {
+  margin: 0;
+  font-size: 13px;
+  color: var(--b-dim);
+  overflow-wrap: anywhere;
+}
+
+.billInfo b {
+  color: var(--b-fg);
+  font-weight: 600;
+}
+
+.billAlert {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--b-red);
+  color: var(--b-red);
+  font-size: 13.5px;
+  overflow-wrap: anywhere;
+}
+
+.billList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.billRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--b-line);
+  border-left: 3px solid var(--tone, var(--b-line));
+  background: var(--b-card);
+}
+
+.billTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.billName {
+  min-width: 0;
+}
+
+.billName h3 {
+  margin: 0;
+  font-family: var(--font-clash), system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.billName p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--b-dim);
+  overflow-wrap: anywhere;
+}
+
+.stateBadge {
+  flex: none;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  padding: 3px 8px;
+  border: 1px solid var(--tone, var(--b-line));
+  color: var(--tone, var(--b-dim));
+}
+
+.tone_due_today .stateBadge,
+.tone_overdue .stateBadge {
+  background: var(--tone);
+  color: #06060a;
+  font-weight: 700;
+}
+
+.tone_paused .stateBadge,
+.tone_cancelled .stateBadge,
+.tone_building .stateBadge {
+  border-style: dashed;
+}
+
+.billCells {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin: 0;
+  min-width: 0;
+}
+
+.billCells > div {
+  min-width: 0;
+}
+
+.billCells dt {
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--b-dim);
+}
+
+.billCells dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.billCells dd small {
+  display: block;
+  font-size: 12.5px;
+  color: var(--b-dim);
+}
+
+.billCells .billWide {
+  grid-column: 1 / -1;
+}
+
+.dueLate {
+  color: var(--b-red);
+  font-weight: 700;
+}
+
+.dueSoon {
+  color: var(--b-amber);
+  font-weight: 700;
+}
+
+.evt {
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  margin-left: 6px;
+  border: 1px solid var(--b-line);
+  color: var(--b-dim);
+  white-space: nowrap;
+}
+
+.evt_read,
+.evt_delivered {
+  border-color: var(--b-wa);
+  color: var(--b-wa);
+}
+
+.evt_sent {
+  border-color: var(--b-blue);
+  color: var(--b-blue);
+}
+
+.evt_queued,
+.evt_held {
+  border-color: var(--b-amber);
+  color: var(--b-amber);
+}
+
+.evt_failed {
+  border-color: var(--b-red);
+  color: var(--b-red);
+}
+
+.evt_scheduled,
+.evt_skipped {
+  border-style: dashed;
+}
+
+@media (min-width: 900px) {
+  .billRow {
+    grid-template-columns: minmax(180px, 1.1fr) minmax(0, 3.4fr);
+    align-items: start;
+    column-gap: 16px;
+  }
+
+  .billTop {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .billCells {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1.5fr) minmax(0, 0.7fr);
+  }
+
+  .billCells .billWide {
+    grid-column: auto;
+  }
+
+  .billActions,
+  .billHistory,
+  .billRow > .flash {
+    grid-column: 1 / -1;
+  }
+}
+
+.billActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.billActions > button:not(.linkBtn),
+.billActions > a:not(.waBtn):not(.waGhost):not(.waDue) {
+  min-height: 40px;
+  padding: 8px 12px;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--b-line);
+  background: transparent;
+  color: var(--b-fg);
+  font: inherit;
+  font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.billActions > button:not(.linkBtn):hover:not(:disabled),
+.billActions > a:not(.waBtn):not(.waGhost):not(.waDue):hover {
+  border-color: var(--b-blue);
+}
+
+.billActions .waBtn,
+.billActions .waDue,
+.billActions .waGhost {
+  font: inherit;
+  font-size: 14px;
+}
+
+.billHistory {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.billHistory ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.billHistory li {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--b-line);
+  font-size: 13px;
+  min-width: 0;
+}
+
+.billHistory li > span:first-child {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--b-dim);
+}
+
+.billHistory li > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.billHistory .evtFuture {
+  border-style: dashed;
+  color: var(--b-dim);
+}
+
+.billEmpty {
+  margin: 0;
+  padding: 18px 12px;
+  border: 1px dashed var(--b-line);
+  color: var(--b-dim);
+  font-size: 14px;
+}
+
+/* Compact payment line on each signup card. */
+.payLine {
+  margin: 10px 0 0;
+  padding: 6px 10px;
+  border: 1px solid var(--b-line);
+  border-left: 3px solid var(--tone, var(--b-line));
+  font-size: 13.5px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.payLine b {
+  color: var(--tone, var(--b-fg));
+  font-weight: 700;
+}

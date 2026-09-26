@@ -18,6 +18,13 @@
  *     (same bytes, same name) to the public bucket under <slug>/ and the
  *     content points at their public URLs. A dry run writes nothing and points
  *     at 7-day signed URLs of the private files instead.
+ *  5. Place photos (imagery.ts): a place-bound business (tours, events, real
+ *     estate, services with a city) with fewer than 2 usable photos gets up to 6
+ *     credited reference photos of its city / area from Wikimedia Commons, shown
+ *     to the model as "Lugar N". They go only to the hero and an all-place
+ *     gallery, never on services, and only when the final vertical allows them.
+ *     Used ones are copied to <slug>/stock-<pageid>.jpg (a dry run hotlinks
+ *     Commons' own 1920 px file).
  */
 import { countryFromE164, referralLink } from "../config";
 import { getDb, storage, type WebGratisSignup } from "../server";
@@ -25,7 +32,8 @@ import { siteContentSchema, slugify, type SiteContentV1, type SiteImage } from "
 import { createMessage, type ContentBlockParam, type MessageParam, type ResponseBlock } from "./anthropic";
 import { fixPalette } from "./contrast";
 import { PUBLIC_BUCKET, type SiteSources } from "./db";
-import { clip, CopyGuard, emailOrNull, facebookUrl, guardContent, instagramUrl, locationFrom, whatsappMessageFor } from "./guards";
+import { clip, CopyGuard, emailOrNull, facebookUrl, guardContent, instagramUrl, locationFrom, norm, servesEnglishSpeakers, whatsappMessageFor } from "./guards";
+import { gatherPlaceImagery, placeImage, planPlaceImagery, publishPlacePhoto, STOCK_VERTICALS, stockPath, type PlacePhoto } from "./imagery";
 import { CONTENT_TYPE, contractSize, forVision, imageSize, loadSharp, sanitizeSvg, sniff, svgColors, WEB_IMAGE_KINDS, type MediaKind } from "./media";
 import { buildBrief, MAX_PHOTOS, siteDraftSchema, siteTool, SYSTEM_PROMPT, TOOL_NAME, type BriefFile, type SiteDraft } from "./prompt";
 
@@ -37,6 +45,63 @@ const MAX_DOC_IMAGES = 3;
 const REQUEST_MEDIA_BUDGET = 20 * 1024 * 1024;
 const MAX_TOKENS = 16_000;
 const EFFORT = "high";
+/** The place-photo step gets at most this long, and always leaves the site model this much. */
+const IMAGERY_BUDGET_MS = 85_000;
+const IMAGERY_RESERVE_MS = 150_000;
+
+/** Every visible text of a site except image alts (which may name what a photo shows). */
+function visibleTexts(c: SiteContentV1): string[] {
+  return [
+    c.business.tagline,
+    c.business.type,
+    c.seo.title,
+    c.seo.description,
+    ...c.seo.keywords,
+    c.hero.eyebrow,
+    c.hero.headline,
+    c.hero.subheadline,
+    c.about.title,
+    ...c.about.body,
+    ...c.about.highlights,
+    c.services.title,
+    c.services.intro ?? "",
+    ...c.services.items.flatMap((i) => [i.name, i.description ?? ""]),
+    ...(c.differentiators ? [c.differentiators.title, ...c.differentiators.items.flatMap((d) => [d.title, d.body])] : []),
+    ...(c.hours ? [c.hours.title, ...c.hours.lines] : []),
+    ...(c.location ? [c.location.title, c.location.areaServed ?? ""] : []),
+    c.contact.title,
+    c.contact.body,
+    ...c.faq.flatMap((f) => [f.q, f.a]),
+  ];
+}
+
+/** The same content with `from` replaced by `to` in every visible text (image alts untouched). */
+function replaceInTexts(c: SiteContentV1, from: RegExp, to: string): SiteContentV1 {
+  const r = (t: string) => t.replace(from, to).replace(/\s{2,}/g, " ").trim();
+  const ro = (t: string | null) => (t === null ? null : r(t));
+  return {
+    ...c,
+    business: { ...c.business, tagline: r(c.business.tagline), type: r(c.business.type) },
+    seo: { ...c.seo, title: r(c.seo.title), description: r(c.seo.description), keywords: c.seo.keywords.map(r) },
+    hero: { ...c.hero, eyebrow: r(c.hero.eyebrow), headline: r(c.hero.headline), subheadline: r(c.hero.subheadline) },
+    about: { ...c.about, title: r(c.about.title), body: c.about.body.map(r), highlights: c.about.highlights.map(r) },
+    services: {
+      ...c.services,
+      title: r(c.services.title),
+      intro: ro(c.services.intro),
+      items: c.services.items.map((i) => ({ ...i, name: r(i.name), description: ro(i.description) })),
+    },
+    differentiators: c.differentiators
+      ? { title: r(c.differentiators.title), items: c.differentiators.items.map((d) => ({ title: r(d.title), body: r(d.body) })) }
+      : null,
+    hours: c.hours ? { title: r(c.hours.title), lines: c.hours.lines.map(r) } : null,
+    location: c.location ? { ...c.location, title: r(c.location.title), areaServed: ro(c.location.areaServed) } : null,
+    contact: { ...c.contact, title: r(c.contact.title), body: r(c.contact.body) },
+    faq: c.faq.map((f) => ({ q: r(f.q), a: r(f.a) })),
+  };
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export class GenerationError extends Error {
   constructor(
@@ -63,6 +128,8 @@ export interface GenerateInput {
   instructions: string | null;
   /** Return the content without copying anything to the public bucket. */
   dryRun: boolean;
+  /** Look for place photos when the business qualifies (default true). */
+  placeImagery?: boolean;
 }
 
 export interface GenerateResult {
@@ -338,6 +405,40 @@ export async function generateSite(input: GenerateInput, deps: GenerateDeps): Pr
     briefFiles.push({ label: `Documento ${n}`, line: "no se pudo leer (no lo mencione)." });
   }
 
+  // Place photos (Wikimedia Commons) for place-bound businesses without enough photos of their own.
+  const usableClientPhotos = photos.filter((p) => p.publishable && p.file).length;
+  const plan = input.placeImagery === false ? null : planPlaceImagery(signup, countryName, usableClientPhotos);
+  const places: PlacePhoto[] = [];
+  if (plan) {
+    const imagery = await gatherPlaceImagery(
+      plan,
+      { businessName: signup.business_name, businessType: signup.business_type, style: signup.style, services: signup.services ?? [] },
+      {
+        fetch: deps.fetch,
+        apiKey: deps.apiKey,
+        model: deps.model,
+        deadline: Math.min(Date.now() + IMAGERY_BUDGET_MS, deps.deadline - IMAGERY_RESERVE_MS),
+      },
+    );
+    sources.stock = imagery.report;
+    for (const p of imagery.photos) {
+      if (!fits(p.vision.base64)) continue;
+      media.push(
+        { type: "text", text: `Lugar ${p.n} (foto de referencia del lugar, Wikimedia Commons; NO es del negocio${p.role === "hero" ? "; sugerida para el hero" : ""}):` },
+        { type: "image", source: { type: "base64", media_type: p.vision.mediaType, data: p.vision.base64 } },
+      );
+      places.push(p);
+    }
+    if (places.length < imagery.photos.length) sources.stock.note = [sources.stock.note, "algunas fotos del lugar no cupieron en la solicitud"].filter(Boolean).join("; ");
+  }
+  const signupText = [signup.business_name, signup.business_type, (signup.services ?? []).join(" "), signup.differentiator, signup.extra_notes, signup.style].filter(Boolean).join("\n");
+  const bilingual = servesEnglishSpeakers(signupText);
+  // A place only the reference photos show (the capital, when the client gave just the country)
+  // must never become the business's location in the copy.
+  const clientPlaces = norm([signupText, signup.city, signup.address].filter(Boolean).join(" "));
+  const unstatedPlace = places.length && plan?.place && !clientPlaces.includes(norm(plan.place)) ? plan.place : null;
+  const unstatedIn = (c: SiteContentV1): boolean => (unstatedPlace ? norm(visibleTexts(c).join(" \n ")).includes(norm(unstatedPlace)) : false);
+
   const brief = buildBrief({
     businessName: signup.business_name,
     businessType: signup.business_type,
@@ -354,6 +455,8 @@ export async function generateSite(input: GenerateInput, deps: GenerateDeps): Pr
     existingWebsite: signup.existing_website,
     extraNotes: signup.extra_notes,
     files: briefFiles,
+    places: places.map((p) => ({ n: p.n, role: p.role, alt: p.alt, title: p.candidate.title })),
+    bilingual,
     instructions: input.instructions,
   });
 
@@ -377,6 +480,8 @@ export async function generateSite(input: GenerateInput, deps: GenerateDeps): Pr
     const size = contractSize(f.size);
     return { src, alt: clip(alt, 160), width: size.width, height: size.height, credit: null };
   };
+  const placeSrc = (p: PlacePhoto) =>
+    input.dryRun ? p.candidate.thumbUrl : getDb().storage.from(PUBLIC_BUCKET).getPublicUrl(stockPath(slug, p.candidate)).data.publicUrl;
 
   // 4. The model, with one validation retry.
   const messages: MessageParam[] = [{ role: "user", content: [...media, { type: "text", text: brief }] }];
@@ -397,9 +502,12 @@ export async function generateSite(input: GenerateInput, deps: GenerateDeps): Pr
   let outputTokens = 0;
   let degraded = false;
   const usedIn = new Map<number, string[]>();
+  /** Place photo n → where the site uses it. */
+  const placeUsedIn = new Map<number, string[]>();
 
   const buildFromDraft = (d: SiteDraft): SiteContentV1 => {
     usedIn.clear();
+    placeUsedIn.clear();
     const mark = (n: number, where: string) => usedIn.set(n, [...(usedIn.get(n) ?? []), where]);
     const photoImage = (ref: { photo: number; alt: string } | null, where: string): SiteImage | null => {
       if (!ref) return null;
@@ -409,8 +517,20 @@ export async function generateSite(input: GenerateInput, deps: GenerateDeps): Pr
       if (img) mark(slot.n, where);
       return img;
     };
-    const heroImage = photoImage(d.hero.image, "hero");
+    let heroImage = photoImage(d.hero.image, "hero");
     const heroN = heroImage ? d.hero.image?.photo : undefined;
+    // Place photos: only on verticals where the place is the point, only as the hero (when no
+    // client photo leads) and as an all-place gallery (never mixed with the client's photos).
+    const stockOk = places.length > 0 && !degraded && STOCK_VERTICALS.includes(d.theme.vertical);
+    const placeOf = (n: number | null | undefined) => (n ? (places.find((p) => p.n === n) ?? null) : null);
+    let heroPlace: PlacePhoto | null = null;
+    if (!heroImage && stockOk && d.places) {
+      heroPlace = placeOf(d.places.hero);
+      if (heroPlace) {
+        heroImage = placeImage(heroPlace, placeSrc(heroPlace));
+        placeUsedIn.set(heroPlace.n, ["hero"]);
+      }
+    }
     const seenInGallery = new Set<number>();
     const gallery: SiteImage[] = [];
     for (const ref of d.gallery) {
@@ -431,7 +551,29 @@ export async function generateSite(input: GenerateInput, deps: GenerateDeps): Pr
         }
       }
     }
+    if (!gallery.length && stockOk && d.places) {
+      for (const n of d.places.gallery) {
+        const p = placeOf(n);
+        if (!p || p === heroPlace || placeUsedIn.has(p.n)) continue;
+        gallery.push(placeImage(p, placeSrc(p)));
+        placeUsedIn.set(p.n, ["galería"]);
+      }
+    }
     const name = slugify(d.business.name) === slugify(signup.business_name) ? d.business.name : clip(signup.business_name, 80);
+    // The model may tidy the city ("Puerto de la libertad, costa" → "Puerto de La Libertad") but
+    // never swap it for another place: every word it writes must be one the client wrote (or the
+    // country's). A trailing country is dropped — the renderer adds it.
+    const words = (text: string) => norm(text).split(/[^a-z0-9]+/).filter(Boolean);
+    const cityWords = new Set([...words(signup.city ?? ""), ...words(countryName)]);
+    const modelCity = countryName
+      ? d.business.city.replace(new RegExp(`[,\\s·-]+${countryName}\\s*$`, "i"), "").trim() || d.business.city
+      : d.business.city;
+    const modelCityWords = words(modelCity);
+    const city = signup.city?.trim()
+      ? modelCityWords.length > 0 && modelCityWords.every((w) => cityWords.has(w))
+        ? clip(modelCity, 80)
+        : clip(signup.city, 80)
+      : d.business.city;
     const loc = locationFrom(signup.address, signup.city, countryName);
     const location =
       d.location || loc.address || loc.mapsUrl
@@ -443,7 +585,7 @@ export async function generateSite(input: GenerateInput, deps: GenerateDeps): Pr
     return {
       version: 1,
       lang: "es",
-      business: { name: clip(name, 80), tagline: d.business.tagline, type: d.business.type, city: clip(signup.city ?? "", 80) || d.business.city, country },
+      business: { name: clip(name, 80), tagline: d.business.tagline, type: d.business.type, city, country },
       seo: d.seo,
       hero: { ...d.hero, image: heroImage },
       about: d.about,
@@ -465,7 +607,7 @@ export async function generateSite(input: GenerateInput, deps: GenerateDeps): Pr
         title: d.contact.title,
         body: d.contact.body,
         whatsapp: signup.whatsapp.replace(/\D/g, ""),
-        whatsappMessage: whatsappMessageFor(signup.site_goal),
+        whatsappMessage: whatsappMessageFor(signup.site_goal, bilingual),
         email: emailOrNull(signup.contact_email),
         instagram: instagramUrl(signup.instagram),
         facebook: facebookUrl(signup.facebook),
@@ -494,6 +636,7 @@ export async function generateSite(input: GenerateInput, deps: GenerateDeps): Pr
         degraded = true;
         messages.splice(0, messages.length, { role: "user", content: [{ type: "text", text: `${brief}\n\n(Los archivos adjuntos no se pudieron procesar; trabaje solo con el formulario.)` }] });
         for (const p of photos) p.seen = false;
+        if (sources.stock && places.length) sources.stock.note = [sources.stock.note, "la API rechazó los adjuntos: sin fotos del lugar"].filter(Boolean).join("; ");
         sources.documents = sources.documents?.map((d) => ({ ...d, read: false, note: d.read ? "la API no pudo leerlo" : d.note }));
         docsRead = false;
         continue;
@@ -522,12 +665,14 @@ export async function generateSite(input: GenerateInput, deps: GenerateDeps): Pr
     } else {
       const candidate = buildFromDraft(parsed.data);
       const check = siteContentSchema.safeParse(candidate);
-      if (check.success) {
+      if (check.success && (!unstatedIn(check.data) || calls >= 2)) {
         draft = parsed.data;
         content = check.data;
         break;
       }
-      feedback = issuesText(check.error.issues);
+      feedback = check.success
+        ? `- El texto dice «${unstatedPlace}», pero el cliente no dio ese lugar (su ubicación es «${signup.city}»). Las fotos «Lugar N» son solo de referencia: no use el nombre de lo que muestran en ningún texto (eyebrow, tagline, hero, about, servicios, contacto, SEO, areaServed). Use solo «${signup.city}».`
+        : issuesText(check.error.issues);
     }
     if (calls >= 2) throw new GenerationError(`La web del modelo no pasó la validación:\n${feedback}`.slice(0, 1500), true);
     sources.retryFeedback = feedback.slice(0, 2000);
@@ -562,6 +707,14 @@ export async function generateSite(input: GenerateInput, deps: GenerateDeps): Pr
   const priceText = [(signup.services ?? []).join("\n"), signup.differentiator, signup.extra_notes, input.instructions, ...sourcePrices].filter(Boolean).join("\n");
   const guard = new CopyGuard({ factText, priceText, whatsappDigits: signup.whatsapp.replace(/\D/g, "") });
   const ctaFallback = signup.site_goal === "citas" ? "Agendar cita" : signup.site_goal === "mostrar" ? "Escríbanos" : "Escríbanos por WhatsApp";
+  if (unstatedPlace && unstatedIn(content)) {
+    // Last resort after the model's retry: the client's own location replaces the photos' place.
+    const name = escapeRe(unstatedPlace);
+    const own = clip(signup.city || countryName, 80);
+    const withCountry = countryName ? new RegExp(`${name}(,\\s*${escapeRe(countryName)})?`, "gi") : new RegExp(name, "gi");
+    content = replaceInTexts(content, withCountry, own);
+    sources.stock = sources.stock ? { ...sources.stock, note: [sources.stock.note, `se cambió «${unstatedPlace}» por «${own}» en el texto`].filter(Boolean).join("; ") } : sources.stock;
+  }
   let guarded = guardContent(content, guard, {
     name: content.business.name,
     type: signup.business_type,
@@ -593,6 +746,30 @@ export async function generateSite(input: GenerateInput, deps: GenerateDeps): Pr
         failed.add(urlOf.get(file.path) ?? "");
       }
     }
+    const publishedSize = new Map<string, { width: number; height: number }>();
+    for (const p of places) {
+      if (!placeUsedIn.has(p.n)) continue;
+      const size = await publishPlacePhoto(
+        p,
+        slug,
+        async (path, bytes) => {
+          const { error } = await getDb().storage.from(PUBLIC_BUCKET).upload(path, bytes, { contentType: "image/jpeg", upsert: true, cacheControl: "86400" });
+          if (error) console.error("[Sites:generate] place photo copy failed", path, error);
+          return !error;
+        },
+        { fetch: deps.fetch },
+      );
+      if (!size) failed.add(placeSrc(p));
+      else publishedSize.set(placeSrc(p), size);
+    }
+    if (publishedSize.size) {
+      // The stored copy may be a little smaller than Commons' rendition (a printed frame trimmed away).
+      const sized = (img: SiteImage | null): SiteImage | null => {
+        const real = img ? publishedSize.get(img.src) : undefined;
+        return img && real ? { ...img, ...contractSize(real) } : img;
+      };
+      result = { ...result, hero: { ...result.hero, image: sized(result.hero.image) }, gallery: result.gallery.map((g) => sized(g) ?? g) };
+    }
     if (failed.size) {
       const keep = (img: SiteImage | null) => (img && !failed.has(img.src) ? img : null);
       result = {
@@ -615,6 +792,31 @@ export async function generateSite(input: GenerateInput, deps: GenerateDeps): Pr
     publicUrl: liveSrcs.has(srcOf(p.file) ?? "-") ? srcOf(p.file) : null,
     note: p.note,
   }));
+  if (sources.stock) {
+    sources.stock.used = places
+      .filter((p) => placeUsedIn.has(p.n))
+      .map((p) => {
+        const src = placeSrc(p);
+        const live = liveSrcs.has(src);
+        return {
+          n: p.n,
+          role: p.role,
+          title: p.candidate.title,
+          pageUrl: p.candidate.pageUrl,
+          author: p.candidate.author,
+          license: p.candidate.license,
+          alt: p.alt,
+          publicUrl: live && !input.dryRun ? src : null,
+          usedIn: live ? (placeUsedIn.get(p.n) ?? []) : [],
+        };
+      });
+    if (places.length && !sources.stock.used.some((u) => u.usedIn.length)) {
+      const why = !STOCK_VERTICALS.includes(result.theme.vertical)
+        ? `la web quedó como «${result.theme.vertical}», donde no se usan fotos de referencia`
+        : "el modelo no usó las fotos del lugar";
+      sources.stock.note = [sources.stock.note, why].filter(Boolean).join("; ");
+    }
+  }
   sources.sourcePrices = sourcePrices;
   sources.guards = { pricesRemoved: guard.report.pricesRemoved, sentencesRemoved: guard.report.sentencesRemoved, contrastFixes: fixes };
   sources.notes = draft.notesForTeam;

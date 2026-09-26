@@ -305,8 +305,21 @@ export function guardContent(content: SiteContentV1, guard: CopyGuard, fb: Fallb
 
 // ─── Contact fields (server-filled, never from the model) ───────────────────
 
-export function whatsappMessageFor(goal: string | null): string {
-  return goal === "citas" ? "Hola, vi su página web y quiero agendar una cita" : "Hola, vi su página web y quiero información";
+/**
+ * The WhatsApp text the site pre-fills. Businesses that serve English-speaking visitors get an
+ * English line too, so a tourist can tap the button without translating anything.
+ */
+export function whatsappMessageFor(goal: string | null, bilingual = false): string {
+  const es = goal === "citas" ? "Hola, vi su página web y quiero agendar una cita" : "Hola, vi su página web y quiero información";
+  if (!bilingual) return es;
+  const en = goal === "citas" ? "Hi, I saw your website and I'd like to book." : "Hi, I saw your website and I'd like more information.";
+  return `${es}. / ${en}`;
+}
+
+/** The client says (anywhere in the form) that they serve English speakers / foreign visitors. */
+const BILINGUAL_RE = /\b(ingles|english|bilingue|gringos?|extranjeros?|turistas? (extranjer\w*|internacional\w*)|foreigners?)\b/;
+export function servesEnglishSpeakers(text: string): boolean {
+  return BILINGUAL_RE.test(norm(text));
 }
 
 const MAPS_HOST_RE = /^https?:\/\/([^/]*\.)?(google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl\/maps)/i;

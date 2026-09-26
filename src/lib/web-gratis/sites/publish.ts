@@ -39,12 +39,25 @@ export interface PublishDeps {
   markDelivered: (signupId: string, body: { status?: "entregada"; siteUrl: string }) => Promise<{ ok: boolean; message: string }>;
 }
 
+/**
+ * A preview can be generated for a lead who hasn't finished the form (scripts/sites/generate-preview.mts),
+ * but nothing goes live until they submit it and accept the terms.
+ */
+export const NOT_SUBMITTED_MESSAGE =
+  "Este cliente aún no terminó su registro (no aceptó los términos). Envíele la vista previa y pídale terminar el formulario.";
+
 const CLOSED_FOR_PUBLISH: Record<string, string> = {
-  borrador: "El cliente no terminó el formulario.",
+  borrador: NOT_SUBMITTED_MESSAGE,
   descartada: "La solicitud está descartada.",
   cancelada: "La solicitud está cancelada.",
   pausada: "La solicitud está pausada (no pagó): reábrala en su tarjeta antes de publicar.",
 };
+
+/** Why this signup's site can't go live, or null. */
+export function publishBlocker(signup: { status: string; terms_accepted_at: string | null }): string | null {
+  if (signup.status === "borrador" || !signup.terms_accepted_at) return NOT_SUBMITTED_MESSAGE;
+  return CLOSED_FOR_PUBLISH[signup.status] ?? null;
+}
 
 const DNS_MISSING =
   "Falta el registro DNS comodín *.machinemindconsulting.com en GoDaddy (CNAME * → cname.vercel-dns.com). La dirección ya quedó agregada en Vercel: publique de nuevo cuando el DNS esté listo. No se le avisó al cliente.";
@@ -86,8 +99,8 @@ export async function publishSite(
   }
   const signup = await getSignup(site.signup_id);
   if (!signup) return { ok: false, status: 404, code: "not_found", message: "La solicitud ya no existe." };
-  const closed = CLOSED_FOR_PUBLISH[signup.status];
-  if (closed) return { ok: false, status: 409, code: "not_eligible", message: closed };
+  const blocked = publishBlocker(signup);
+  if (blocked) return { ok: false, status: 409, code: "not_eligible", message: blocked };
   if (!deps.vercel) return vercelMissing();
 
   const host = `${site.slug}.${SITES_ROOT_DOMAIN}`;
@@ -172,7 +185,7 @@ export async function setSitePaused(
     if (site.status !== "paused") return { ok: false, status: 409, code: "not_eligible", message: "La web no está pausada." };
     if (!site.published_at) return { ok: false, status: 409, code: "not_eligible", message: "Nunca se publicó: use «Publicar»." };
     const signup = await getSignup(site.signup_id);
-    const closed = signup ? CLOSED_FOR_PUBLISH[signup.status] : "La solicitud ya no existe.";
+    const closed = signup ? publishBlocker(signup) : "La solicitud ya no existe.";
     if (closed) return { ok: false, status: 409, code: "not_eligible", message: closed };
   }
   const { data, error } = await getDb()

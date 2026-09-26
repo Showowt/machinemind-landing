@@ -33,6 +33,35 @@ export interface SiteSources {
   usage?: { inputTokens: number; outputTokens: number };
   /** Set by quick edits from the board. */
   lastEdit?: { at: string; fields: string[] };
+  /** Place photos from Wikimedia Commons (imagery.ts): what was searched, picked and used. */
+  stock?: StockSources | null;
+}
+
+/** One Wikimedia Commons file the imagery step picked (and, once used, where it went). */
+export interface StockPick {
+  /** "Lugar N" as the generator saw it. */
+  n: number;
+  role: "hero" | "gallery";
+  title: string;
+  pageUrl: string;
+  author: string;
+  license: string;
+  alt: string;
+}
+
+export interface StockSources {
+  /** Why imagery ran (the place-bound vertical guessed from the form). */
+  vertical: string;
+  place: string | null;
+  queries: string[];
+  /** Files the searches returned / that passed the license, size, place and content filters. */
+  found: number;
+  candidates: number;
+  picked: StockPick[];
+  used: (StockPick & { publicUrl: string | null; usedIn: string[] })[];
+  /** Why nothing (or less) was used, for the team; null when all went well. */
+  note: string | null;
+  ms: number;
 }
 
 export interface SiteRow {

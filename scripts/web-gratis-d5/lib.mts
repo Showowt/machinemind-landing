@@ -27,6 +27,9 @@ export const site = {
   payments: await import(`${REPO}/src/lib/web-gratis/payments.ts`),
   templates: await import(`${REPO}/src/lib/web-gratis/templates.ts`),
   config: await import(`${REPO}/src/lib/web-gratis/config.ts`),
+  billing: await import(`${REPO}/src/lib/web-gratis/billing.ts`),
+  notify: await import(`${REPO}/src/lib/web-gratis/notify.ts`),
+  outbox: await import(`${REPO}/src/lib/web-gratis/outbox.ts`),
 };
 
 export const db = site.server.getDb();
@@ -182,8 +185,11 @@ export async function messagesOf(id: string): Promise<Record<string, unknown>[]>
   return (data ?? []) as Record<string, unknown>[];
 }
 
-export async function templateRow(id: string, template: string): Promise<Record<string, unknown> | null> {
-  const { data, error } = await db.from("web_gratis_messages").select("*").eq("signup_id", id).eq("template", template).maybeSingle();
+/** The row of a template outside any renewal cycle (or of one cycle when `cycle` is given). */
+export async function templateRow(id: string, template: string, cycle: string | null = null): Promise<Record<string, unknown> | null> {
+  let q = db.from("web_gratis_messages").select("*").eq("signup_id", id).eq("template", template);
+  q = cycle ? q.eq("cycle", cycle) : q.is("cycle", null);
+  const { data, error } = await q.maybeSingle();
   if (error) throw error;
   return (data as Record<string, unknown> | null) ?? null;
 }
@@ -230,8 +236,11 @@ export async function cleanup(): Promise<string> {
     : { count: 0 };
   const { count: evts } = await db.from("web_gratis_stripe_events").select("id", { count: "exact", head: true }).like("id", "evt_ZZ%");
   const { count: credits } = await db.from("web_gratis_referral_credits").select("id", { count: "exact", head: true });
+  const { count: ledgerLeft } = ids.length
+    ? await db.from("web_gratis_payments").select("id", { count: "exact", head: true }).in("signup_id", ids.slice(0, 200))
+    : { count: 0 };
   const { count: sitesLeft } = ids.length
     ? await db.from("web_gratis_sites").select("id", { count: "exact", head: true }).in("signup_id", ids.slice(0, 200))
     : { count: 0 };
-  return `cleanup: signups deleted=${ids.length} files=${files} public site files=${publicFiles} | left: ZZ signups=${left} ZZ sites=${sitesLeft} ZZ-phone messages=${msgs} ZZ stripe events=${evts} referral credits(total)=${credits}`;
+  return `cleanup: signups deleted=${ids.length} files=${files} public site files=${publicFiles} | left: ZZ signups=${left} ZZ sites=${sitesLeft} ZZ-phone messages=${msgs} ZZ stripe events=${evts} ZZ payments=${ledgerLeft} referral credits(total)=${credits}`;
 }

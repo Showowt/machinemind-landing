@@ -4,8 +4,10 @@
  * per-country counts for the tab, board stats, settings, 1-hour signed links for
  * logos / photos / documents, file sizes for documents, referrer names, each
  * client's WhatsApp log (newest 25) and referral credits, plus each signup's
- * generated website (summary + 30-day stats, keyed by signup id) and which
- * site integrations are configured.
+ * generated website (summary + 30-day stats, keyed by signup id), which
+ * site integrations are configured, and each signup's payment timeline
+ * (billing.ts — day N of the free month, due date, next automatic reminder;
+ * the same source as GET /api/web-gratis/admin/billing).
  * Bearer WEB_GRATIS_ADMIN_TOKEN.
  */
 import {
@@ -21,18 +23,23 @@ import {
   type BoardView,
   type OpsSignup,
 } from "@/lib/web-gratis/admin";
+import { billingTimeline, type BillingTimeline } from "@/lib/web-gratis/billing";
 import { fail, ok } from "@/lib/web-gratis/http";
 import { boardStats } from "@/lib/web-gratis/outbox";
 import { CREDITS_TABLE } from "@/lib/web-gratis/payments";
-import { getDb, SETTINGS_TABLE, SIGNUPS_TABLE, storage } from "@/lib/web-gratis/server";
+import { getDb, SETTINGS_TABLE, SIGNUPS_TABLE, storage, type WebGratisSettings } from "@/lib/web-gratis/server";
 import type { SiteSummary } from "@/lib/web-gratis/sites/shared";
 import { siteSummaries, sitesConfig } from "@/lib/web-gratis/sites/summary";
-import { MESSAGES_TABLE } from "@/lib/web-gratis/whatsapp";
+import { hasPaymentMethod, PAYMENT_TEMPLATES } from "@/lib/web-gratis/templates";
+import { MESSAGES_TABLE, type MessageRow } from "@/lib/web-gratis/whatsapp";
 
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 40;
 const LOG_PER_CLIENT = 25;
+const MESSAGE_PAGE = 1000;
+/** Safety stop for the page's payment-ask rows. */
+const MAX_MESSAGE_ROWS = 50_000;
 
 interface LogRow {
   id: number;
@@ -67,6 +74,54 @@ interface CreditRow {
 interface FileInfo {
   size: number | null;
   mime: string | null;
+}
+
+/**
+ * The payment asks (day 28 / day 30 / pause notice / renewal — the only templates billing.ts
+ * reads) of the signups on this page, grouped by signup. Paged: PostgREST caps a response at
+ * 1000 rows, and a cut would drop the newest rows (the current cycle's).
+ */
+async function templateMessages(ids: string[]): Promise<Map<string, MessageRow[]>> {
+  const bySignup = new Map<string, MessageRow[]>();
+  if (ids.length === 0) return bySignup;
+  for (let from = 0; from < MAX_MESSAGE_ROWS; from += MESSAGE_PAGE) {
+    const { data, error } = await getDb()
+      .from(MESSAGES_TABLE)
+      .select("*")
+      .in("signup_id", ids)
+      .in("template", [...PAYMENT_TEMPLATES])
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + MESSAGE_PAGE - 1);
+    if (error) throw error;
+    const page = (data ?? []) as MessageRow[];
+    for (const m of page) {
+      if (!m.signup_id) continue;
+      const list = bySignup.get(m.signup_id) ?? [];
+      list.push(m);
+      bySignup.set(m.signup_id, list);
+    }
+    if (page.length < MESSAGE_PAGE) break;
+  }
+  return bySignup;
+}
+
+/**
+ * Payment timeline per signup on this page (the card's payment line). Without
+ * the message ledger a timeline would show sent reminders as still pending, so
+ * no ledger → no payment lines, never wrong ones.
+ */
+function billingFor(rows: OpsSignup[], sends: Map<string, MessageRow[]> | null, payable: boolean, now: Date): Record<string, BillingTimeline> {
+  const out: Record<string, BillingTimeline> = {};
+  if (!sends) return out;
+  for (const r of rows) {
+    try {
+      out[r.id] = billingTimeline(r, sends.get(r.id) ?? [], now, { hasPaymentMethod: payable });
+    } catch (error) {
+      console.error("[WebGratis:admin:list] billing timeline", r.id, error);
+    }
+  }
+  return out;
 }
 
 /** PostgREST `or` filter for the search box (input already restricted to safe characters). */
@@ -142,7 +197,7 @@ export async function GET(request: Request) {
     };
 
     const ids = rows.map((r) => r.id);
-    const [stats, settingsRes, logRes, creditRes, countryCountList, fileInfo, sites] = await Promise.all([
+    const [stats, settingsRes, logRes, creditRes, countryCountList, fileInfo, sites, sends] = await Promise.all([
       boardStats(),
       db.from(SETTINGS_TABLE).select("delivery_days, high_demand, pay_link, demo_link, paypal_link").eq("id", 1).single(),
       ids.length
@@ -167,6 +222,10 @@ export async function GET(request: Request) {
       siteSummaries(ids).catch((siteError: unknown): Record<string, SiteSummary> => {
         console.error("[WebGratis:admin:list] sites", siteError);
         return {};
+      }),
+      templateMessages(ids).catch((sendsError: unknown): Map<string, MessageRow[]> | null => {
+        console.error("[WebGratis:admin:list] billing ledger", sendsError);
+        return null;
       }),
     ]);
     if (logRes.error) console.error("[WebGratis:admin:list] whatsapp log", logRes.error);
@@ -214,6 +273,17 @@ export async function GET(request: Request) {
       ? { SV: countryCountList[0], CO: countryCountList[1], OTHER: countryCountList[2] }
       : null;
 
+    if (settingsRes.error) console.error("[WebGratis:admin:list] settings", settingsRes.error);
+    const settings: WebGratisSettings = (settingsRes.data as WebGratisSettings | null) ?? {
+      delivery_days: null,
+      high_demand: false,
+      pay_link: null,
+      demo_link: null,
+      paypal_link: null,
+    };
+    // Same rule as the scheduler: /pagar can take money (Stripe link, or PayPal — always has a default).
+    const billing = billingFor(rows, sends, hasPaymentMethod(settings), new Date());
+
     return ok({
       view,
       page,
@@ -223,7 +293,7 @@ export async function GET(request: Request) {
       countryCounts,
       rows,
       stats,
-      settings: settingsRes.data ?? { delivery_days: null, high_demand: false, pay_link: null, demo_link: null, paypal_link: null },
+      settings,
       links,
       fileInfo,
       referrers,
@@ -231,6 +301,7 @@ export async function GET(request: Request) {
       credits,
       sites,
       sitesConfig: sitesConfig(),
+      billing,
     });
   } catch (error) {
     console.error("[WebGratis:admin:list]", error);

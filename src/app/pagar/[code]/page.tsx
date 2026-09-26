@@ -20,7 +20,7 @@ import styles from "../pay.module.css";
 import PayShell from "../PayShell";
 import { PAY_COPY, payCountry, payLang, type PayCountry } from "../copy";
 import { DEFAULT_PAYPAL_LINK, MM_WHATSAPP, MONTHLY_PRICE_USD } from "@/lib/web-gratis/config";
-import { findSignupByCode, loadSettings, type WebGratisSettings, type WebGratisSignup } from "@/lib/web-gratis/server";
+import { findSignupByCode, loadSettings, svDate, type WebGratisSettings, type WebGratisSignup } from "@/lib/web-gratis/server";
 
 export const dynamic = "force-dynamic";
 
@@ -46,6 +46,24 @@ function stripeHref(payLink: string | null, signupId: string, lang: "es" | "en")
   } catch {
     return null;
   }
+}
+
+/** Days before paid_through when a PayPal/manual payer can renew here (the renewal WhatsApp goes out at −3). */
+const RENEWAL_OPENS_DAYS = 7;
+
+/** A PayPal/manual payer whose month is ending (or ended): /pagar shows the renewal, not "ya está activa". */
+function renewalDue(signup: WebGratisSignup): { due: string; past: boolean } | null {
+  if (signup.status !== "activa") return null;
+  if (signup.paid_via !== "paypal" && signup.paid_via !== "manual") return null; // Stripe renews itself
+  if (!signup.paid_through) return null;
+  const today = svDate(new Date());
+  if (today < svDate(new Date(`${signup.paid_through}T12:00:00Z`), -RENEWAL_OPENS_DAYS)) return null;
+  return { due: signup.paid_through, past: today > signup.paid_through };
+}
+
+function longDate(ymd: string, lang: "es" | "en"): string {
+  const d = new Date(`${ymd}T12:00:00Z`);
+  return d.toLocaleDateString(lang === "es" ? "es-SV" : "en-US", { day: "numeric", month: "long", timeZone: "UTC" });
 }
 
 function waHref(text: string): string {
@@ -106,7 +124,8 @@ export default async function PayPage({ params, searchParams }: PageProps) {
     );
   }
 
-  if (signup.status === "activa") {
+  const renewal = renewalDue(signup);
+  if (signup.status === "activa" && !renewal) {
     return (
       <PayShell t={t} lang={lang} toggleHref={toggleHref} country={country}>
         <section className={styles.card}>
@@ -162,9 +181,16 @@ export default async function PayPage({ params, searchParams }: PageProps) {
       <section className={styles.card}>
         <p className={styles.kicker}>{t.kicker}</p>
         <h1 className={styles.title}>
-          {paused ? t.pausedTitleLead : t.titleLead} <span className={styles.accent}>{paused ? t.pausedTitleAccent : t.titleAccent}</span>
+          {paused ? t.pausedTitleLead : renewal ? t.renewalTitleLead : t.titleLead}{" "}
+          <span className={styles.accent}>{paused ? t.pausedTitleAccent : renewal ? t.renewalTitleAccent : t.titleAccent}</span>
         </h1>
-        <p className={styles.lede}>{paused ? t.pausedLede(signup.business_name) : t.lede(signup.business_name)}</p>
+        <p className={styles.lede}>
+          {paused
+            ? t.pausedLede(signup.business_name)
+            : renewal
+              ? t.renewalLede(signup.business_name, longDate(renewal.due, lang), renewal.past)
+              : t.lede(signup.business_name)}
+        </p>
         <p className={styles.price}>
           <span className={styles.amount}>${MONTHLY_PRICE_USD}</span>
           <span className={styles.per}>USD {t.per}</span>

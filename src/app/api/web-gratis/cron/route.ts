@@ -4,9 +4,13 @@
  * 1. Queues "abandoned form" alerts for drafts idle 20+ minutes.
  * 2. Health checks (stuck/failed alerts, storage) → system alerts.
  * 3. Automatic WhatsApp scheduler (confirm / ready / day 28 / day 30 / pause
- *    notice / rescue + auto-pause), max 25 sends, inside the send windows.
+ *    notice / rescue + auto-pause, and monthly renewals of PayPal / manual
+ *    payers), max 25 sends, inside the send windows.
  * 4. Referral credits a failed write left behind are granted (idempotent).
- * 5. Drains the outbox until it's empty or the time budget runs out.
+ * 5. Billing: "💰 PAGO RECIBIDO" for every payment not alerted yet (board
+ *    payments land in the ledger through a DB trigger), and the daily
+ *    "💳 COBROS" digest at 08:00 SV (once a day: outbox key cobros:<SV date>).
+ * 6. Drains the outbox until it's empty or the time budget runs out.
  * 0. First of all it kicks /api/web-gratis/sites/run (client-website
  *    generation, one site per minute) as a separate invocation, without
  *    awaiting it on this path — a 1–2 minute model call must never delay the
@@ -19,7 +23,7 @@ import { after, NextResponse } from "next/server";
 import { SITE_ORIGIN } from "@/lib/web-gratis/config";
 import { sendTelegram, systemHtml, telegramChats } from "@/lib/web-gratis/notify";
 import { drainOutbox, enqueueSystem, runMaintenance, type DrainReport } from "@/lib/web-gratis/outbox";
-import { reconcileReferralCredits } from "@/lib/web-gratis/payments";
+import { alertNewPayments, defaultBillingDeps, reconcileReferralCredits, runCobrosDigest, type DigestReport } from "@/lib/web-gratis/payments";
 import { defaultWaDeps, runWhatsAppScheduler, type SchedulerReport } from "@/lib/web-gratis/whatsapp";
 
 export const maxDuration = 60;
@@ -79,6 +83,23 @@ export async function GET(request: Request) {
     } catch (error) {
       console.error("[WebGratis:cron] referral credit reconcile", error);
     }
+    // Billing alerts: each step on its own, so one failing never stops the others or the drain.
+    const billingDeps = defaultBillingDeps();
+    let paymentsAlerted = 0;
+    try {
+      const paid = await alertNewPayments(billingDeps);
+      paymentsAlerted = paid.alerted;
+      if (paid.errors.length) console.error("[WebGratis:cron] payment alerts", paid.errors);
+    } catch (error) {
+      console.error("[WebGratis:cron] payment alerts", error);
+    }
+    let cobros: DigestReport | { error: string } | null = null;
+    try {
+      cobros = await runCobrosDigest(billingDeps);
+    } catch (error) {
+      console.error("[WebGratis:cron] cobros digest", error);
+      cobros = { error: error instanceof Error ? error.message : String(error) };
+    }
     const drains: DrainReport[] = [];
     // Keep draining while there's a full batch and time left (45s of the 60s budget).
     while (Date.now() - started < 40_000) {
@@ -86,7 +107,7 @@ export async function GET(request: Request) {
       drains.push(report);
       if (report.claimed < 80) break;
     }
-    return NextResponse.json({ data: { maintenance, whatsapp, creditsGranted, drains, ms: Date.now() - started }, error: null, message: null });
+    return NextResponse.json({ data: { maintenance, whatsapp, creditsGranted, paymentsAlerted, cobros, drains, ms: Date.now() - started }, error: null, message: null });
   } catch (error) {
     console.error("[WebGratis:cron]", error);
     // The database may be the problem, so alert directly — at most every 10 minutes.

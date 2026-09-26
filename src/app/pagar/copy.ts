@@ -60,6 +60,12 @@ export const PAY_COPY = {
     activeBody: (business: string) =>
       `Gracias por confiar en nosotros. La web de ${business} sigue en línea con soporte completo: cambios, actualizaciones y ayuda cuando la necesite.`,
     activeHelp: "¿Necesita un cambio? Escríbanos",
+    renewalTitleLead: "Renueve su",
+    renewalTitleAccent: "mensualidad.",
+    renewalLede: (business: string, due: string, past: boolean) =>
+      past
+        ? `La mensualidad de la web de ${business} venció el ${due}. Renuévela para que siga en línea con soporte completo.`
+        : `La mensualidad de la web de ${business} vence el ${due}. Renuévela para que siga en línea con soporte completo, sin interrupciones.`,
     buildingTitle: "Su web aún está en construcción",
     buildingBody: (business: string) =>
       `No tiene que pagar nada todavía. Primero le entregamos la web de ${business} y la usa gratis ${FREE_DAYS} días; le avisamos por WhatsApp apenas esté lista.`,
@@ -138,6 +144,12 @@ export const PAY_COPY = {
     activeBody: (business: string) =>
       `Thank you for trusting us. ${business}'s website stays online with full support: changes, updates and help whenever you need it.`,
     activeHelp: "Need a change? Message us",
+    renewalTitleLead: "Renew your",
+    renewalTitleAccent: "monthly plan.",
+    renewalLede: (business: string, due: string, past: boolean) =>
+      past
+        ? `${business}'s monthly plan was due on ${due}. Renew it to keep the website online with full support.`
+        : `${business}'s monthly plan is due on ${due}. Renew it to keep the website online with full support, uninterrupted.`,
     buildingTitle: "Your website is still being built",
     buildingBody: (business: string) =>
       `There's nothing to pay yet. We deliver ${business}'s website first and you use it free for ${FREE_DAYS} days; we'll message you on WhatsApp as soon as it's ready.`,

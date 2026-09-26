@@ -4,10 +4,15 @@
  * Signature verified by hand (HMAC-SHA256 of `${t}.${rawBody}` with
  * STRIPE_WEBHOOK_SECRET_WEBGRATIS, 5-minute tolerance). Without the secret the
  * endpoint answers 503 so Stripe keeps retrying until it's configured — no
- * event is ever accepted unverified. Handled events: checkout.session.completed
- * (+ async payment succeeded/failed) → activa + referral credit + alert;
- * invoice.payment_failed / customer.subscription.deleted → alert only.
- * Idempotent on the event id.
+ * event is ever accepted unverified. Handled events:
+ *   checkout.session.completed (+ async payment succeeded/failed) → activa +
+ *     payments ledger + referral credit + "💰 PAGO RECIBIDO" alert;
+ *   invoice.paid → monthly renewal: paid_through = the new period's end, ledger
+ *     + "💰 PAGO RECIBIDO" (the first invoice only corrects the date);
+ *   invoice.payment_failed / customer.subscription.deleted → billing_issue on
+ *     the signup (the board shows it as overdue / cancelled) + alert.
+ * The Stripe endpoint must be subscribed to all of these (invoice.paid included).
+ * Idempotent on the event id (and the ledger on the Stripe id).
  */
 import { fail, ok } from "@/lib/web-gratis/http";
 import { enqueueSystem } from "@/lib/web-gratis/outbox";

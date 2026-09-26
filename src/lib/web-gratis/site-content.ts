@@ -7,15 +7,19 @@
  * - Spanish, usted register, the business's own voice; never invent facts: no prices, awards,
  *   years in business, addresses, phone numbers, reviews or testimonials the client didn't give.
  * - Prices only when the client wrote them (form text or their uploaded menu/price list).
- * - Images are only the client's own uploads (published to the public bucket) or Unsplash photos
- *   with credit; `null` when there is nothing fitting — the renderer has designed fallbacks.
- * - Colors come from the client's logo / stated style / vertical — NOT MachineMind black + gold.
+ * - Images are only the client's own uploads (published to the public bucket), Unsplash photos
+ *   with credit, or place photos from Wikimedia Commons (copied to the public bucket, `credit` =
+ *   "<Author> · <License> · Wikimedia Commons" + the file page). Credited images are ATMOSPHERE
+ *   (the city / area), never the client's products, properties, team or clients. `null` when
+ *   there is nothing fitting — the renderer has designed fallbacks.
+ * - Colors come from the client's logo / stated style / vertical — NOT MachineMind black + gold
+ *   (unless the client explicitly asked for black and gold).
  * Client-safe: no secrets.
  */
 import { z } from "zod";
 
 export const SITE_VERTICALS = [
-  "food", "beauty", "retail", "tours", "health", "services", "auto", "education", "events", "other",
+  "food", "beauty", "retail", "tours", "health", "services", "auto", "education", "events", "realestate", "other",
 ] as const;
 export type SiteVertical = (typeof SITE_VERTICALS)[number];
 
@@ -24,12 +28,12 @@ const text = (max: number) => z.string().trim().min(1).max(max);
 const optText = (max: number) => z.string().trim().max(max).nullable();
 
 export const siteImageSchema = z.object({
-  /** Absolute https URL (public bucket or images.unsplash.com). */
+  /** Absolute https URL (public bucket or images.unsplash.com; upload.wikimedia.org only in dry runs). */
   src: z.url().max(1000),
   alt: text(160),
   width: z.number().int().positive().max(8000).nullable(),
   height: z.number().int().positive().max(8000).nullable(),
-  /** Required for Unsplash photos (photographer + profile link); null for the client's own. */
+  /** Required for Unsplash / Wikimedia Commons photos (author [· license · source] + link); null for the client's own. */
   credit: z.object({ name: text(80), url: z.url().max(500) }).nullable(),
 });
 export type SiteImage = z.infer<typeof siteImageSchema>;

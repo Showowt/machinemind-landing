@@ -8,9 +8,11 @@
  * (and therefore the outbox) is unreachable.
  */
 import { Resend } from "resend";
+import type { BillingTimeline } from "./billing";
 import { countryFromE164, FREE_DAYS, MM_INSTAGRAM, MONTHLY_PRICE_USD, referralLink, SITE_ORIGIN, type SignupCountry } from "./config";
 import { scripts, waLink } from "./scripts";
 import { signedLinks, type Referrer, type WebGratisSignup } from "./server";
+import { formatDateEs, formatDayEs } from "./templates";
 
 export const BOARD_URL = `${SITE_ORIGIN}/admin/web-gratis`;
 
@@ -407,6 +409,227 @@ export function sitePublishedMessage(i: SiteAlertInfo): SiteAlertMessage {
       { href: i.publicUrl, label: "Abrir la web" },
     ),
   };
+}
+
+// ─── Billing (cobros): payment alerts and the daily digest ───────────────────
+
+const VIA_NAME: Record<string, string> = { stripe: "Stripe", paypal: "PayPal", manual: "efectivo / a mano" };
+
+export function viaName(via: string | null | undefined): string {
+  return via ? (VIA_NAME[via] ?? via) : "—";
+}
+
+/** "$19" for a plan-price payment, or what Stripe actually charged ("$19.00 USD"). */
+export function amountLabel(cents: number | null | undefined, currency: string | null | undefined): string {
+  if (cents === null || cents === undefined) return `$${MONTHLY_PRICE_USD}`;
+  return `$${(cents / 100).toFixed(2)} ${(currency ?? "usd").toUpperCase()}`;
+}
+
+export interface PaymentAlertInput {
+  business: string;
+  amount: string;
+  via: string | null;
+  /** YYYY-MM-DD the payment covers up to (Stripe: the current period's end). */
+  paidThrough: string | null;
+}
+
+/** "💰 PAGO RECIBIDO — Cabalito sv · $19 · PayPal · pagado hasta 25 de noviembre" (first line of every payment alert). */
+export function paymentReceivedText(p: PaymentAlertInput): string {
+  return `💰 PAGO RECIBIDO — ${p.business} · ${p.amount} · ${viaName(p.via)} · pagado hasta ${p.paidThrough ? formatDateEs(p.paidThrough) : "—"}`;
+}
+
+/**
+ * The polite message a person sends the client from their own WhatsApp (usted),
+ * by situation. Renewals of PayPal / manual payers carry the PayPal link: /pagar
+ * shows its pay buttons only before the first payment.
+ */
+export function billingWaText(t: BillingTimeline, paypalLink: string): string {
+  const price = `$${t.monthly} USD al mes`;
+  const due = t.dueDate ? formatDateEs(t.dueDate) : null;
+  const hello = `Hola, ${t.business}. Le saluda MachineMind 👋`;
+  const thanks = "¡Muchas gracias!";
+  switch (t.state) {
+    case "due_today":
+      return `${hello} Hoy termina su mes gratis de la página web. Para mantenerla en línea con soporte completo son ${price}, sin contrato: ${t.payUrl} ${thanks}`;
+    case "overdue":
+      // A paying client's /pagar page says "ya está activa" (no pay buttons), so the fallback is PayPal.
+      return t.paidVia
+        ? `${hello} No pudimos cobrar la mensualidad de su página web (${price}) con su tarjeta. ¿Nos ayuda a revisarlo? Si prefiere, puede pagar este mes por PayPal aquí: ${paypalLink} y enviarnos el comprobante por este chat. ${thanks}`
+        : `${hello} Su mes gratis de la página web terminó${due ? ` el ${due}` : ""}. Para mantenerla en línea con soporte completo son ${price}, sin contrato: ${t.payUrl} Si prefiere alojarla usted mismo, le entregamos los archivos. ${thanks}`;
+    case "renewal_due":
+    case "due_soon":
+      if (t.paidVia && t.paidVia !== "stripe") {
+        return `${hello} La mensualidad de su página web (${price}) ${t.daysLeft !== null && t.daysLeft < 0 ? "venció" : "vence"}${due ? ` el ${due}` : ""}. Puede renovarla aquí: ${paypalLink} y enviarnos el comprobante por este chat. ¡Gracias por su confianza!`;
+      }
+      return `${hello} Su mes gratis de la página web termina${due ? ` el ${due}` : " pronto"}. Para mantenerla en línea con soporte completo son ${price}, sin contrato: ${t.payUrl} ${thanks}`;
+    case "paused":
+      return `${hello} Su página web está en pausa. Si quiere tenerla de nuevo en línea (${price}, sin contrato), actívela aquí: ${t.payUrl} y se la reactivamos el mismo día.`;
+    default:
+      return `${hello} Le escribo por su página web: aquí puede mantenerla en línea (${price}, sin contrato): ${t.payUrl} ${thanks}`;
+  }
+}
+
+export interface DigestPaused {
+  t: BillingTimeline;
+  pausedAt: string;
+}
+
+export interface DigestPayment {
+  business: string;
+  amount: string;
+  via: string | null;
+  paidThrough: string | null;
+}
+
+export interface CobrosDigestInput {
+  /** SV date of the digest (YYYY-MM-DD). */
+  day: string;
+  dueToday: BillingTimeline[];
+  /** Free month ending in 1–3 days. */
+  dueSoon: BillingTimeline[];
+  overdue: BillingTimeline[];
+  /** PayPal / manual renewals coming due in 1–3 days. */
+  renewals: BillingTimeline[];
+  paused: DigestPaused[];
+  paymentsYesterday: DigestPayment[];
+  totals: { paying: number; mrr: number; dueThisWeek: number };
+  paypalLink: string;
+}
+
+export interface CobrosDigestPart {
+  html: string;
+  text: string;
+  /** Only the first part goes by e-mail (with the whole digest). */
+  subject: string | null;
+  emailHtml: string | null;
+}
+
+/** Whether the digest has anything to report (the total line alone isn't news). */
+export function cobrosHasNews(i: CobrosDigestInput): boolean {
+  return (
+    i.dueToday.length + i.dueSoon.length + i.overdue.length + i.renewals.length + i.paused.length + i.paymentsYesterday.length > 0
+  );
+}
+
+function dueIn(days: number | null): string {
+  if (days === null) return "";
+  if (days === 0) return "hoy";
+  const n = Math.abs(days);
+  return days > 0 ? `en ${n} día${n === 1 ? "" : "s"}` : `hace ${n} día${n === 1 ? "" : "s"}`;
+}
+
+function nextHint(t: BillingTimeline): string | null {
+  if (!t.next) return null;
+  const when = formatDateEs(t.next.date);
+  return t.next.status === "held" ? `${t.next.label} retenido (${when})` : `${t.next.label}: ${when}`;
+}
+
+/** One client line: business, state, date, WhatsApp (prefilled) and /pagar links. */
+function clientLine(t: BillingTimeline, detail: string, paypalLink: string): { html: string; text: string } {
+  const wa = waLink(t.whatsapp, billingWaText(t, paypalLink));
+  return {
+    html: `• <b>${esc(clip(t.business, 60))}</b> — ${esc(detail)} · <a href="${esc(wa)}">WhatsApp</a> · <a href="${esc(t.payUrl)}">/pagar</a>`,
+    text: `• ${t.business} — ${detail} · WhatsApp ${t.whatsapp} · ${t.payUrl}`,
+  };
+}
+
+/**
+ * "💳 COBROS — <día>": who is due today, in 1–3 days (day N of the free
+ * month), overdue, PayPal renewals coming up, paused for non-payment, payments
+ * received yesterday, and the one-line total. Packed into as many Telegram
+ * messages as needed — never truncated (a cut digest silently drops clients).
+ */
+export function cobrosDigestMessages(i: CobrosDigestInput): CobrosDigestPart[] {
+  const title = `💳 COBROS — ${formatDayEs(i.day)}`;
+  const blocks: { html: string[]; text: string[] }[] = [];
+  const section = (heading: string, lines: { html: string; text: string }[]) => {
+    if (!lines.length) return;
+    blocks.push({
+      html: [`<b>${esc(heading)} (${lines.length})</b>`, ...lines.map((l) => l.html)],
+      text: [`${heading} (${lines.length})`, ...lines.map((l) => l.text)],
+    });
+  };
+  const withNext = (base: string, t: BillingTimeline) => [base, nextHint(t)].filter(Boolean).join(" · ");
+
+  section(
+    "⏰ Vencen hoy",
+    i.dueToday.map((t) =>
+      clientLine(t, t.paidVia ? `${viaName(t.paidVia)} · su mes vence hoy (${formatDateEs(t.dueDate ?? i.day)})` : `mes gratis · vence hoy (${formatDateEs(t.dueDate ?? i.day)})`, i.paypalLink),
+    ),
+  );
+  section(
+    "📅 Vencen en 1–3 días",
+    i.dueSoon.map((t) =>
+      clientLine(t, withNext(`${t.day !== null ? `día ${t.day}/${t.freeDays}` : "mes gratis"} · vence el ${t.dueDate ? formatDateEs(t.dueDate) : "—"} (${dueIn(t.daysLeft)})`, t), i.paypalLink),
+    ),
+  );
+  section(
+    "🔴 Vencidos sin pago",
+    i.overdue.map((t) => {
+      const what = t.state === "overdue" && t.paidVia === "stripe" ? "Stripe no pudo cobrar" : t.paidVia ? `${viaName(t.paidVia)} sin renovar` : "mes gratis terminado";
+      return clientLine(t, withNext(`${what} · venció el ${t.dueDate ? formatDateEs(t.dueDate) : "—"} (${dueIn(t.daysLeft)})`, t), i.paypalLink);
+    }),
+  );
+  section(
+    "🔁 Renovaciones PayPal próximas",
+    i.renewals.map((t) =>
+      clientLine(t, withNext(`${viaName(t.paidVia)} · pagado hasta ${t.dueDate ? formatDateEs(t.dueDate) : "—"} (${dueIn(t.daysLeft)})`, t), i.paypalLink),
+    ),
+  );
+  section(
+    "⏸ Pausadas por falta de pago",
+    i.paused.map((p) => clientLine(p.t, `pausada el ${formatDateEs(p.pausedAt)}${p.t.dueDate ? ` · venció el ${formatDateEs(p.t.dueDate)}` : ""}`, i.paypalLink)),
+  );
+  section(
+    "💰 Pagos recibidos ayer",
+    i.paymentsYesterday.map((p) => ({
+      html: `• <b>${esc(clip(p.business, 60))}</b> — ${esc(`${p.amount} · ${viaName(p.via)} · pagado hasta ${p.paidThrough ? formatDateEs(p.paidThrough) : "—"}`)}`,
+      text: `• ${p.business} — ${p.amount} · ${viaName(p.via)} · pagado hasta ${p.paidThrough ? formatDateEs(p.paidThrough) : "—"}`,
+    })),
+  );
+
+  const total = `Total: pagando ${i.totals.paying} · MRR $${i.totals.mrr} · vencen esta semana ${i.totals.dueThisWeek}`;
+  const footerHtml = `<b>${esc(total)}</b>\n📋 <a href="${BOARD_URL}">Tablero → Cobros</a>`;
+
+  // Pack whole sections; a section too long for one message is split by lines (never dropped).
+  const units: { html: string; text: string }[] = [];
+  for (const b of blocks) {
+    const whole = b.html.join("\n");
+    if (whole.length <= TELEGRAM_MAX - 400) units.push({ html: whole, text: b.text.join("\n") });
+    else b.html.forEach((line, k) => units.push({ html: line, text: b.text[k] ?? "" }));
+  }
+  const parts: { html: string[]; text: string[] }[] = [];
+  let cur: { html: string[]; text: string[] } = { html: [], text: [] };
+  const size = (list: string[]) => list.join("\n\n").length;
+  for (const u of units) {
+    if (cur.html.length && size([...cur.html, u.html]) + footerHtml.length + 120 > TELEGRAM_MAX) {
+      parts.push(cur);
+      cur = { html: [], text: [] };
+    }
+    cur.html.push(u.html);
+    cur.text.push(u.text);
+  }
+  parts.push(cur);
+
+  const fullText = [title, "", blocks.map((b) => b.text.join("\n")).join("\n\n"), "", total].join("\n");
+  const emailBody = blocks
+    .map((b) => `<p style="margin:16px 0 6px;color:#1e9bf0;font-weight:600">${b.html[0].replace(/<\/?b>/g, "")}</p>${b.html.slice(1).map((l) => `<div style="margin:4px 0">${l.replace(/<a href=/g, '<a style="color:#1e9bf0" href=')}</div>`).join("")}`)
+    .join("");
+  const emailHtml = `
+  <div style="font-family:system-ui,-apple-system,sans-serif;max-width:680px;margin:0 auto;background:#06060a;color:#f0f0f3;padding:28px;border-top:3px solid #1e9bf0">
+    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.2em;color:#1e9bf0;text-transform:uppercase">Web gratis · cobros</p>
+    <h1 style="margin:0 0 8px;font-size:22px">${esc(title)}</h1>
+    ${emailBody}
+    <p style="margin:20px 0 0;font-weight:600">${esc(total)}</p>
+    <p style="margin:14px 0 0"><a href="${BOARD_URL}" style="color:#1e9bf0">Abrir tablero → Cobros</a></p>
+  </div>`;
+
+  return parts.map((p, k) => ({
+    html: [`<b>${esc(title)}${parts.length > 1 ? ` (${k + 1}/${parts.length})` : ""}</b>`, "", p.html.join("\n\n"), "", footerHtml].join("\n"),
+    text: k === 0 ? fullText : `${title} (${k + 1}/${parts.length})`,
+    subject: k === 0 ? title : null,
+    emailHtml: k === 0 ? emailHtml : null,
+  }));
 }
 
 // ─── Email ──────────────────────────────────────────────────────────────────

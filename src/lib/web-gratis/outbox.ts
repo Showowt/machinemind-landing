@@ -28,24 +28,31 @@ export const OUTBOX_TABLE = "web_gratis_outbox";
 type Kind = "submitted" | "abandoned" | "system";
 
 /**
- * Client-website alerts. Stored as kind 'system' (the table's CHECK allows only
- * submitted / abandoned / system) with `payload.alert` set; unlike plain system
- * alerts they carry their own Telegram HTML and also go out by e-mail.
+ * Rich alerts: client-website alerts and the daily "💳 COBROS" digest. Stored as
+ * kind 'system' (the table's CHECK allows only submitted / abandoned / system)
+ * with `payload.alert` set; unlike plain system alerts they carry their own
+ * Telegram HTML (links) and also go out by e-mail when they have a subject.
  */
 export type SiteAlertKind = "site_ready" | "site_failed" | "site_published";
-const SITE_ALERT_KINDS: readonly string[] = ["site_ready", "site_failed", "site_published"];
+export type RichAlertKind = SiteAlertKind | "billing_digest";
+const RICH_ALERT_KINDS: readonly string[] = ["site_ready", "site_failed", "site_published", "billing_digest"];
 
 interface OutboxPayload {
   tg_done?: string[];
   text?: string;
-  alert?: SiteAlertKind;
+  alert?: RichAlertKind;
   html?: string;
   subject?: string;
   email_html?: string;
 }
 
-function isSiteAlert(r: { kind: Kind; payload: OutboxPayload | null }): boolean {
-  return r.kind === "system" && !!r.payload?.alert && SITE_ALERT_KINDS.includes(r.payload.alert);
+function isRichAlert(r: { kind: Kind; payload: OutboxPayload | null }): boolean {
+  return r.kind === "system" && !!r.payload?.alert && RICH_ALERT_KINDS.includes(r.payload.alert);
+}
+
+/** A rich alert that also goes by e-mail (a multi-part digest mails only its first part). */
+function emailsRichAlert(r: { kind: Kind; payload: OutboxPayload | null }): boolean {
+  return isRichAlert(r) && !!r.payload?.subject;
 }
 
 interface OutboxRow {
@@ -119,6 +126,29 @@ export function enqueueSystem(key: string, text: string): Promise<boolean> {
   return enqueue("system", `system:${key}`, null, { text });
 }
 
+/**
+ * Daily billing digest part (Telegram HTML; e-mail when `subject` is set),
+ * deduplicated by the exact outbox key (e.g. "cobros:2026-09-25").
+ */
+export function enqueueBillingDigest(
+  dedupeKey: string,
+  message: { html: string; text: string; subject: string | null; emailHtml: string | null },
+): Promise<boolean> {
+  return enqueue("system", dedupeKey.slice(0, 200), null, {
+    alert: "billing_digest",
+    text: message.text,
+    html: message.html,
+    ...(message.subject && message.emailHtml ? { subject: message.subject, email_html: message.emailHtml } : {}),
+  });
+}
+
+/** Whether the outbox already holds a row with this dedupe key (sent or pending). */
+export async function outboxHasKey(dedupeKey: string): Promise<boolean> {
+  const { data, error } = await getDb().from(OUTBOX_TABLE).select("id").eq("dedupe_key", dedupeKey).limit(1).maybeSingle();
+  if (error) throw error;
+  return !!data;
+}
+
 /** Client-website alert (Telegram HTML + e-mail), deduplicated by key. */
 export function enqueueSiteAlert(
   kind: SiteAlertKind,
@@ -161,7 +191,7 @@ export async function drainOutbox({ budgetMs, limit = 60 }: { budgetMs: number; 
   for (const r of rows) {
     state.set(r.id, {
       tgDone: new Set(r.payload?.tg_done ?? []),
-      emailDone: r.email_done || (r.kind !== "submitted" && !isSiteAlert(r)),
+      emailDone: r.email_done || (r.kind !== "submitted" && !emailsRichAlert(r)),
       retryAfterSec: null,
       touched: false,
       errors: [],
@@ -212,7 +242,7 @@ export async function drainOutbox({ budgetMs, limit = 60 }: { budgetMs: number; 
 
     const plan: { rows: OutboxRow[]; html: string; photos?: string[] }[] = [];
     for (const r of system) {
-      plan.push({ rows: [r], html: isSiteAlert(r) && r.payload?.html ? r.payload.html : systemHtml(String(r.payload?.text ?? "")) });
+      plan.push({ rows: [r], html: isRichAlert(r) && r.payload?.html ? r.payload.html : systemHtml(String(r.payload?.text ?? "")) });
     }
     if (submitted.length <= INDIVIDUAL_MAX) {
       for (const r of submitted) {
@@ -297,8 +327,8 @@ export async function drainOutbox({ budgetMs, limit = 60 }: { budgetMs: number; 
     await sleep(550); // Resend allows ~2 requests/second
   }
 
-  // ── Email: client-website alerts (one each; they're rare) ──
-  for (const r of live.filter((row) => isSiteAlert(row) && !state.get(row.id)!.emailDone)) {
+  // ── Email: rich alerts — client websites, the daily billing digest (one each; they're rare) ──
+  for (const r of live.filter((row) => emailsRichAlert(row) && !state.get(row.id)!.emailDone)) {
     if (Date.now() > deadline - 1500) break;
     const st = state.get(r.id)!;
     st.touched = true;

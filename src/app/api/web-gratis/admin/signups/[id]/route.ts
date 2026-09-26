@@ -59,6 +59,11 @@ const patchSchema = z.object({
   paidVia: z.enum(["manual", "paypal"]).optional(),
   /** PayPal / manual payer paid another month. */
   renew: z.literal(true).optional(),
+  /**
+   * The paid_through the board showed when «Pagó otro mes» was clicked: a second click
+   * (or a second open board) that no longer matches is refused instead of adding 30 more days.
+   */
+  expectedPaidThrough: z.union([z.iso.date(), z.null()]).optional(),
   /** Corrected WhatsApp number (any common format; normalised to E.164). */
   whatsapp: z.string().trim().min(1).max(30).optional(),
   /** Referral code of the business that referred this one (from the free-text answer). */
@@ -176,7 +181,8 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         update.recontact_after = null;
         update.paused_at = null;
         // A PayPal / cash payment covers one month from today (or from the end of the month already paid).
-        if (via !== "stripe") update.paid_through = svDateOf(laterDate(current.paid_through, today), 30);
+        // Only on the move to Activa: a repeated "→ Activa" adds nothing (another month is `renew`).
+        if (via !== "stripe" && current.status !== "activa") update.paid_through = svDateOf(laterDate(current.paid_through, today), 30);
       }
       if (status === "pausada" && !current.paused_at) {
         update.paused_at = now;
@@ -192,6 +198,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     if (patch.renew) {
       if ((update.status ?? current.status) !== "activa") return fail(409, "invalid", "Solo para clientes activos.");
+      if (patch.expectedPaidThrough !== undefined && patch.expectedPaidThrough !== current.paid_through) {
+        return fail(
+          409,
+          "invalid",
+          `Ese mes ya se registró: está pagado hasta ${current.paid_through ?? "—"}. Recargue el tablero antes de sumar otro.`,
+        );
+      }
       update.paid_through = svDateOf(laterDate(current.paid_through, today), 30);
       update.last_touch_at = now;
       update.last_touch_kind = "pago_mes";
@@ -254,14 +267,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
     const becameActive = saved.status === "activa" && current.status !== "activa";
     const creditDue = !!saved.activated_at && !!saved.referred_by_id && (becameActive || referralLinked);
-    if (becameActive || creditDue) {
+    // A PayPal / cash activation reaches the team once, as "💰 PAGO RECIBIDO" (payments ledger, next
+    // cron run); only the cases the ledger doesn't cover get their own alert here.
+    const activationText = !becameActive
+      ? null
+      : paidEarlyDelivery
+        ? `✅ Entregada y activa: ${saved.business_name} (${saved.whatsapp}) ya había pagado; «Web lista» sale sola por WhatsApp dentro de su horario.`
+        : saved.paid_via === "stripe"
+          ? `▶️ Reactivada a mano: ${saved.business_name} (${saved.whatsapp}) paga con Stripe; confirme en Stripe que su suscripción siga cobrando.`
+          : null;
+    if (activationText || creditDue) {
       after(async () => {
-        if (becameActive) {
-          const text = paidEarlyDelivery
-            ? `✅ Entregada y activa: ${saved.business_name} (${saved.whatsapp}) ya había pagado; «Web lista» sale sola por WhatsApp dentro de su horario.`
-            : `💰 Activada a mano (${saved.paid_via === "paypal" ? "PayPal" : "pago manual"}): ${saved.business_name} (${saved.whatsapp}).${saved.paid_through ? ` Pagado hasta ${saved.paid_through}.` : ""} Los recordatorios de pago se detienen solos.`;
-          await enqueueSystem(`paid-manual:${saved.id}:${now.slice(0, 13)}`, text);
-        }
+        if (activationText) await enqueueSystem(`paid-manual:${saved.id}:${now.slice(0, 13)}`, activationText);
         if (paidEarlyDelivery) {
           try {
             await queueManualTemplate(saved.id, "cqv_web_ready", new Date(), "pagó antes de la entrega");

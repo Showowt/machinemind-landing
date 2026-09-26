@@ -91,6 +91,7 @@ function validDraft(over: Json = {}): Json {
       ],
     },
     gallery: [{ photo: 1, alt: "Duplicado del hero" }],
+    places: null,
     differentiators: null,
     hours: null,
     location: null,

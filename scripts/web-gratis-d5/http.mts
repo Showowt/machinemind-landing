@@ -439,6 +439,17 @@ export async function runHttp(): Promise<void> {
       res = await fetch(`${BASE}/api/web-gratis/admin/signups/${p8.id}`, { method: "PATCH", headers: auth, body: JSON.stringify({ renew: true }) });
       const s8 = await signup(p8.id);
       check("PayPal payer 'Pagó otro mes' → paid_through +30 days", res.status === 200 && s8.paid_through === site.wa.svDateOf(site.server.svDate(new Date(), 2), 30), [res.status, s8.paid_through]);
+      // A double click / second open board still carries the date it saw before the first save.
+      res = await fetch(`${BASE}/api/web-gratis/admin/signups/${p8.id}`, { method: "PATCH", headers: auth, body: JSON.stringify({ renew: true, expectedPaidThrough: site.server.svDate(new Date(), 2) }) });
+      const s8again = await signup(p8.id);
+      check("'Pagó otro mes' with a stale paid_through (double click) → 409, no extra month", res.status === 409 && s8again.paid_through === s8.paid_through, [res.status, s8again.paid_through]);
+      res = await fetch(`${BASE}/api/web-gratis/admin/signups/${p8.id}`, { method: "PATCH", headers: auth, body: JSON.stringify({ status: "activa", paidVia: "paypal" }) });
+      const s8same = await signup(p8.id);
+      check("'→ Activa' on a client already Activa adds no month", res.status === 200 && s8same.paid_through === s8.paid_through, [res.status, s8same.paid_through]);
+      res = await fetch(`${BASE}/api/web-gratis/admin/signups/${p8.id}`, { method: "PATCH", headers: auth, body: JSON.stringify({ renew: true, expectedPaidThrough: s8.paid_through }) });
+      const s8next = await signup(p8.id);
+      check("'Pagó otro mes' with the current paid_through → another +30 days", res.status === 200 && s8next.paid_through === site.wa.svDateOf(s8.paid_through as string, 30), [res.status, s8next.paid_through]);
+      Object.assign(s8, { paid_through: s8next.paid_through });
       res = await fetch(`${BASE}/api/web-gratis/admin/signups/${p1.id}`, { method: "PATCH", headers: auth, body: JSON.stringify({ renew: true }) });
       check("'Pagó otro mes' on a client that isn't active → 409", res.status === 409);
 
