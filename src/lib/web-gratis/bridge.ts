@@ -122,6 +122,10 @@ export interface HistoryItem {
   direction: "inbound" | "outbound";
   body: string;
   created_at: string;
+  /** The ledger's msg_type (text / image / document / …): tells a photo apart from a caption. */
+  msgType: string | null;
+  /** True on the row of the message being claimed, so Rewired can tell which media came first in a burst. */
+  self?: true;
 }
 
 export interface BridgeDeps {
@@ -226,22 +230,23 @@ async function buildContext(primary: OpsSignup): Promise<ClientContext> {
   };
 }
 
-async function historyFor(phone: string): Promise<HistoryItem[]> {
+async function historyFor(phone: string, selfWamid: string): Promise<HistoryItem[]> {
   const { data, error } = await getDb()
     .from(MESSAGES_TABLE)
-    .select("direction, body, msg_type, created_at, status")
+    .select("direction, body, msg_type, created_at, status, wa_message_id")
     .eq("phone", phone)
     .not("status", "in", "(queued,skipped,failed)")
     .order("created_at", { ascending: false })
     .limit(12);
   if (error) throw error;
-  return ((data ?? []) as { direction: "inbound" | "outbound"; body: string | null; msg_type: string | null; created_at: string }[])
-    .reverse()
-    .map((m) => ({
-      direction: m.direction,
-      body: m.body ?? MEDIA_LABEL[m.msg_type ?? "other"] ?? "[mensaje]",
-      created_at: m.created_at,
-    }));
+  type Row = { direction: "inbound" | "outbound"; body: string | null; msg_type: string | null; created_at: string; wa_message_id: string | null };
+  return ((data ?? []) as Row[]).reverse().map((m) => ({
+    direction: m.direction,
+    body: m.body ?? MEDIA_LABEL[m.msg_type ?? "other"] ?? "[mensaje]",
+    created_at: m.created_at,
+    msgType: m.msg_type,
+    ...(m.direction === "inbound" && m.wa_message_id === selfWamid ? { self: true as const } : {}),
+  }));
 }
 
 // ─── Handlers ───────────────────────────────────────────────────────────────
@@ -289,7 +294,7 @@ async function onInbound(req: Extract<BridgeRequest, { type: "inbound" }>, deps:
     }
   }
 
-  const [client, history] = await Promise.all([primary ? buildContext(primary) : Promise.resolve(null), historyFor(req.phone)]);
+  const [client, history] = await Promise.all([primary ? buildContext(primary) : Promise.resolve(null), historyFor(req.phone, req.wamid)]);
   return okResult({ duplicate: false, client, history });
 }
 
