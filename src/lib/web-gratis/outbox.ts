@@ -202,7 +202,9 @@ export async function drainOutbox({ budgetMs, limit = 60 }: { budgetMs: number; 
   const skip = new Set<number>();
   for (const r of rows) {
     const s = r.signup_id ? signups.get(r.signup_id) : undefined;
-    if (r.kind === "abandoned" && (!s || s.status !== "borrador")) skip.add(r.id);
+    // A team preview (utm_source 'equipo') is a row WE made from a lead's DM, not a form they
+    // abandoned: its "escribirle" alert would invite a second, stacked message to that lead.
+    if (r.kind === "abandoned" && (!s || s.status !== "borrador" || s.utm_source === "equipo")) skip.add(r.id);
     if (r.kind === "submitted" && !s) skip.add(r.id);
     if (r.kind === "system" && !r.payload?.text) skip.add(r.id);
   }
