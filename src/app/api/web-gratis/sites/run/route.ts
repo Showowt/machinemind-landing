@@ -12,7 +12,9 @@ import { timingSafeEqual } from "crypto";
 import { after } from "next/server";
 import { z } from "zod";
 import { fail, ok } from "@/lib/web-gratis/http";
+import { adoptChatPreviews } from "@/lib/web-gratis/sites/chat-preview";
 import {
+  alertFor,
   alertIfUnconfigured,
   claimNextJob,
   defaultSitesDeps,
@@ -43,6 +45,12 @@ export async function GET(request: Request) {
       await sweepRevalidations(deps);
     } catch (error) {
       console.error("[Sites:run] revalidation sweep", error);
+    }
+    // Chat previews whose lead said "sí": the draft exists already → review queue + "WEB LISTA".
+    try {
+      for (const { signup, site } of await adoptChatPreviews()) await alertFor("site_ready", site, signup, {}, deps);
+    } catch (error) {
+      console.error("[Sites:run] chat-preview adoption", error);
     }
   });
 

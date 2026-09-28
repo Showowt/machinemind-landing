@@ -35,7 +35,8 @@ export function toSummary(row: Omit<SiteRow, "content">, stats: SiteStats | null
     updatedAt: row.updated_at,
     publicUrl: publicSiteUrl(row.slug),
     previewUrl: previewUrl(row.slug, row.preview_token, mm),
-    exportUrl: row.version > 0 ? exportUrl(row.slug, row.preview_token, mm) : null,
+    // mm-sites exports only delivered (published) sites — the preview token also goes to prospects.
+    exportUrl: row.version > 0 && row.published_at ? exportUrl(row.slug, row.preview_token, mm) : null,
     customDomain: row.custom_domain,
     domainStatus: row.domain_status,
     stats,

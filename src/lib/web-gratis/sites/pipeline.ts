@@ -123,7 +123,7 @@ export async function ensureSiteRow(
 
 // ─── Claims ─────────────────────────────────────────────────────────────────
 
-async function alertFor(kind: SiteAlertKind, site: SiteRow, signup: WebGratisSignup | null, extra: { error?: string; attempts?: number }, deps: SitesDeps) {
+export async function alertFor(kind: SiteAlertKind, site: SiteRow, signup: WebGratisSignup | null, extra: { error?: string; attempts?: number }, deps: SitesDeps) {
   if (!signup) return;
   const info = {
     business: signup.business_name,
