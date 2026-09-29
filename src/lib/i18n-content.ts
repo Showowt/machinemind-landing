@@ -275,15 +275,15 @@ export const TRANSLATIONS: Record<Lang, SiteTranslations> = {
 
     initiativeBar: {
       tag: "Business Digitalization Initiative 2026",
-      text: "Free websites for businesses in El Salvador and Colombia",
-      short: "Free website · El Salvador & Colombia",
+      text: "Free websites for businesses in El Salvador",
+      short: "Free website · El Salvador",
       cta: "Apply",
     },
 
     initiative: {
-      eyebrow: "Business Digitalization Initiative 2026 · El Salvador · Colombia",
+      eyebrow: "Business Digitalization Initiative 2026 · El Salvador",
       headingPrefix: "Free websites for businesses in",
-      headingItalic: "El Salvador and Colombia.",
+      headingItalic: "El Salvador.",
       desc: "We are MachineMind. We design and publish your business's website at no cost, ready to bring you customers on WhatsApp. You just tell us about your business.",
       visionLabel: "Why we do it",
       sv: {
@@ -528,15 +528,15 @@ export const TRANSLATIONS: Record<Lang, SiteTranslations> = {
 
     initiativeBar: {
       tag: "Iniciativa de Digitalización de Negocios 2026",
-      text: "Web gratis para negocios de El Salvador y Colombia",
-      short: "Web gratis · El Salvador y Colombia",
+      text: "Web gratis para negocios de El Salvador",
+      short: "Web gratis · El Salvador",
       cta: "Solicitar",
     },
 
     initiative: {
-      eyebrow: "Iniciativa de Digitalización de Negocios 2026 · El Salvador · Colombia",
+      eyebrow: "Iniciativa de Digitalización de Negocios 2026 · El Salvador",
       headingPrefix: "Web gratis para los negocios de",
-      headingItalic: "El Salvador y Colombia.",
+      headingItalic: "El Salvador.",
       desc: "Somos MachineMind. Diseñamos y publicamos la página web de su negocio sin costo, lista para recibir clientes por WhatsApp. Usted solo nos cuenta de su negocio.",
       visionLabel: "Por qué lo hacemos",
       sv: {

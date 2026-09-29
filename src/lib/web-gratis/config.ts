@@ -1,5 +1,6 @@
 /**
- * Free-website funnel (El Salvador + Colombia) — shared constants.
+ * Free-website funnel — shared constants. New sign-ups: El Salvador only
+ * (OPEN_MARKETS); Colombian clients from before 2026-09-29 keep being served.
  * Client-safe: no secrets in this file.
  */
 
@@ -69,6 +70,30 @@ export function countryFromE164(e164: string): SignupCountry {
   if (e164.startsWith("+503")) return "SV";
   if (e164.startsWith("+57")) return "CO";
   return "OTHER";
+}
+
+/**
+ * Markets taking NEW sign-ups. Colombia closed on 2026-09-29 (Phil: social
+ * ads, El Salvador only). CO stays in MARKETS so existing Colombian rows,
+ * alerts, sites and billing keep working.
+ */
+export const OPEN_MARKETS: readonly Market[] = ["SV"];
+
+export function isOpenMarket(m: Market | null | undefined): boolean {
+  return m != null && OPEN_MARKETS.includes(m);
+}
+
+/** Phone codes of closed markets: hidden on the form, refused by the API for new sign-ups. */
+export const CLOSED_DIALS: readonly string[] = MARKETS.flatMap((m) => (isOpenMarket(m) ? [] : [MARKET_INFO[m].dial]));
+
+/**
+ * True when the number belongs to a closed market (e.g. +57) and so may not
+ * start a sign-up. A form begun from there before the market closed may still
+ * finish: the routes allow it when the saved row already has that country.
+ */
+export function isClosedMarketNumber(e164: string): boolean {
+  const c = countryFromE164(e164);
+  return c !== "OTHER" && !isOpenMarket(c);
 }
 
 // ─── Uploads ────────────────────────────────────────────────────────────────

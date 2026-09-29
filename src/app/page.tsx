@@ -379,7 +379,7 @@ export default function Home() {
       {/* ═══ SCROLL PROGRESS ═══ */}
       <div className="scroll-progress" />
 
-      {/* ═══ INITIATIVE BAR — free website, El Salvador + Colombia ═══ */}
+      {/* ═══ INITIATIVE BAR — free website, El Salvador (Colombia closed to new sign-ups 2026-09-29) ═══ */}
       <InitiativeBar lang={lang} onEngage={markWgEngaged} />
 
       {/* ═══ NAVIGATION ═══ */}

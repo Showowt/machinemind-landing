@@ -12,7 +12,13 @@
  */
 import { after } from "next/server";
 import { sendCapiEvent } from "@/lib/web-gratis/capi";
-import { countryFromE164, splitServices, toE164, WHATSAPP_CONSENT_VERSION_STEP1 } from "@/lib/web-gratis/config";
+import {
+  countryFromE164,
+  isClosedMarketNumber,
+  splitServices,
+  toE164,
+  WHATSAPP_CONSENT_VERSION_STEP1,
+} from "@/lib/web-gratis/config";
 import { fail, ok } from "@/lib/web-gratis/http";
 import { notifySaveFailed } from "@/lib/web-gratis/notify";
 import { enqueueSystem } from "@/lib/web-gratis/outbox";
@@ -89,15 +95,20 @@ export async function POST(request: Request) {
     const db = getDb();
     const { data: existing, error: readError } = await db
       .from(SIGNUPS_TABLE)
-      .select("id, status, step, referral_code")
+      .select("id, status, step, referral_code, country")
       .eq("id", req.draftId)
       .maybeSingle();
     if (readError) throw readError;
+
+    // New sign-ups: open markets only (Colombia closed 2026-09-29). A form
+    // started from a closed market before then may still finish.
+    const closedMarket = isClosedMarketNumber(whatsapp);
 
     if (existing) {
       if (existing.status !== "borrador") {
         return ok({ referralCode: existing.referral_code as string, status: existing.status as string });
       }
+      if (closedMarket && existing.country !== step1.country) return fail(400, "market_closed");
       const { error: updateError } = await db
         .from(SIGNUPS_TABLE)
         .update({ ...step1, ...step2, step: Math.max(existing.step as number, req.step) })
@@ -106,6 +117,7 @@ export async function POST(request: Request) {
       if (updateError) throw updateError;
       return ok({ referralCode: existing.referral_code as string, status: "borrador" });
     }
+    if (closedMarket) return fail(400, "market_closed");
 
     const hash = ipHash(request);
     const fromThisIp = await recentDraftsFromIp(hash);

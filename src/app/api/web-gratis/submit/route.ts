@@ -16,6 +16,7 @@ import { after } from "next/server";
 import { sendCapiEvent } from "@/lib/web-gratis/capi";
 import {
   countryFromE164,
+  isClosedMarketNumber,
   REFERRAL_CODE_RE,
   splitServices,
   toE164,
@@ -116,10 +117,17 @@ export async function POST(request: Request) {
 
     const { data: existing, error: readError } = await db
       .from(SIGNUPS_TABLE)
-      .select("id, status, referral_code, business_name, whatsapp_consent_at, referred_by_id, logo_paths, photo_paths, document_paths")
+      .select("id, status, referral_code, business_name, whatsapp_consent_at, referred_by_id, logo_paths, photo_paths, document_paths, country")
       .eq("id", req.draftId)
       .maybeSingle();
     if (readError) throw readError;
+
+    // New sign-ups: open markets only (Colombia closed 2026-09-29). A form
+    // started from a closed market before then may still finish.
+    const closedMarket = isClosedMarketNumber(whatsapp);
+    if (closedMarket && (!existing || (existing.status === "borrador" && existing.country !== content.country))) {
+      return fail(400, "market_closed");
+    }
 
     const submission = {
       ...content,

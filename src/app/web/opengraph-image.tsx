@@ -4,12 +4,12 @@ import { FREE_DAYS, MONTHLY_PRICE_USD } from "@/lib/web-gratis/config";
 export const runtime = "edge";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-export const alt = "Su página web, gratis — Iniciativa de Digitalización de Negocios 2026 · El Salvador y Colombia · MachineMind";
+export const alt = "Su página web, gratis — Iniciativa de Digitalización de Negocios 2026 · El Salvador · MachineMind";
 
 /**
- * Link preview for WhatsApp / Facebook shares of /web, /colombia, /elsalvador
- * and referral links. Neutral across both markets; MachineMind's own initiative
- * (no government marks, seals or claims).
+ * Link preview for WhatsApp / Facebook shares of /web, /elsalvador and referral
+ * links. El Salvador only (Colombia closed to new sign-ups 2026-09-29);
+ * MachineMind's own initiative (no government marks, seals or claims).
  */
 export default function OGImage() {
   return new ImageResponse(
@@ -70,7 +70,7 @@ export default function OGImage() {
             INICIATIVA DE DIGITALIZACIÓN DE NEGOCIOS 2026
           </div>
           <div style={{ display: "flex", fontSize: 26, letterSpacing: 7, color: "#1e9bf0", fontFamily: "sans-serif" }}>
-            EL SALVADOR · COLOMBIA
+            EL SALVADOR
           </div>
         </div>
 

@@ -766,7 +766,7 @@ export async function sendDigestEmail(
 
   const html = `
   <div style="font-family:system-ui,-apple-system,sans-serif;max-width:680px;margin:0 auto;background:#06060a;color:#f0f0f3;padding:28px;border-top:3px solid #1e9bf0">
-    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.2em;color:#1e9bf0;text-transform:uppercase">Web gratis · El Salvador y Colombia</p>
+    <p style="margin:0 0 6px;font-size:11px;letter-spacing:0.2em;color:#1e9bf0;text-transform:uppercase">Web gratis · El Salvador</p>
     <h1 style="margin:0 0 8px;font-size:22px">${rows.length} solicitudes nuevas</h1>
     <p style="margin:0 0 16px;color:rgba(240,240,243,0.7);font-size:14px">${esc(AUTO_CONFIRM_TEXT)}</p>
     ${cards}

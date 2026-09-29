@@ -111,6 +111,7 @@ export type WebGratisErrorCode =
   | "rate_limited"
   | "duplicate"
   | "draft_not_found"
+  | "market_closed"
   | "unsupported_type"
   | "too_large"
   | "too_many_files"

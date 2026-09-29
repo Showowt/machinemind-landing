@@ -6,14 +6,17 @@ import styles from "./web.module.css";
 import { COPY, type Copy, type Lang } from "./copy";
 import {
   ALLOWED_UPLOAD_TYPES,
+  CLOSED_DIALS,
   COUNTRY_CODES,
   EMAIL_RE,
+  isOpenMarket,
   MARKET_INFO,
   MARKETS,
   MAX_DOCUMENTS,
   MAX_PHOTOS,
   MAX_UPLOAD_BYTES,
   MM_WHATSAPP,
+  OPEN_MARKETS,
   parseMarket,
   REFERRAL_CODE_RE,
   referralLink,
@@ -899,15 +902,18 @@ export default function WebGratisClient({ initialMarket, marketHint }: WebGratis
     const param = (key: string) => params.get(key)?.trim().slice(0, 200) || undefined;
 
     // Market: ?pais= / ?country= → the person's saved choice → browser time zone → server hint → SV.
-    const fromParam = parseMarket(params.get("pais") ?? params.get("country"));
+    // Only markets still taking sign-ups count (Colombia closed 2026-09-29).
+    const open = (m: Market | null): Market | null => (isOpenMarket(m) ? m : null);
+    const fromParam = open(parseMarket(params.get("pais") ?? params.get("country")));
     let timeZone = "";
     try {
       timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone ?? "";
     } catch (error) {
       console.error("[WebGratis] time zone", error);
     }
-    const fromZone: Market | null =
-      timeZone === MARKET_INFO.CO.timezone ? "CO" : timeZone === MARKET_INFO.SV.timezone ? "SV" : null;
+    const fromZone: Market | null = open(
+      timeZone === MARKET_INFO.CO.timezone ? "CO" : timeZone === MARKET_INFO.SV.timezone ? "SV" : null,
+    );
 
     const incoming = (params.get("ref") ?? "").trim().toUpperCase();
     const storedRef = readJSON<{ code: string; at: number }>(REF_KEY);
@@ -929,8 +935,8 @@ export default function WebGratisClient({ initialMarket, marketHint }: WebGratis
 
     const saved = readJSON<Persisted>(STORAGE_KEY);
     if (saved && saved.v === 1 && saved.draftId && now - saved.savedAt < DRAFT_TTL_MS) {
-      const savedMarket = parseMarket(saved.fields?.country);
-      const chosen = fromParam ?? savedMarket ?? fromZone ?? marketHint ?? "SV";
+      const savedMarket = open(parseMarket(saved.fields?.country));
+      const chosen = fromParam ?? savedMarket ?? fromZone ?? open(marketHint) ?? "SV";
       const restored: Fields = { ...emptyFields(chosen), ...saved.fields, country: chosen };
       // A number already typed keeps its code; an empty one follows the market.
       if (!restored.whatsappLocal.trim()) restored.countryCode = MARKET_INFO[chosen].dial;
@@ -961,7 +967,7 @@ export default function WebGratisClient({ initialMarket, marketHint }: WebGratis
       const id = newId();
       draftIdRef.current = id;
       setDraftId(id);
-      setFields(emptyFields(fromParam ?? fromZone ?? marketHint ?? "SV"));
+      setFields(emptyFields(fromParam ?? fromZone ?? open(marketHint) ?? "SV"));
       setAttribution(fresh);
     }
     setCanShare(typeof navigator.share === "function");
@@ -1541,11 +1547,12 @@ export default function WebGratisClient({ initialMarket, marketHint }: WebGratis
                 <div key={step} className={styles.stepBody}>
                   {step === 1 ? (
                     <>
+                      {OPEN_MARKETS.length > 1 ? (
                       <fieldset className={styles.fieldset}>
                         <legend className={styles.label}>{t.countryPicker.label}</legend>
                         <p className={styles.hint}>{t.countryPicker.hint}</p>
                         <div className={styles.marketRow}>
-                          {MARKETS.map((m) => (
+                          {OPEN_MARKETS.map((m) => (
                             <label key={m} className={market === m ? styles.marketOn : styles.market}>
                               <input
                                 type="radio"
@@ -1561,6 +1568,7 @@ export default function WebGratisClient({ initialMarket, marketHint }: WebGratis
                           ))}
                         </div>
                       </fieldset>
+                      ) : null}
                       <TextField
                         id="wg-businessName"
                         label={t.fields.businessName.label}
@@ -1622,7 +1630,8 @@ export default function WebGratisClient({ initialMarket, marketHint }: WebGratis
                             value={fields.countryCode}
                             onChange={(e) => setField("countryCode", e.target.value)}
                           >
-                            {COUNTRY_CODES.map((c) => (
+                            {/* Closed markets' codes stay only for a draft restored with one. */}
+                            {COUNTRY_CODES.filter((c) => !CLOSED_DIALS.includes(c.code) || c.code === fields.countryCode).map((c) => (
                               <option key={c.code} value={c.code}>
                                 {c.label}
                               </option>

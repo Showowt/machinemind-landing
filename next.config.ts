@@ -15,7 +15,8 @@ const nextConfig: NextConfig = {
   // Free-website funnel aliases → /web. Redirect sources match case-insensitively,
   // so "/gratis" also covers "/Gratis" and "/GRATIS". Never list a case variant of
   // "/web" itself here — it would match "/web" and loop. Country entry links
-  // (/colombia, /elsalvador) pick the market; the visitor's own query string
+  // (/elsalvador) pick the market; /colombia (closed to new sign-ups
+  // 2026-09-29) lands on the El Salvador page. The visitor's own query string
   // (utm_*, fbclid, ref) is carried over to /web by Next.js.
   async redirects() {
     const aliases = ["/gratis", "/web-gratis", "/webgratis"].map((source) => ({
@@ -24,7 +25,7 @@ const nextConfig: NextConfig = {
       permanent: false,
     }));
     const markets = [
-      { source: "/colombia", destination: "/web?pais=co", permanent: false },
+      { source: "/colombia", destination: "/web", permanent: false },
       { source: "/elsalvador", destination: "/web?pais=sv", permanent: false },
       { source: "/el-salvador", destination: "/web?pais=sv", permanent: false },
     ];

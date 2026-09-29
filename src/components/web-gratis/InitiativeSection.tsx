@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, type CSSProperties } from 'react';
 import { TRANSLATIONS, type Lang } from '@/lib/i18n-content';
-import { MM_WHATSAPP, WEB_GRATIS_PATH } from '@/lib/web-gratis/config';
+import { isOpenMarket, MM_WHATSAPP, WEB_GRATIS_PATH, type Market } from '@/lib/web-gratis/config';
 import { formatWhatsAppDisplay, whatsAppHref } from './whatsapp-display';
 
 /**
  * Home-page section for the Business Digitalization Initiative 2026 (free
- * websites for businesses in El Salvador and Colombia). Uses the home page's
+ * websites for businesses in El Salvador; Colombia closed to new sign-ups on
+ * 2026-09-29, so only open markets get a vision line and a CTA). Uses the home page's
  * shared classes (section-dark, section-inner, section-header, eyebrow,
  * reveal-up, card-animate) so it animates with the page's own GSAP / observer
  * system; everything else is scoped under .wgi.
@@ -33,14 +34,16 @@ interface InitiativeSectionProps {
 
 interface CountryEntry {
   key: 'sv' | 'co';
+  market: Market;
   dial: string;
   href: string;
 }
 
-const COUNTRIES: readonly CountryEntry[] = [
-  { key: 'sv', dial: '+503', href: `${WEB_GRATIS_PATH}?pais=sv` },
-  { key: 'co', dial: '+57', href: `${WEB_GRATIS_PATH}?pais=co` },
+const ALL_COUNTRIES: readonly CountryEntry[] = [
+  { key: 'sv', market: 'SV', dial: '+503', href: `${WEB_GRATIS_PATH}?pais=sv` },
+  { key: 'co', market: 'CO', dial: '+57', href: `${WEB_GRATIS_PATH}?pais=co` },
 ];
+const COUNTRIES = ALL_COUNTRIES.filter((c) => isOpenMarket(c.market));
 
 export default function InitiativeSection({ lang, onVisibleChange, onEngage }: InitiativeSectionProps) {
   const t = TRANSLATIONS[lang].initiative;
@@ -225,6 +228,7 @@ const SECTION_CSS = `
 
 /* Country CTAs: 1px gold border, fill slides up, text inverts */
 .wgi-cta-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px}
+.wgi-cta-grid>:only-child{grid-column:1/-1}
 .wgi-country-cta{position:relative;isolation:isolate;overflow:hidden;display:flex;flex-direction:column;gap:12px;
   padding:32px 32px 28px;background:rgba(6,6,10,0.75);border:1px solid rgba(201,169,110,0.45);
   color:var(--w-fg);text-decoration:none;transition:color .45s cubic-bezier(.4,0,.2,1),border-color .45s}
