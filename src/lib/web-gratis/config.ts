@@ -96,6 +96,20 @@ export function isClosedMarketNumber(e164: string): boolean {
   return c !== "OTHER" && !isOpenMarket(c);
 }
 
+/**
+ * Rewired's chat sign-up flows (WhatsApp one-tap + preview, Instagram DM +
+ * preview) post to /draft and /submit with these utm_campaign values. They may
+ * finish a sign-up from a closed market — Phil 2026-09-29: honor the "sí" already
+ * given to offers sent before Colombia closed; Rewired starts no new CO offers.
+ * The public form never sets them. A business rule, not a security boundary:
+ * attribution is client-supplied (the worst case is one CO row the team declines).
+ */
+export const CHAT_SIGNUP_CAMPAIGNS: readonly string[] = ["wa_quick_signup", "wa_preview", "ig_dm_signup", "ig_preview"];
+
+export function isChatSignup(utmCampaign: string | null | undefined): boolean {
+  return !!utmCampaign && CHAT_SIGNUP_CAMPAIGNS.includes(utmCampaign);
+}
+
 // ─── Uploads ────────────────────────────────────────────────────────────────
 
 export const STORAGE_BUCKET = "web-gratis";

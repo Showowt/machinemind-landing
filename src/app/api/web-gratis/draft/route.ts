@@ -14,6 +14,7 @@ import { after } from "next/server";
 import { sendCapiEvent } from "@/lib/web-gratis/capi";
 import {
   countryFromE164,
+  isChatSignup,
   isClosedMarketNumber,
   splitServices,
   toE164,
@@ -101,8 +102,9 @@ export async function POST(request: Request) {
     if (readError) throw readError;
 
     // New sign-ups: open markets only (Colombia closed 2026-09-29). A form
-    // started from a closed market before then may still finish.
-    const closedMarket = isClosedMarketNumber(whatsapp);
+    // started from a closed market before then may still finish, and so may a
+    // "sí" to a chat offer sent before the close (Rewired's chat flows).
+    const closedMarket = isClosedMarketNumber(whatsapp) && !isChatSignup(req.attribution?.utm_campaign);
 
     if (existing) {
       if (existing.status !== "borrador") {
