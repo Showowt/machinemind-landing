@@ -158,7 +158,7 @@ async function documentFileInfo(rows: OpsSignup[]): Promise<Record<string, FileI
 }
 
 export async function GET(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
 
   const params = new URL(request.url).searchParams;

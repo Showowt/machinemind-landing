@@ -1,6 +1,10 @@
 /**
- * Ops-board auth: a shared bearer token (WEB_GRATIS_ADMIN_TOKEN) for Phil +
- * Sergio. Fails closed — with no token configured, every admin call is refused.
+ * Ops-board auth: a shared bearer key (WEB_GRATIS_ADMIN_TOKEN) for Phil,
+ * Sergio and Fernanda. Fails closed — with no key configured, every admin
+ * call is refused. Since 2026-09-30 the key may be short (Phil wants a
+ * typeable numeric code), so every WRONG attempt pays a 1-second penalty:
+ * that turns a brute-force of the code space into years, not minutes, while
+ * a correct login stays instant.
  *
  * Also the ops-side view of the columns added by migration 20260927
  * (country, document_paths, existing_website, address, contact_email,
@@ -11,12 +15,16 @@ import { countryFromE164, type SignupCountry } from "./config";
 import { fail } from "./http";
 import type { WebGratisSignup } from "./server";
 
-export function requireAdmin(request: Request): Response | null {
+const WRONG_KEY_DELAY_MS = 1000;
+
+export async function requireAdmin(request: Request): Promise<Response | null> {
   const token = process.env.WEB_GRATIS_ADMIN_TOKEN?.trim();
-  if (!token || token.length < 24) return fail(503, "server_error", "admin token not configured");
+  if (!token || token.length < 8) return fail(503, "server_error", "admin token not configured");
   const given = Buffer.from((request.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "").trim());
   const expected = Buffer.from(token);
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) {
+    console.error("[WebGratis:admin] wrong board key", request.headers.get("x-forwarded-for") ?? "ip?");
+    await new Promise((r) => setTimeout(r, WRONG_KEY_DELAY_MS));
     return fail(401, "invalid", "unauthorized");
   }
   return null;

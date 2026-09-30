@@ -178,7 +178,7 @@ function byDue(a: { t: BillingTimeline | undefined; r: OpsSignup }, b: { t: Bill
 }
 
 export async function GET(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   const params = new URL(request.url).searchParams;
   const viewParam = params.get("view") ?? "todas";

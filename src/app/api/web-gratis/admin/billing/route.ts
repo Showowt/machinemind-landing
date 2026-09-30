@@ -150,7 +150,7 @@ function byDue(a: BillingTimeline, b: BillingTimeline): number {
 }
 
 export async function GET(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
 
   try {

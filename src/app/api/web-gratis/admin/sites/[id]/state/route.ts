@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 const bodySchema = z.object({ action: z.enum(["pause", "resume"]) });
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) return fail(400, "invalid");

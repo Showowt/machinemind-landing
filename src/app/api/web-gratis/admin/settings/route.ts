@@ -29,7 +29,7 @@ const settingsSchema = z.object({
 });
 
 export async function PUT(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   let body: unknown;
   try {

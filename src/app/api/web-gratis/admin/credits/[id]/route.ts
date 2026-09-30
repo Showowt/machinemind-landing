@@ -24,7 +24,7 @@ const bodySchema = z.object({
 });
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   const { id } = await params;
   if (!/^\d{1,18}$/.test(id)) return fail(400, "invalid");

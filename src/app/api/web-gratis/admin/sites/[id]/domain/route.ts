@@ -27,7 +27,7 @@ type Params = { params: Promise<{ id: string }> };
 const deps = () => ({ now: () => new Date(), fetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, init), vercel: vercelEnv() });
 
 export async function POST(request: Request, { params }: Params) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) return fail(400, "invalid");
@@ -50,7 +50,7 @@ export async function POST(request: Request, { params }: Params) {
 }
 
 export async function DELETE(request: Request, { params }: Params) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) return fail(400, "invalid");

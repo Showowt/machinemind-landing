@@ -36,7 +36,7 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   let body: unknown;
   try {

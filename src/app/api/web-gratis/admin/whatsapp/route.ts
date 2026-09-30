@@ -33,7 +33,7 @@ const STATUS_FOR: Record<string, number> = {
 };
 
 export async function POST(request: Request) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   let body: unknown;
   try {

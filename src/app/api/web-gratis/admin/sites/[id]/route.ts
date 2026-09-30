@@ -63,7 +63,7 @@ const patchSchema = z.union([
 type Params = { params: Promise<{ id: string }> };
 
 export async function GET(request: Request, { params }: Params) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) return fail(400, "invalid");
@@ -79,7 +79,7 @@ export async function GET(request: Request, { params }: Params) {
 }
 
 export async function PATCH(request: Request, { params }: Params) {
-  const denied = requireAdmin(request);
+  const denied = await requireAdmin(request);
   if (denied) return denied;
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) return fail(400, "invalid");
