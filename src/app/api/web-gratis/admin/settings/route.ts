@@ -19,6 +19,13 @@ const settingsSchema = z.object({
   payLink: httpsLink,
   demoLink: httpsLink.optional(),
   paypalLink: httpsLink.optional(),
+  // Fernanda's shift (SV clock). agentDays: ISO weekday digits, 1=Mon … 7=Sun.
+  agentStartHour: z.number().int().min(0).max(23).optional(),
+  agentEndHour: z.number().int().min(1).max(24).optional(),
+  agentDays: z
+    .string()
+    .regex(/^[1-7]{1,7}$/)
+    .optional(),
 });
 
 export async function PUT(request: Request) {
@@ -32,6 +39,13 @@ export async function PUT(request: Request) {
   }
   const parsed = settingsSchema.safeParse(body);
   if (!parsed.success) return fail(400, "invalid", parsed.error.issues[0]?.message);
+  if (
+    parsed.data.agentStartHour !== undefined &&
+    parsed.data.agentEndHour !== undefined &&
+    parsed.data.agentEndHour <= parsed.data.agentStartHour
+  ) {
+    return fail(400, "invalid", "agentEndHour must be after agentStartHour");
+  }
   try {
     const { data, error } = await getDb()
       .from("web_gratis_settings")
@@ -41,9 +55,12 @@ export async function PUT(request: Request) {
         pay_link: parsed.data.payLink || null,
         ...(parsed.data.demoLink !== undefined ? { demo_link: parsed.data.demoLink || null } : {}),
         ...(parsed.data.paypalLink !== undefined ? { paypal_link: parsed.data.paypalLink || null } : {}),
+        ...(parsed.data.agentStartHour !== undefined ? { agent_start_hour: parsed.data.agentStartHour } : {}),
+        ...(parsed.data.agentEndHour !== undefined ? { agent_end_hour: parsed.data.agentEndHour } : {}),
+        ...(parsed.data.agentDays !== undefined ? { agent_days: parsed.data.agentDays } : {}),
       })
       .eq("id", 1)
-      .select("delivery_days, high_demand, pay_link, demo_link, paypal_link")
+      .select("delivery_days, high_demand, pay_link, demo_link, paypal_link, agent_start_hour, agent_end_hour, agent_days")
       .single();
     if (error) throw error;
     return ok(data);

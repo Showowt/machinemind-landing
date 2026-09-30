@@ -110,6 +110,7 @@ export interface Copy {
   validation: {
     required: string;
     whatsappSV: string;
+    whatsappPA: string;
     whatsappCO: string;
     services: string;
     email: string;
@@ -157,6 +158,7 @@ export interface Copy {
 }
 
 const SV = MARKET_INFO.SV;
+const PA = MARKET_INFO.PA;
 const CO = MARKET_INFO.CO;
 
 const es: Copy = {
@@ -171,6 +173,15 @@ const es: Copy = {
       phonePlaceholder: SV.phoneExample,
       shareText: (business, link) =>
         `¡Mire esto! MachineMind le hace la página web GRATIS a negocios salvadoreños 🇸🇻 Yo ya pedí la mía para ${business}. Regístrese aquí, toma 2 minutos: ${link}`,
+    },
+    PA: {
+      name: PA.name,
+      align: "Nos alineamos con la visión de transformación digital del Gobierno de Panamá.",
+      mission: `Queremos que cada negocio de Panamá esté en internet. Por eso diseñamos su página web gratis. Después de los ${FREE_DAYS} días gratis, usted decide: la seguimos alojando por $${MONTHLY_PRICE_USD} USD al mes con soporte completo, o la aloja usted mismo.`,
+      cityPlaceholder: "Ej: Ciudad de Panamá, San Francisco",
+      phonePlaceholder: PA.phoneExample,
+      shareText: (business, link) =>
+        `¡Mire esto! MachineMind le hace la página web GRATIS a negocios panameños 🇵🇦 Yo ya pedí la mía para ${business}. Regístrese aquí, toma 2 minutos: ${link}`,
     },
     CO: {
       name: CO.name,
@@ -331,6 +342,7 @@ const es: Copy = {
   validation: {
     required: "Este dato es necesario.",
     whatsappSV: `Revise el número: en El Salvador son 8 dígitos (ej: ${SV.phoneExample}).`,
+    whatsappPA: `Revise el número: en Panamá el celular tiene 8 dígitos y empieza por 6 (ej: ${PA.phoneExample}).`,
     whatsappCO: `Revise el número: en Colombia el celular tiene 10 dígitos y empieza por 3 (ej: ${CO.phoneExample}).`,
     services: "Escriba al menos un servicio o producto.",
     email: "Revise el correo: debe verse así, contacto@sunegocio.com (o déjelo vacío).",
@@ -416,6 +428,15 @@ const en: Copy = {
       phonePlaceholder: SV.phoneExample,
       shareText: (business, link) =>
         `Check this out! MachineMind builds FREE websites for Salvadoran businesses 🇸🇻 I already asked for mine for ${business}. Sign up here, it takes 2 minutes: ${link}`,
+    },
+    PA: {
+      name: PA.name,
+      align: "We are aligned with the Government of Panama's digital-transformation vision.",
+      mission: `We want every business in Panama to be online. That's why we design your website for free. After the ${FREE_DAYS} free days, you decide: we keep hosting it for $${MONTHLY_PRICE_USD} USD a month with full support, or you host it yourself.`,
+      cityPlaceholder: "e.g. Panama City, San Francisco",
+      phonePlaceholder: PA.phoneExample,
+      shareText: (business, link) =>
+        `Check this out! MachineMind builds FREE websites for Panamanian businesses 🇵🇦 I already asked for mine for ${business}. Sign up here, it takes 2 minutes: ${link}`,
     },
     CO: {
       name: CO.name,
@@ -576,6 +597,7 @@ const en: Copy = {
   validation: {
     required: "This is required.",
     whatsappSV: `Check the number: El Salvador numbers have 8 digits (e.g. ${SV.phoneExample}).`,
+    whatsappPA: `Check the number: Panamanian mobiles have 8 digits and start with 6 (e.g. ${PA.phoneExample}).`,
     whatsappCO: `Check the number: Colombian mobiles have 10 digits and start with 3 (e.g. ${CO.phoneExample}).`,
     services: "Add at least one service or product.",
     email: "Check the email: it should look like hello@yourbusiness.com (or leave it empty).",

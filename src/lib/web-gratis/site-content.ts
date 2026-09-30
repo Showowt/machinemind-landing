@@ -57,7 +57,7 @@ export const siteContentSchema = z.object({
     tagline: text(120),
     type: text(120),
     city: text(80),
-    country: z.enum(["SV", "CO", "OTHER"]),
+    country: z.enum(["SV", "PA", "CO", "OTHER"]),
   }),
   seo: z.object({
     title: text(70),

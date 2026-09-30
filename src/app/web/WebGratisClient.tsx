@@ -130,6 +130,12 @@ export interface WebGratisClientProps {
   initialMarket: Market | null;
   /** Server-side guess (visitor's IP country) used only when nothing better is known. */
   marketHint: Market | null;
+  /**
+   * ?draft=<uuid> (team use): work on THAT row — a quick capture being completed
+   * by Fernanda — instead of a fresh draft. Skips the localStorage restore and
+   * save so a personal draft on the same device is never clobbered.
+   */
+  adoptDraftId?: string | null;
 }
 
 // ─── Constants + pure helpers ───────────────────────────────────────────────
@@ -450,6 +456,7 @@ function legacyCopy(text: string): void {
 
 function whatsappKey(countryCode: string): ValidationKey {
   if (countryCode === MARKET_INFO.SV.dial) return "whatsappSV";
+  if (countryCode === MARKET_INFO.PA.dial) return "whatsappPA";
   if (countryCode === MARKET_INFO.CO.dial) return "whatsappCO";
   return "invalidWhatsappGeneric";
 }
@@ -498,7 +505,7 @@ function whatsappHelpHref(t: Copy, f: Fields): string {
 }
 
 function flagClass(market: Market): string {
-  return market === "CO" ? styles.flagCO : styles.flagSV;
+  return market === "CO" ? styles.flagCO : market === "PA" ? styles.flagPA : styles.flagSV;
 }
 
 // ─── Presentational pieces (module scope so inputs never remount) ───────────
@@ -852,7 +859,7 @@ function DoneCard({
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
-export default function WebGratisClient({ initialMarket, marketHint }: WebGratisClientProps) {
+export default function WebGratisClient({ initialMarket, marketHint, adoptDraftId }: WebGratisClientProps) {
   const [ready, setReady] = useState(false);
   const [lang, setLang] = useState<Lang>("es");
   const [step, setStep] = useState<Step>(1);
@@ -912,7 +919,13 @@ export default function WebGratisClient({ initialMarket, marketHint }: WebGratis
       console.error("[WebGratis] time zone", error);
     }
     const fromZone: Market | null = open(
-      timeZone === MARKET_INFO.CO.timezone ? "CO" : timeZone === MARKET_INFO.SV.timezone ? "SV" : null,
+      timeZone === MARKET_INFO.CO.timezone
+        ? "CO"
+        : timeZone === MARKET_INFO.PA.timezone
+          ? "PA"
+          : timeZone === MARKET_INFO.SV.timezone
+            ? "SV"
+            : null,
     );
 
     const incoming = (params.get("ref") ?? "").trim().toUpperCase();
@@ -932,6 +945,17 @@ export default function WebGratisClient({ initialMarket, marketHint }: WebGratis
       fbclid: params.get("fbclid")?.slice(0, 500) || undefined,
       landing_url: window.location.href.slice(0, 1000),
     };
+
+    // Team mode: complete an existing row (a quick capture) under its own id.
+    if (adoptDraftId) {
+      draftIdRef.current = adoptDraftId;
+      setDraftId(adoptDraftId);
+      setFields(emptyFields(fromParam ?? fromZone ?? open(marketHint) ?? "SV"));
+      setAttribution({ ...fresh, utm_source: fresh.utm_source ?? "equipo" });
+      setCanShare(typeof navigator.share === "function");
+      setReady(true);
+      return;
+    }
 
     const saved = readJSON<Persisted>(STORAGE_KEY);
     if (saved && saved.v === 1 && saved.draftId && now - saved.savedAt < DRAFT_TTL_MS) {
@@ -973,12 +997,13 @@ export default function WebGratisClient({ initialMarket, marketHint }: WebGratis
     setCanShare(typeof navigator.share === "function");
     setReady(true);
     track("ViewContent", { content_name: "web_gratis" });
-  }, [marketHint]);
+  }, [marketHint, adoptDraftId]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Persist progress so an in-app-browser reload lands the user back in place.
+  // (Not in team mode: a teammate's session must never clobber a personal draft.)
   useEffect(() => {
-    if (!ready || !draftId) return;
+    if (!ready || !draftId || adoptDraftId) return;
     const data: Persisted = {
       v: 1,
       draftId,
@@ -994,7 +1019,7 @@ export default function WebGratisClient({ initialMarket, marketHint }: WebGratis
       savedAt: Date.now(),
     };
     writeJSON(STORAGE_KEY, data);
-  }, [ready, draftId, step, fields, uploads, lang, attribution, submitted, leadTracked]);
+  }, [ready, draftId, adoptDraftId, step, fields, uploads, lang, attribution, submitted, leadTracked]);
 
   useEffect(() => {
     document.documentElement.lang = lang === "es" ? (market === "CO" ? "es-CO" : "es-SV") : "en";

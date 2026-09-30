@@ -23,6 +23,8 @@ export function requireAdmin(request: Request): Response | null {
 }
 
 export const BOARD_VIEWS = [
+  "llamar",
+  "seguimiento",
   "nuevo",
   "en_construccion",
   "entregada",
@@ -34,9 +36,16 @@ export const BOARD_VIEWS = [
 ] as const;
 export type BoardView = (typeof BOARD_VIEWS)[number];
 
+/** Statuses a follow-up can still move forward (seguimiento view + digests). */
+export const FOLLOW_UP_STATUSES: readonly string[] = ["borrador", "nuevo", "en_construccion", "entregada", "compartida", "activa"];
+
 /** Which statuses each board tab shows. */
 export function statusesFor(view: BoardView): string[] | null {
   switch (view) {
+    case "llamar":
+      return ["borrador"]; // + quick_capture_at is not null (the list route adds it)
+    case "seguimiento":
+      return [...FOLLOW_UP_STATUSES]; // + next_follow_up_at is not null
     case "cerradas":
       return ["pausada", "cancelada", "descartada"];
     case "todas":
@@ -48,7 +57,7 @@ export function statusesFor(view: BoardView): string[] | null {
 
 // ─── Country + documents (migration 20260927) ───────────────────────────────
 
-export const BOARD_COUNTRIES = ["SV", "CO", "OTHER"] as const satisfies readonly SignupCountry[];
+export const BOARD_COUNTRIES = ["SV", "PA", "CO", "OTHER"] as const satisfies readonly SignupCountry[];
 export type BoardCountry = SignupCountry;
 
 /** Columns added on 2026-09-24; optional here so this compiles whether or not server.ts's row type lists them yet. */
@@ -69,7 +78,7 @@ export type OpsSignup = WebGratisSignup & SignupDocsCountry;
  * client that didn't send it) fall back to the WhatsApp prefix.
  */
 export function signupCountry(row: { country?: string | null; whatsapp?: string | null }): BoardCountry {
-  if (row.country === "SV" || row.country === "CO" || row.country === "OTHER") return row.country;
+  if (row.country === "SV" || row.country === "PA" || row.country === "CO" || row.country === "OTHER") return row.country;
   return countryFromE164(row.whatsapp ?? "");
 }
 
@@ -91,10 +100,12 @@ export function countryOrFilter(country: BoardCountry): string {
   switch (country) {
     case "SV":
       return "country.eq.SV,and(country.is.null,whatsapp.like.+503*)";
+    case "PA":
+      return "country.eq.PA,and(country.is.null,whatsapp.like.+507*)";
     case "CO":
       return "country.eq.CO,and(country.is.null,whatsapp.like.+57*)";
     case "OTHER":
-      return "country.eq.OTHER,and(country.is.null,whatsapp.not.like.+503*,whatsapp.not.like.+57*)";
+      return "country.eq.OTHER,and(country.is.null,whatsapp.not.like.+503*,whatsapp.not.like.+507*,whatsapp.not.like.+57*)";
   }
 }
 

@@ -80,6 +80,21 @@ export const draftRequestSchema = z.object({
   attribution: attributionSchema.optional(),
 });
 
+/**
+ * Number-only capture (/web since 2026-09-30): the page asks for the WhatsApp
+ * number and nothing else. Fernanda dials it; the rest of the row fills in
+ * later through her call, the funnel line's responder, or the team form.
+ */
+export const quickRequestSchema = z.object({
+  quickId: z.uuid(),
+  attempt: attemptSchema,
+  lang: z.enum(["es", "en"]).default("es"),
+  website: z.string().max(200).optional(), // honeypot — humans never see it
+  countryCode: z.enum(countryCodes),
+  whatsappLocal: z.string().trim().min(1).max(24),
+  attribution: attributionSchema.optional(),
+});
+
 export const submitRequestSchema = z.object({
   draftId: z.uuid(),
   attempt: attemptSchema,
@@ -100,6 +115,7 @@ export const uploadUrlRequestSchema = z.object({
 });
 
 export type DraftRequest = z.infer<typeof draftRequestSchema>;
+export type QuickRequest = z.infer<typeof quickRequestSchema>;
 export type SubmitRequest = z.infer<typeof submitRequestSchema>;
 export type UploadUrlRequest = z.infer<typeof uploadUrlRequestSchema>;
 

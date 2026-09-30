@@ -73,6 +73,11 @@ const patchSchema = z.object({
     .transform((v) => v.toUpperCase())
     .pipe(z.string().regex(/^[A-HJ-NP-Z2-9]{6}$/))
     .optional(),
+  /** Fernanda logged a call: counts the attempt and stamps the outcome. */
+  callOutcome: z.enum(["contestada", "no_contesto", "numero_malo"]).optional(),
+  /** When this lead needs its next touch (null clears it — nothing pending). */
+  followUpAt: z.union([z.iso.datetime({ offset: true }), z.null()]).optional(),
+  followUpNote: z.union([z.string().max(300), z.null()]).optional(),
 });
 
 const REOPEN_FREE_DAYS = 7;
@@ -93,10 +98,14 @@ function normalizeWhatsapp(raw: string, country: BoardCountry): string | null {
     international = true;
   }
   if (!international) {
+    // 6XXXXXXX is a valid local number in BOTH El Salvador and Panamá: the
+    // business's current market decides; SV wins otherwise (the home market).
+    if (country === "PA" && /^6\d{7}$/.test(digits)) return `+507${digits}`; // Panamá mobile, local
     if (/^[267]\d{7}$/.test(digits)) return `+503${digits}`; // El Salvador, local
     if (country !== "OTHER" && /^3\d{9}$/.test(digits)) return `+57${digits}`; // Colombia mobile, local
   }
   if (digits.startsWith("503")) return /^503[267]\d{7}$/.test(digits) ? `+${digits}` : null;
+  if (digits.startsWith("507")) return /^5076\d{7}$/.test(digits) ? `+${digits}` : null;
   if (digits.startsWith("57")) return /^573\d{9}$/.test(digits) ? `+${digits}` : null;
   // Any other number must carry its country code: a bare 10-digit local number
   // ("305 555 0123") would otherwise be saved as +305… — a different country.
@@ -131,7 +140,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { data: found, error: readError } = await db
       .from(SIGNUPS_TABLE)
       .select(
-        "id, status, business_name, whatsapp, delivered_at, free_until, shared_at, activated_at, confirmed_at, paid_via, paused_at, paid_through, referred_by_id, no_whatsapp_at, site_url, country",
+        "id, status, business_name, whatsapp, delivered_at, free_until, shared_at, activated_at, confirmed_at, paid_via, paused_at, paid_through, referred_by_id, no_whatsapp_at, site_url, country, call_attempts",
       )
       .eq("id", id)
       .maybeSingle();
@@ -247,6 +256,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       update.last_touch_at = now;
       update.last_touch_kind = patch.touch;
     }
+    if (patch.callOutcome) {
+      update.call_attempts = ((current as { call_attempts?: number }).call_attempts ?? 0) + 1;
+      update.last_call_outcome = patch.callOutcome;
+      update.last_touch_at = now;
+      update.last_touch_kind = `llamada_${patch.callOutcome}`;
+    }
+    if (patch.followUpAt !== undefined) update.next_follow_up_at = patch.followUpAt;
+    if (patch.followUpNote !== undefined) update.follow_up_note = patch.followUpNote?.trim() || null;
+    // A closed lead has no pending follow-up: leaving one would haunt the queue.
+    if (patch.status && CLOSED.includes(patch.status) && patch.followUpAt === undefined) update.next_follow_up_at = null;
     if (patch.confirmed && !current.confirmed_at) update.confirmed_at = now;
     if (Object.keys(update).length === 0) return ok({ id, unchanged: true });
 

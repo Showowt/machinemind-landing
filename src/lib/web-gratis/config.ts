@@ -1,7 +1,7 @@
 /**
- * Free-website funnel — shared constants. New sign-ups: El Salvador only
- * (OPEN_MARKETS); Colombian clients from before 2026-09-29 keep being served.
- * Client-safe: no secrets in this file.
+ * Free-website funnel — shared constants. New sign-ups: El Salvador + Panamá
+ * (OPEN_MARKETS, Phil 2026-09-30); Colombian clients from before 2026-09-29
+ * keep being served. Client-safe: no secrets in this file.
  */
 
 export const WEB_GRATIS_PATH = "/web";
@@ -27,7 +27,7 @@ export const MM_INSTAGRAM = "machinemindconsulting";
 // ─── Markets ────────────────────────────────────────────────────────────────
 
 /** Markets the /web page is framed for (copy, phone default, city examples). */
-export const MARKETS = ["SV", "CO"] as const;
+export const MARKETS = ["SV", "PA", "CO"] as const;
 export type Market = (typeof MARKETS)[number];
 /** Value of web_gratis_signups.country — always derived from the WhatsApp number. */
 export type SignupCountry = Market | "OTHER";
@@ -42,6 +42,13 @@ export const MARKET_INFO: Record<
     timezone: "America/El_Salvador",
     cities: ["San Salvador", "Santa Tecla", "San Miguel", "Santa Ana"],
     phoneExample: "7000 0000",
+  },
+  PA: {
+    dial: "507",
+    name: "Panamá",
+    timezone: "America/Panama",
+    cities: ["Ciudad de Panamá", "San Miguelito", "David", "Colón", "La Chorrera"],
+    phoneExample: "6123 4567",
   },
   CO: {
     dial: "57",
@@ -61,6 +68,7 @@ export function parseMarket(raw: string | null | undefined): Market | null {
     .replace(/[̀-ͯ]/g, "")
     .replace(/[\s_-]+/g, "");
   if (v === "sv" || v === "slv" || v === "elsalvador" || v === "salvador") return "SV";
+  if (v === "pa" || v === "pan" || v === "panama") return "PA";
   if (v === "co" || v === "col" || v === "colombia") return "CO";
   return null;
 }
@@ -68,16 +76,17 @@ export function parseMarket(raw: string | null | undefined): Market | null {
 /** Country of a validated E.164 number, so the DB column always matches the number. */
 export function countryFromE164(e164: string): SignupCountry {
   if (e164.startsWith("+503")) return "SV";
+  if (e164.startsWith("+507")) return "PA";
   if (e164.startsWith("+57")) return "CO";
   return "OTHER";
 }
 
 /**
- * Markets taking NEW sign-ups. Colombia closed on 2026-09-29 (Phil: social
- * ads, El Salvador only). CO stays in MARKETS so existing Colombian rows,
- * alerts, sites and billing keep working.
+ * Markets taking NEW sign-ups. Panamá opened 2026-09-30 (Phil: all campaigns
+ * on SV + PA). Colombia closed on 2026-09-29; CO stays in MARKETS so existing
+ * Colombian rows, alerts, sites and billing keep working.
  */
-export const OPEN_MARKETS: readonly Market[] = ["SV"];
+export const OPEN_MARKETS: readonly Market[] = ["SV", "PA"];
 
 export function isOpenMarket(m: Market | null | undefined): boolean {
   return m != null && OPEN_MARKETS.includes(m);
@@ -256,6 +265,9 @@ export function toE164(countryCode: string, local: string): string | null {
   }
   if (countryCode === "503") {
     if (!/^[267]\d{7}$/.test(digits)) return null;
+  } else if (countryCode === "507") {
+    // Panamá: WhatsApp lives on 8-digit mobiles starting with 6.
+    if (!/^6\d{7}$/.test(digits)) return null;
   } else if (countryCode === "57") {
     if (!/^3\d{9}$/.test(digits)) return null;
   } else if (countryCode === "1") {
@@ -284,6 +296,56 @@ export function referralLink(code: string): string {
 export const WHATSAPP_CONSENT_VERSION_STEP1 = "v1-step1-2026-09-24";
 /** Consent recorded at submit when no step-1 draft ever reached the server. */
 export const WHATSAPP_CONSENT_VERSION_SUBMIT = "v1-submit-2026-09-24";
+/** Consent line under the number-only quick form ("la llamamos y le escribimos por WhatsApp"). */
+export const WHATSAPP_CONSENT_VERSION_QUICK = "v1-quick-2026-09-30";
+
+// ─── Fernanda's shift ───────────────────────────────────────────────────────
+
+/**
+ * The conversion specialist's working hours, on the El Salvador clock (UTC-6,
+ * no DST — Panamá is one hour ahead). Stored in web_gratis_settings and edited
+ * from the board; these defaults match Phil's brief: 9:00–18:00, Mon–Sat.
+ * agent_days holds ISO weekday digits (1=Monday … 7=Sunday).
+ */
+export interface AgentSchedule {
+  startHour: number;
+  endHour: number;
+  /** e.g. "123456" = Monday through Saturday. */
+  days: string;
+}
+
+export const AGENT_SCHEDULE_DEFAULT: AgentSchedule = { startHour: 9, endHour: 18, days: "123456" };
+
+/** ISO weekday (1=Mon … 7=Sun) + hour of `date` in El Salvador. */
+function svWeekdayHour(date: Date): { weekday: number; hour: number } {
+  const sv = new Date(date.getTime() - 6 * 60 * 60 * 1000);
+  const weekday = ((sv.getUTCDay() + 6) % 7) + 1;
+  return { weekday, hour: sv.getUTCHours() };
+}
+
+/** True while the agent is on shift and should be dialing new numbers herself. */
+export function agentOnDuty(schedule: AgentSchedule, date: Date = new Date()): boolean {
+  const { weekday, hour } = svWeekdayHour(date);
+  return schedule.days.includes(String(weekday)) && hour >= schedule.startHour && hour < schedule.endHour;
+}
+
+/**
+ * "hoy a las 9", "mañana a las 9", "el lunes a las 9" — when the agent next
+ * starts, for the done-screen promise. Spanish only (the callers are es-first).
+ */
+export function agentNextStart(schedule: AgentSchedule, date: Date = new Date()): string {
+  const { weekday, hour } = svWeekdayHour(date);
+  const h = `a las ${schedule.startHour}`;
+  if (schedule.days.includes(String(weekday)) && hour < schedule.startHour) return `hoy ${h}`;
+  const dayNames = ["", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
+  for (let ahead = 1; ahead <= 7; ahead++) {
+    const d = ((weekday - 1 + ahead) % 7) + 1;
+    if (schedule.days.includes(String(d))) {
+      return ahead === 1 ? `mañana ${h}` : `el ${dayNames[d]} ${h}`;
+    }
+  }
+  return `mañana ${h}`;
+}
 
 /** PayPal fallback when the board has no PayPal link saved. */
 export const DEFAULT_PAYPAL_LINK = "https://paypal.me/MachineMind/19USD";

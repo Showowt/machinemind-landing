@@ -32,7 +32,7 @@ import { isTestSignupName, MESSAGES_TABLE, type MessageRow } from "@/lib/web-gra
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-const COUNTRY_NAME: Record<"SV" | "CO" | "OTHER", string> = { SV: "El Salvador", CO: "Colombia", OTHER: "Otro" };
+const COUNTRY_NAME: Record<"SV" | "PA" | "CO" | "OTHER", string> = { SV: "El Salvador", PA: "Panamá", CO: "Colombia", OTHER: "Otro" };
 
 /** The board's Cobros tab (not a signup status). */
 const COBROS_VIEW = "cobros";

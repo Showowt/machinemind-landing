@@ -147,7 +147,7 @@ interface ClientFile {
   size: { width: number; height: number } | null;
 }
 
-const COUNTRY_NAME: Record<string, string> = { SV: "El Salvador", CO: "Colombia", OTHER: "" };
+const COUNTRY_NAME: Record<string, string> = { SV: "El Salvador", PA: "Panamá", CO: "Colombia", OTHER: "" };
 
 function extOf(path: string): string {
   return (path.split(".").pop() ?? "").toLowerCase();

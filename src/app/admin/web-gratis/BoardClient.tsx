@@ -26,7 +26,7 @@ import {
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-type View = "nuevo" | "en_construccion" | "entregada" | "compartida" | "activa" | "cerradas" | "borrador" | "todas";
+type View = "llamar" | "seguimiento" | "nuevo" | "en_construccion" | "entregada" | "compartida" | "activa" | "cerradas" | "borrador" | "todas";
 type Status = OpsSignup["status"];
 
 type Row = OpsSignup;
@@ -80,6 +80,9 @@ interface Stats {
   outbox_pending: number;
   outbox_failed: number;
   top_referrers: { business_name: string; referral_code: string; n: number }[];
+  por_llamar?: number;
+  seguimientos_vencidos?: number;
+  seguimientos_hoy?: number;
   wa_queued?: number;
   wa_sent_today?: number;
   wa_failed_24h?: number;
@@ -98,6 +101,9 @@ interface Settings {
   pay_link: string | null;
   demo_link: string | null;
   paypal_link: string | null;
+  agent_start_hour?: number;
+  agent_end_hour?: number;
+  agent_days?: string;
 }
 
 interface ListResponse {
@@ -137,6 +143,10 @@ interface SettingsDraft {
   payLink: string;
   demoLink: string;
   paypalLink: string;
+  /** Fernanda's shift (SV clock). */
+  agentStart: string;
+  agentEnd: string;
+  agentDays: string;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -147,10 +157,11 @@ const COUNTRY_KEY = "mm-wg-admin-country";
 /** Whether this device last looked at the pipeline list or at "Cobros". */
 const MODE_KEY = "mm-wg-admin-mode";
 
-const COUNTRIES: readonly BoardCountry[] = ["SV", "CO", "OTHER"];
+const COUNTRIES: readonly BoardCountry[] = ["SV", "PA", "CO", "OTHER"];
 
 const COUNTRY_LABEL: Record<BoardCountry, string> = {
   SV: "El Salvador",
+  PA: "Panamá",
   CO: "Colombia",
   OTHER: "Otros países",
 };
@@ -158,11 +169,14 @@ const COUNTRY_LABEL: Record<BoardCountry, string> = {
 /** Example number for the "Corregir WhatsApp" field, per market. */
 const PHONE_EXAMPLE: Record<BoardCountry, string> = {
   SV: "+503 7123 4567",
+  PA: "+507 6123 4567",
   CO: "+57 300 123 4567",
   OTHER: "+1 305 555 0123",
 };
 
 const TABS: { view: View; label: string; statuses: Status[] | null }[] = [
+  { view: "llamar", label: "📞 Por llamar", statuses: ["borrador"] },
+  { view: "seguimiento", label: "⏰ Seguimientos", statuses: null },
   { view: "nuevo", label: "Nuevas", statuses: ["nuevo"] },
   { view: "en_construccion", label: "En construcción", statuses: ["en_construccion"] },
   { view: "entregada", label: "Entregadas", statuses: ["entregada"] },
@@ -281,6 +295,25 @@ function svToday(days = 0): string {
   const d = new Date(Date.now() - 6 * 3_600_000);
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
+}
+
+/** ISO instant of `days` ahead at `hour`:00 on the El Salvador clock (UTC-6, no DST). */
+function svAtIso(days: number, hour: number): string {
+  const d = new Date(Date.now() - 6 * 3_600_000);
+  d.setUTCDate(d.getUTCDate() + days);
+  d.setUTCHours(hour, 0, 0, 0);
+  return new Date(d.getTime() + 6 * 3_600_000).toISOString();
+}
+
+function followUpLabel(iso: string): string {
+  return new Date(iso).toLocaleString("es-SV", {
+    timeZone: "America/El_Salvador",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function sinceDelivered(iso: string | null): number | null {
@@ -1512,14 +1545,14 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
     <article className={`${styles.card} ${slaClass(row)}`}>
       <header className={styles.cardHead}>
         <div className={styles.cardTitle}>
-          <h3>{row.business_name}</h3>
-          <p>
-            {row.business_type} · {row.city}
-          </p>
+          <h3>{row.business_name ?? row.whatsapp}</h3>
+          <p>{row.business_name ? `${row.business_type} · ${row.city}` : "Solo dejó su número — los datos se toman en la llamada"}</p>
         </div>
         <div className={styles.headTags}>
           <CountryTag country={country} />
-          <span className={`${styles.pill} ${styles[`pill_${row.status}`] ?? ""}`}>{STATUS_LABEL[row.status]}</span>
+          <span className={`${styles.pill} ${styles[`pill_${row.status}`] ?? ""}`}>
+            {row.status === "borrador" && row.quick_capture_at ? "📞 Por llamar" : STATUS_LABEL[row.status]}
+          </span>
         </div>
       </header>
 
@@ -1849,14 +1882,93 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
         <SitePanel row={row} site={site} config={sitesConfig} siteApi={siteApi} onSite={onSite} onReload={onReload} />
       ) : null}
 
+      {!["pausada", "cancelada", "descartada"].includes(row.status) ? (
+        <div className={styles.waAuto}>
+          {row.next_follow_up_at ? (
+            <p
+              className={`${styles.payLine} ${new Date(row.next_follow_up_at).getTime() < Date.now() ? (styles.tone_overdue ?? "") : ""}`}
+            >
+              ⏰ Seguimiento: <b>{followUpLabel(row.next_follow_up_at)}</b>
+              {new Date(row.next_follow_up_at).getTime() < Date.now() ? " · VENCIDO" : ""}
+              {row.follow_up_note ? ` — ${row.follow_up_note}` : ""}
+            </p>
+          ) : (
+            <p className={styles.dim}>⏰ Sin seguimiento programado — todo lead activo debería tener su próxima acción</p>
+          )}
+          <div className={styles.tplRow}>
+            <button type="button" disabled={busy} onClick={() => void patch({ followUpAt: new Date(Date.now() + 2 * 3_600_000).toISOString() }, "Seguimiento: en 2 horas")}>
+              ⏰ +2 h
+            </button>
+            <button type="button" disabled={busy} onClick={() => void patch({ followUpAt: svAtIso(1, 9) }, "Seguimiento: mañana 9 am")}>
+              Mañana 9
+            </button>
+            <button type="button" disabled={busy} onClick={() => void patch({ followUpAt: svAtIso(2, 9) }, "Seguimiento: en 2 días")}>
+              +2 días
+            </button>
+            <button type="button" disabled={busy} onClick={() => void patch({ followUpAt: svAtIso(7, 9) }, "Seguimiento: en 7 días")}>
+              +7 días
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                const note = window.prompt("Nota del seguimiento (qué toca hacer):", row.follow_up_note ?? "");
+                if (note !== null) void patch({ followUpNote: note.trim() || null }, "Nota guardada");
+              }}
+            >
+              Nota
+            </button>
+            {row.next_follow_up_at ? (
+              <button type="button" disabled={busy} onClick={() => void patch({ followUpAt: null }, "Seguimiento quitado")}>
+                Quitar
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       <div className={styles.actions}>
         {row.status === "borrador" ? (
-          <>
-            {wa("rescue", scripts.rescue(row.business_name), "Rescatar por WhatsApp", { className: styles.waBtn, blocked: blockedAll })}
-            <button type="button" disabled={busy} onClick={() => void move("descartada")}>
-              Descartar
-            </button>
-          </>
+          row.quick_capture_at ? (
+            <>
+              <a className={styles.primary} href={`/web?draft=${row.id}${country !== "OTHER" ? `&pais=${country.toLowerCase()}` : ""}`} target="_blank" rel="noopener noreferrer">
+                📝 Completar formulario (en la llamada)
+              </a>
+              <button type="button" disabled={busy} onClick={() => void patch({ callOutcome: "contestada" }, "Contestó ✓ — complete el formulario")}>
+                📞 Contestó
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void patch({ callOutcome: "no_contesto", followUpAt: new Date(Date.now() + 2 * 3_600_000).toISOString() }, "No contestó — reintento en 2 h")}
+              >
+                🚫 No contestó (+2 h)
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm(`¿Descartar ${row.whatsapp}? Solo si el número no existe o pidió que no lo llamen.`)) {
+                    void patch({ callOutcome: "numero_malo", status: "descartada" }, "Descartado");
+                  }
+                }}
+              >
+                📵 Número malo
+              </button>
+              {row.call_attempts > 0 ? (
+                <span className={styles.dim}>
+                  {row.call_attempts} intento{row.call_attempts === 1 ? "" : "s"} · último: {row.last_call_outcome ?? "—"}
+                </span>
+              ) : null}
+            </>
+          ) : (
+            <>
+              {wa("rescue", scripts.rescue(row.business_name), "Rescatar por WhatsApp", { className: styles.waBtn, blocked: blockedAll })}
+              <button type="button" disabled={busy} onClick={() => void move("descartada")}>
+                Descartar
+              </button>
+            </>
+          )
         ) : null}
 
         {row.status === "nuevo" ? (
@@ -2500,6 +2612,9 @@ export default function BoardClient() {
               payLink: payload.settings.pay_link ?? "",
               demoLink: payload.settings.demo_link ?? "",
               paypalLink: payload.settings.paypal_link ?? "",
+              agentStart: String(payload.settings.agent_start_hour ?? 9),
+              agentEnd: String(payload.settings.agent_end_hour ?? 18),
+              agentDays: payload.settings.agent_days ?? "123456",
             },
         );
       } catch (err) {
@@ -2667,6 +2782,8 @@ export default function BoardClient() {
   async function saveSettings() {
     if (!settingsDraft) return;
     const days = settingsDraft.days.trim() ? Number.parseInt(settingsDraft.days, 10) : null;
+    const agentStart = Number.parseInt(settingsDraft.agentStart, 10);
+    const agentEnd = Number.parseInt(settingsDraft.agentEnd, 10);
     const res = await api("/api/web-gratis/admin/settings", {
       method: "PUT",
       body: JSON.stringify({
@@ -2675,6 +2792,9 @@ export default function BoardClient() {
         payLink: settingsDraft.payLink.trim() || null,
         demoLink: settingsDraft.demoLink.trim() || null,
         paypalLink: settingsDraft.paypalLink.trim() || null,
+        ...(Number.isFinite(agentStart) ? { agentStartHour: agentStart } : {}),
+        ...(Number.isFinite(agentEnd) ? { agentEndHour: agentEnd } : {}),
+        ...(settingsDraft.agentDays ? { agentDays: settingsDraft.agentDays } : {}),
       }),
     });
     const json = (await res.json()) as { message: string | null };
@@ -2768,6 +2888,16 @@ export default function BoardClient() {
   const stats = data?.stats;
   const count = (statuses: Status[] | null) =>
     stats ? (statuses ? statuses.reduce((n, s) => n + (stats.by_status[s] ?? 0), 0) : Object.values(stats.by_status).reduce((a, b) => a + b, 0)) : 0;
+  // The work queues count their own thing, not a status total.
+  const tabCount = (tab: { view: View; statuses: Status[] | null }): number =>
+    tab.view === "llamar"
+      ? (stats?.por_llamar ?? 0)
+      : tab.view === "seguimiento"
+        ? (stats?.seguimientos_vencidos ?? 0) + (stats?.seguimientos_hoy ?? 0)
+        : count(tab.statuses);
+  const tabUrgentFor = (tab: { view: View }): boolean =>
+    (tab.view === "llamar" && (stats?.por_llamar ?? 0) > 0) ||
+    (tab.view === "seguimiento" && (stats?.seguimientos_vencidos ?? 0) > 0);
   const rateToday = stats && stats.started_today ? Math.round((stats.submitted_today / stats.started_today) * 100) : 0;
   // The Cobros tab shows how many clients need a payment action (due today, overdue or a manual renewal).
   // Counted per client: a lapsed renewal is both "overdue" and "renewal due" in billingSummary.
@@ -2785,7 +2915,7 @@ export default function BoardClient() {
       ? billing
         ? COUNTRIES.reduce<Record<BoardCountry, number>>(
             (acc, c) => ({ ...acc, [c]: billing.timelines.filter((t) => (billing.clients[t.signupId]?.country ?? countryFromE164(t.whatsapp)) === c).length }),
-            { SV: 0, CO: 0, OTHER: 0 },
+            { SV: 0, PA: 0, CO: 0, OTHER: 0 },
           )
         : null
       : (data?.countryCounts ?? null);
@@ -2923,6 +3053,29 @@ export default function BoardClient() {
                 onChange={(e) => setSettingsDraft({ ...settingsDraft, demoLink: e.target.value })}
               />
             </label>
+            <label>
+              Turno de Fernanda — hora en que EMPIEZA (reloj de El Salvador, 0–23; Panamá va 1 h adelante)
+              <input
+                inputMode="numeric"
+                value={settingsDraft.agentStart}
+                onChange={(e) => setSettingsDraft({ ...settingsDraft, agentStart: e.target.value.replace(/\D/g, "").slice(0, 2) })}
+              />
+            </label>
+            <label>
+              Turno de Fernanda — hora en que TERMINA (1–24)
+              <input
+                inputMode="numeric"
+                value={settingsDraft.agentEnd}
+                onChange={(e) => setSettingsDraft({ ...settingsDraft, agentEnd: e.target.value.replace(/\D/g, "").slice(0, 2) })}
+              />
+            </label>
+            <label>
+              Días que trabaja (1=lunes … 7=domingo; «123456» = lunes a sábado). Fuera del turno, la línea del embudo atiende sola.
+              <input
+                value={settingsDraft.agentDays}
+                onChange={(e) => setSettingsDraft({ ...settingsDraft, agentDays: e.target.value.replace(/[^1-7]/g, "").slice(0, 7) })}
+              />
+            </label>
             <button type="button" className={styles.primary} onClick={() => void saveSettings()}>
               Guardar
             </button>
@@ -2965,7 +3118,7 @@ export default function BoardClient() {
             }}
           >
             {tab.label}
-            <span>{count(tab.statuses)}</span>
+            <span className={tabUrgentFor(tab) ? styles.tabUrgent : undefined}>{tabCount(tab)}</span>
           </button>
         ))}
       </nav>

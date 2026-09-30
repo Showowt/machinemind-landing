@@ -173,22 +173,37 @@ export async function GET(request: Request) {
   try {
     const db = getDb();
     const statuses = statusesFor(view);
-    let query = db.from(SIGNUPS_TABLE).select("*", { count: "exact" });
+    // View-specific filters beyond the status list, applied identically to the
+    // page query and the per-country counts.
+    type Filterable = { not: (col: string, op: string, val: unknown) => Filterable; is: (col: string, val: unknown) => Filterable };
+    const applyView = <Q extends Filterable>(qy: Q): Q => {
+      if (view === "llamar") return qy.not("quick_capture_at", "is", null) as Q;
+      if (view === "seguimiento") return qy.not("next_follow_up_at", "is", null) as Q;
+      // Quick captures have their own tab; "Sin terminar" is real abandoned forms.
+      if (view === "borrador") return qy.is("quick_capture_at", null) as Q;
+      return qy;
+    };
+    let query = applyView(db.from(SIGNUPS_TABLE).select("*", { count: "exact" }));
     if (statuses) query = query.in("status", statuses);
     if (q) query = query.or(searchFilter(q));
     if (country) query = query.or(countryOrFilter(country));
-    // New requests oldest-first (work the queue in order); everything else most-recent-first.
+    // Work queues in order: calls oldest-first, follow-ups soonest-first, new
+    // requests oldest-first; everything else most-recent-first.
     query =
-      view === "nuevo"
-        ? query.order("submitted_at", { ascending: true, nullsFirst: false })
-        : query.order("updated_at", { ascending: false });
+      view === "llamar"
+        ? query.order("quick_capture_at", { ascending: true })
+        : view === "seguimiento"
+          ? query.order("next_follow_up_at", { ascending: true })
+          : view === "nuevo"
+            ? query.order("submitted_at", { ascending: true, nullsFirst: false })
+            : query.order("updated_at", { ascending: false });
     const { data, error, count } = await query.range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
     if (error) throw error;
     const rows = ((data ?? []) as OpsSignup[]).map(normalizeOpsRow);
 
     /** Rows of this tab (and search) in one country — for the country filter's counts. */
     const countFor = async (c: BoardCountry): Promise<number> => {
-      let cq = db.from(SIGNUPS_TABLE).select("id", { count: "exact", head: true }).or(countryOrFilter(c));
+      let cq = applyView(db.from(SIGNUPS_TABLE).select("id", { count: "exact", head: true }).or(countryOrFilter(c)));
       if (statuses) cq = cq.in("status", statuses);
       if (q) cq = cq.or(searchFilter(q));
       const { count: n, error: countError } = await cq;
@@ -199,7 +214,7 @@ export async function GET(request: Request) {
     const ids = rows.map((r) => r.id);
     const [stats, settingsRes, logRes, creditRes, countryCountList, fileInfo, sites, sends] = await Promise.all([
       boardStats(),
-      db.from(SETTINGS_TABLE).select("delivery_days, high_demand, pay_link, demo_link, paypal_link").eq("id", 1).single(),
+      db.from(SETTINGS_TABLE).select("delivery_days, high_demand, pay_link, demo_link, paypal_link, agent_start_hour, agent_end_hour, agent_days").eq("id", 1).single(),
       ids.length
         ? db
             .from(MESSAGES_TABLE)
@@ -270,16 +285,19 @@ export async function GET(request: Request) {
     }
 
     const countryCounts: Record<BoardCountry, number> | null = countryCountList
-      ? { SV: countryCountList[0], CO: countryCountList[1], OTHER: countryCountList[2] }
+      ? (Object.fromEntries(BOARD_COUNTRIES.map((c, i) => [c, countryCountList[i] ?? 0])) as Record<BoardCountry, number>)
       : null;
 
     if (settingsRes.error) console.error("[WebGratis:admin:list] settings", settingsRes.error);
-    const settings: WebGratisSettings = (settingsRes.data as WebGratisSettings | null) ?? {
+    const settings: WebGratisSettings = (settingsRes.data as unknown as WebGratisSettings | null) ?? {
       delivery_days: null,
       high_demand: false,
       pay_link: null,
       demo_link: null,
       paypal_link: null,
+      agent_start_hour: 9,
+      agent_end_hour: 18,
+      agent_days: "123456",
     };
     // Same rule as the scheduler: /pagar can take money (Stripe link, or PayPal — always has a default).
     const billing = billingFor(rows, sends, hasPaymentMethod(settings), new Date());

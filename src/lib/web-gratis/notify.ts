@@ -56,6 +56,7 @@ export function svTime(date: Date = new Date()): string {
 
 const COUNTRY_LABELS: Record<SignupCountry, { flag: string; name: string }> = {
   SV: { flag: "🇸🇻", name: "El Salvador" },
+  PA: { flag: "🇵🇦", name: "Panamá" },
   CO: { flag: "🇨🇴", name: "Colombia" },
   OTHER: { flag: "🌎", name: "Otro país" },
 };
@@ -265,6 +266,35 @@ export function abandonedDigests<T>(items: { ref: T; row: WebGratisSignup }[]) {
 
 export function systemHtml(text: string): string {
   return `⚠️ <b>WEB GRATIS — sistema</b>\n${esc(text)}`;
+}
+
+/**
+ * Number-only quick capture (the /web form since 2026-09-30): the lead left
+ * ONLY a WhatsApp number, so the alert's whole job is to make Fernanda dial it
+ * within 5 minutes. Sent through the outbox as a rich system alert.
+ */
+export function quickLeadAlert(
+  row: Pick<WebGratisSignup, "whatsapp" | "country" | "referral_code" | "lang" | "utm_source" | "utm_medium" | "utm_campaign" | "fbclid" | "created_at">,
+  duty: { onDuty: boolean; nextStart: string },
+): { html: string; text: string } {
+  const phone = row.whatsapp ?? "";
+  const dial = phone.replace(/\D/g, "");
+  const lines = [
+    `📞 <b>WEB GRATIS — LLAMAR AHORA</b> · ${esc(countryLabel(row))}`,
+    ``,
+    `<b>${esc(phone)}</b>`,
+    `Dejó solo su número en el formulario rápido: quiere su página web gratis. Sin nombre ni negocio todavía — eso se recoge en la llamada.`,
+    ``,
+    duty.onDuty
+      ? `🔔 <b>Turno de Fernanda</b> — marcar en los próximos 5 minutos.`
+      : `🌙 Fuera de turno — la línea del embudo (+1 786-257-0284) atiende si escribe; Fernanda lo llama ${esc(duty.nextStart)}.`,
+    `📲 <a href="https://wa.me/${dial}">Abrir su WhatsApp</a>   ·   idioma ${row.lang === "en" ? "EN" : "ES"} · código ${esc(row.referral_code)}`,
+    `📊 ${esc(sourceLabel(row))}`,
+    `📋 <a href="${BOARD_URL}">Tablero → Por llamar</a>   🕐 ${esc(svTime(new Date(row.created_at)))}`,
+  ];
+  const html = lines.join("\n");
+  const text = `LLAMAR AHORA (web gratis): ${phone} — número solo, ${duty.onDuty ? "turno de Fernanda" : `fuera de turno, llamar ${duty.nextStart}`}. Tablero: ${BOARD_URL}`;
+  return { html, text };
 }
 
 // ─── Client-website alerts (sent by the outbox as Telegram + email) ─────────

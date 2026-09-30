@@ -10,6 +10,7 @@
  */
 import {
   abandonedDigests,
+  BOARD_URL,
   sendAlertEmail,
   sendDigestEmail,
   sendSubmittedEmail,
@@ -18,10 +19,12 @@ import {
   submittedDigests,
   submittedHtml,
   systemHtml,
+  TELEGRAM_MAX,
   telegramChats,
   type LeadContext,
 } from "./notify";
-import { getDb, signedLinks, SIGNUPS_TABLE, storage, type Referrer, type WebGratisSignup } from "./server";
+import { FOLLOW_UP_STATUSES } from "./admin";
+import { agentScheduleOf, getDb, loadSettings, signedLinks, SIGNUPS_TABLE, storage, type Referrer, type WebGratisSignup } from "./server";
 
 export const OUTBOX_TABLE = "web_gratis_outbox";
 
@@ -34,8 +37,8 @@ type Kind = "submitted" | "abandoned" | "system";
  * Telegram HTML (links) and also go out by e-mail when they have a subject.
  */
 export type SiteAlertKind = "site_ready" | "site_failed" | "site_published";
-export type RichAlertKind = SiteAlertKind | "billing_digest";
-const RICH_ALERT_KINDS: readonly string[] = ["site_ready", "site_failed", "site_published", "billing_digest"];
+export type RichAlertKind = SiteAlertKind | "billing_digest" | "quick_lead";
+const RICH_ALERT_KINDS: readonly string[] = ["site_ready", "site_failed", "site_published", "billing_digest", "quick_lead"];
 
 interface OutboxPayload {
   tg_done?: string[];
@@ -124,6 +127,11 @@ export async function enqueue(
 /** System alert, deduplicated by key (use a time bucket in the key to throttle). */
 export function enqueueSystem(key: string, text: string): Promise<boolean> {
   return enqueue("system", `system:${key}`, null, { text });
+}
+
+/** "Call this number NOW" — one per quick capture, Telegram only (no subject). */
+export function enqueueQuickLead(signupId: string, message: { html: string; text: string }): Promise<boolean> {
+  return enqueue("system", `quick:${signupId}`, signupId, { alert: "quick_lead", html: message.html, text: message.text });
 }
 
 /**
@@ -509,5 +517,119 @@ export async function runMaintenance(): Promise<MaintenanceReport> {
     await enqueueSystem(`daily:${day}`, text);
   }
 
+  await queueShiftStartDigest(now).catch((digestError) => {
+    console.error("[WebGratis:outbox] shift-start digest", digestError);
+  });
+
   return { abandonedQueued: typeof queued === "number" ? queued : 0, alerts };
+}
+
+// ─── Fernanda's shift-start digest ──────────────────────────────────────────
+
+interface QueueRow {
+  id: string;
+  business_name: string | null;
+  whatsapp: string;
+  status: string;
+  quick_capture_at: string | null;
+  next_follow_up_at: string | null;
+  follow_up_note: string | null;
+}
+
+const svClock = (iso: string) =>
+  new Date(iso).toLocaleString("es-SV", { timeZone: "America/El_Salvador", weekday: "short", hour: "2-digit", minute: "2-digit" });
+
+function queueLine(r: QueueRow, kind: "llamar" | "seguimiento"): string {
+  const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const who = r.business_name ? `<b>${esc(r.business_name)}</b> · ${esc(r.whatsapp)}` : `<b>${esc(r.whatsapp)}</b>`;
+  const when = kind === "llamar" ? (r.quick_capture_at ? `esperando desde ${svClock(r.quick_capture_at)}` : "") : r.next_follow_up_at ? `vence ${svClock(r.next_follow_up_at)}` : "";
+  const note = r.follow_up_note ? ` — ${esc(r.follow_up_note.slice(0, 80))}` : "";
+  return `• ${who} (${esc(r.status)}) ${when}${note} · <a href="https://wa.me/${r.whatsapp.replace(/\D/g, "")}">chat</a>`;
+}
+
+/** Split lines into Telegram-sized parts without ever dropping one (see packMessages). */
+function packParts(header: string, lines: string[], footer: string): string[] {
+  const parts: string[] = [];
+  let group: string[] = [];
+  const build = (g: string[]) => [header, "", ...g, "", footer].join("\n");
+  for (const line of lines) {
+    if (group.length > 0 && build([...group, line]).length > TELEGRAM_MAX) {
+      parts.push(build(group));
+      group = [];
+    }
+    group.push(line);
+  }
+  parts.push(build(group));
+  return parts;
+}
+
+/**
+ * Fernanda's day, queued once at her shift-start hour (SV clock, working days
+ * from web_gratis_settings): numbers still waiting for their first call,
+ * overdue follow-ups, and follow-ups due today. Never truncated — packed into
+ * as many Telegram messages as needed.
+ */
+async function queueShiftStartDigest(now: Date): Promise<void> {
+  const schedule = agentScheduleOf(await loadSettings());
+  const sv = new Date(now.getTime() - 6 * 60 * 60 * 1000);
+  const weekday = ((sv.getUTCDay() + 6) % 7) + 1;
+  if (sv.getUTCHours() !== schedule.startHour || !schedule.days.includes(String(weekday))) return;
+  const day = sv.toISOString().slice(0, 10);
+  if (await outboxHasKey(`system:fernanda:${day}:0`)) return;
+
+  const db = getDb();
+  const cols = "id, business_name, whatsapp, status, quick_capture_at, next_follow_up_at, follow_up_note";
+  // "Due today" ends at SV midnight (UTC-6, no DST).
+  const svMidnightUtc = new Date(Date.UTC(sv.getUTCFullYear(), sv.getUTCMonth(), sv.getUTCDate() + 1) + 6 * 60 * 60 * 1000);
+  const [calls, overdue, todayRes] = await Promise.all([
+    db
+      .from(SIGNUPS_TABLE)
+      .select(cols)
+      .eq("status", "borrador")
+      .not("quick_capture_at", "is", null)
+      .order("quick_capture_at", { ascending: true })
+      .limit(200),
+    db
+      .from(SIGNUPS_TABLE)
+      .select(cols)
+      .in("status", [...FOLLOW_UP_STATUSES])
+      .not("next_follow_up_at", "is", null)
+      .lt("next_follow_up_at", now.toISOString())
+      .order("next_follow_up_at", { ascending: true })
+      .limit(200),
+    db
+      .from(SIGNUPS_TABLE)
+      .select(cols)
+      .in("status", [...FOLLOW_UP_STATUSES])
+      .gte("next_follow_up_at", now.toISOString())
+      .lt("next_follow_up_at", svMidnightUtc.toISOString())
+      .order("next_follow_up_at", { ascending: true })
+      .limit(200),
+  ]);
+  if (calls.error) throw calls.error;
+  if (overdue.error) throw overdue.error;
+  if (todayRes.error) throw todayRes.error;
+
+  const callRows = (calls.data ?? []) as QueueRow[];
+  const overdueRows = (overdue.data ?? []) as QueueRow[];
+  const todayRows = (todayRes.data ?? []) as QueueRow[];
+
+  const lines: string[] = [];
+  lines.push(`📞 <b>Por llamar ya: ${callRows.length}</b>${callRows.length ? " — la regla de oro: 5 minutos" : " ✅"}`);
+  lines.push(...callRows.map((r) => queueLine(r, "llamar")));
+  lines.push(``, `⏰ <b>Seguimientos vencidos: ${overdueRows.length}</b>${overdueRows.length ? " — primero estos" : " ✅"}`);
+  lines.push(...overdueRows.map((r) => queueLine(r, "seguimiento")));
+  lines.push(``, `📅 <b>Para hoy: ${todayRows.length}</b>`);
+  lines.push(...todayRows.map((r) => queueLine(r, "seguimiento")));
+
+  const header = `☀️ <b>FERNANDA — TU DÍA</b> · ${sv.toLocaleDateString("es-SV", { weekday: "long", day: "numeric", month: "long" })}`;
+  const footer = `📋 <a href="${BOARD_URL}">Tablero → Por llamar / Seguimientos</a>`;
+  const parts = packParts(header, lines, footer);
+  for (let i = 0; i < parts.length; i++) {
+    await enqueue("system", `system:fernanda:${day}:${i}`, null, {
+      alert: "quick_lead",
+      html: parts[i],
+      text: `Fernanda — tu día (${day}): ${callRows.length} por llamar, ${overdueRows.length} vencidos, ${todayRows.length} para hoy. ${BOARD_URL}`,
+    });
+  }
 }

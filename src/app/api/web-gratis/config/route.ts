@@ -1,20 +1,24 @@
 /**
- * GET /api/web-gratis/config — public, cached: the delivery promise and the
- * high-demand notice the /web page shows. Never exposes the payment link.
+ * GET /api/web-gratis/config — public, cached: the delivery promise, the
+ * high-demand notice, and whether the conversion specialist is on shift
+ * (drives the "la llamamos ya" vs "la llamamos mañana a las 9" copy on /web).
+ * Never exposes the payment link.
  */
+import { agentNextStart, agentOnDuty } from "@/lib/web-gratis/config";
 import { fail, ok } from "@/lib/web-gratis/http";
-import { getDb } from "@/lib/web-gratis/server";
+import { agentScheduleOf, loadSettings } from "@/lib/web-gratis/server";
 
 export async function GET() {
   try {
-    const { data, error } = await getDb()
-      .from("web_gratis_settings")
-      .select("delivery_days, high_demand")
-      .eq("id", 1)
-      .single();
-    if (error) throw error;
+    const settings = await loadSettings();
+    const schedule = agentScheduleOf(settings);
     return ok(
-      { deliveryDays: (data?.delivery_days as number | null) ?? null, highDemand: !!data?.high_demand },
+      {
+        deliveryDays: settings.delivery_days,
+        highDemand: settings.high_demand,
+        onDuty: agentOnDuty(schedule),
+        nextStart: agentNextStart(schedule),
+      },
       { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } },
     );
   } catch (error) {

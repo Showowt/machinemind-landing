@@ -97,6 +97,13 @@ export interface WebGratisSignup {
   declined_at: string | null;
   /** PayPal / manual payers: the month is paid up to this SV date (Stripe renews on its own). */
   paid_through: string | null;
+  /** Set when the row was born from the number-only quick form (20260930): Fernanda calls it. */
+  quick_capture_at: string | null;
+  /** Fernanda's follow-up queue (20260930): when this lead needs its next touch, and why. */
+  next_follow_up_at: string | null;
+  follow_up_note: string | null;
+  call_attempts: number;
+  last_call_outcome: "contestada" | "no_contesto" | "numero_malo" | null;
   created_at: string;
   updated_at: string;
 }
@@ -110,18 +117,30 @@ export interface WebGratisSettings {
   pay_link: string | null;
   demo_link: string | null;
   paypal_link: string | null;
+  /** Fernanda's shift on the SV clock (20260930): she dials new numbers inside it. */
+  agent_start_hour: number;
+  agent_end_hour: number;
+  /** ISO weekday digits, 1=Monday … 7=Sunday (e.g. "123456" = Mon–Sat). */
+  agent_days: string;
 }
 
 export const SETTINGS_TABLE = "web_gratis_settings";
 
+const SETTINGS_COLUMNS = "delivery_days, high_demand, pay_link, demo_link, paypal_link, agent_start_hour, agent_end_hour, agent_days";
+
 export async function loadSettings(): Promise<WebGratisSettings> {
-  const { data, error } = await getDb()
-    .from(SETTINGS_TABLE)
-    .select("delivery_days, high_demand, pay_link, demo_link, paypal_link")
-    .eq("id", 1)
-    .single();
+  const { data, error } = await getDb().from(SETTINGS_TABLE).select(SETTINGS_COLUMNS).eq("id", 1).single();
   if (error) throw error;
-  return data as WebGratisSettings;
+  return data as unknown as WebGratisSettings;
+}
+
+/** The agent schedule of a settings row, for config.ts's agentOnDuty/agentNextStart. */
+export function agentScheduleOf(s: Pick<WebGratisSettings, "agent_start_hour" | "agent_end_hour" | "agent_days">): {
+  startHour: number;
+  endHour: number;
+  days: string;
+} {
+  return { startHour: s.agent_start_hour, endHour: s.agent_end_hour, days: s.agent_days };
 }
 
 /** El Salvador is UTC-6 all year (no DST). */

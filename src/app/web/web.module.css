@@ -123,6 +123,10 @@
   background: linear-gradient(#fcd116 0 50%, #003893 50% 75%, #ce1126 75%);
 }
 
+.flagPA {
+  background: linear-gradient(90deg, #005293 0 25%, #ffffff 25% 75%, #d21034 75%);
+}
+
 .langBtn {
   font-size: 12px;
   letter-spacing: 0.14em;
