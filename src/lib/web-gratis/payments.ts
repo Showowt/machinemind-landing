@@ -331,8 +331,8 @@ export interface PaymentRow {
 
 /**
  * Record a Stripe payment (idempotent on the Stripe id). The webhook alerts it
- * itself, so the row is born alerted. False when it was already recorded. A
- * ledger failure never fails the webhook: the payment is on the signup either way.
+ * itself, but the row stays unalerted until the outbox accepts the alert.
+ * False means an idempotent duplicate; other failures must retry the webhook.
  */
 async function recordStripePayment(p: {
   signupId: string;
@@ -356,11 +356,25 @@ async function recordStripePayment(p: {
       paid_through: p.paidThrough,
       source: p.source,
       external_id: p.externalId.slice(0, 200),
-      alerted_at: p.now.toISOString(),
+      alerted_at: null,
     });
   if (!error) return true;
-  if (error.code !== "23505") console.error("[WebGratis:payments] ledger insert failed", p.signupId, p.externalId, error);
-  return false;
+  if (error.code === "23505") return false;
+  throw error;
+}
+
+/** Use the same outbox key in the webhook and the recovery sweep. */
+function paymentAlertKey(row: Pick<PaymentRow, "id" | "source" | "external_id">): string {
+  if (row.source === "stripe_checkout" && row.external_id) return `paid:${row.external_id}`;
+  if (row.source === "stripe_invoice" && row.external_id) return `paid-invoice:${row.external_id}`;
+  return `payment:${row.id}`;
+}
+
+async function markStripePaymentAlerted(externalId: string, now: Date): Promise<void> {
+  const { error } = await getDb().from(PAYMENTS_TABLE)
+    .update({ alerted_at: now.toISOString() }).eq("external_id", externalId)
+    .select("id").single();
+  if (error) throw error;
 }
 
 // ─── Event claim (idempotency) ──────────────────────────────────────────────
@@ -392,7 +406,7 @@ async function finishEvent(id: string, status: "processed" | "ignored" | "failed
   let { error } = await record(signupId);
   // 23503: the referenced signup doesn't exist — record the outcome without the link.
   if (error?.code === "23503") ({ error } = await record(null));
-  if (error) console.error("[WebGratis:stripe] could not record event outcome", id, status, error);
+  if (error) throw error;
 }
 
 async function signupByStripe(subscriptionId: string | null, customerId: string | null): Promise<WebGratisSignup | null> {
@@ -501,29 +515,33 @@ async function onPaid(event: StripeEvent, deps: PaymentDeps): Promise<StripeHand
   }
 
   // Read before activating: was it already paid (another subscription = possible double charge)?
-  const { data: prior } = await getDb().from(SIGNUPS_TABLE).select("activated_at, paid_via, stripe_subscription_id").eq("id", ref).maybeSingle();
+  const { data: prior, error: priorError } = await getDb().from(SIGNUPS_TABLE).select("*").eq("id", ref).maybeSingle();
+  if (priorError) throw priorError;
   const now = deps.now();
   // Stripe bills monthly from today; invoice.paid corrects it to the exact period end.
   const paidThrough = addMonths(svDay(now));
-  const result = await activateSignup(ref, "stripe", { stripeCustomerId: customerId, stripeSubscriptionId: subscriptionId, paidThrough }, now);
-  if (!result) {
+  if (!prior) {
     await deps.alert(
       `paid-orphan:${event.id}`,
       `💰 PAGÓ por Stripe ${amount} con un código de cliente que no existe (${ref}; ${payer || "sin datos"}). Revise en Stripe.`,
     );
     return { duplicate: false, handled: "unknown_signup", signupId: null };
   }
-  const s = result.signup;
+  // Persist the confirmed payment before activation: a failed ledger write must
+  // not turn a first payment / reactivation into a renewal on the next attempt.
   await recordStripePayment({
-    signupId: s.id,
-    kind: result.newlyActive ? "first" : result.previousStatus === "pausada" || result.previousStatus === "cancelada" || result.previousStatus === "descartada" ? "reactivation" : "renewal",
+    signupId: ref,
+    kind: !prior.activated_at ? "first" : ["pausada", "cancelada", "descartada"].includes(prior.status) ? "reactivation" : "renewal",
     amountCents: num(o.amount_total),
     currency: str(o.currency),
-    paidThrough: s.paid_through,
+    paidThrough: !prior.paid_through || paidThrough > prior.paid_through ? paidThrough : prior.paid_through,
     source: "stripe_checkout",
     externalId: event.id,
     now,
   });
+  const result = await activateSignup(ref, "stripe", { stripeCustomerId: customerId, stripeSubscriptionId: subscriptionId, paidThrough }, now);
+  if (!result) throw new Error(`Paid signup disappeared during activation: ${ref}`);
+  const s = result.signup;
 
   // D4 — idempotent, so a Stripe retry that finds the signup already active still grants it.
   let creditNote = "";
@@ -566,6 +584,7 @@ async function onPaid(event: StripeEvent, deps: PaymentDeps): Promise<StripeHand
     `paid:${event.id}`,
     `${paymentReceivedText({ business: s.business_name, amount: amount || amountLabel(null, null), via: "stripe", paidThrough: s.paid_through })} (se renueva sola)\n${s.whatsapp} activó su web.${creditNote} ${notes.join(" ")}`,
   );
+  await markStripePaymentAlerted(event.id, now);
   return { duplicate: false, handled: "activated", signupId: s.id, thankYou: thanks.status };
 }
 
@@ -575,7 +594,7 @@ async function setBillingIssue(signupId: string, issue: "payment_failed" | "subs
     .from(SIGNUPS_TABLE)
     .update({ billing_issue: issue, billing_issue_at: now.toISOString() })
     .eq("id", signupId);
-  if (error) console.error("[WebGratis:stripe] billing_issue not recorded", signupId, issue, error);
+  if (error) throw error;
 }
 
 /**
@@ -629,10 +648,22 @@ async function onInvoicePaid(event: StripeEvent, deps: PaymentDeps): Promise<Str
   }
 
   const wasPaused = s.status === "pausada" || s.status === "cancelada" || s.status === "descartada";
+  const invoiceId = invoice.id ?? event.id;
+  await recordStripePayment({
+    signupId: s.id,
+    kind: wasPaused ? "reactivation" : "renewal",
+    amountCents: cents,
+    currency: invoice.currency ?? null,
+    paidThrough: !s.paid_through || periodEnd > s.paid_through ? periodEnd : s.paid_through,
+    source: "stripe_invoice",
+    externalId: invoiceId,
+    now,
+  });
   let current: WebGratisSignup = s;
   if (wasPaused) {
     const result = await activateSignup(s.id, "stripe", { paidThrough: periodEnd }, now);
-    if (result) current = result.signup;
+    if (!result) throw new Error(`Paid signup disappeared during reactivation: ${s.id}`);
+    current = result.signup;
   } else {
     const { data, error } = await getDb()
       .from(SIGNUPS_TABLE)
@@ -650,24 +681,15 @@ async function onInvoicePaid(event: StripeEvent, deps: PaymentDeps): Promise<Str
     if (error) throw error;
     current = data as WebGratisSignup;
   }
-  const invoiceId = invoice.id ?? event.id;
-  const fresh = await recordStripePayment({
-    signupId: s.id,
-    kind: wasPaused ? "reactivation" : "renewal",
-    amountCents: cents,
-    currency: invoice.currency ?? null,
-    paidThrough: current.paid_through,
-    source: "stripe_invoice",
-    externalId: invoiceId,
-    now,
-  });
-  if (fresh || wasPaused) {
+  // Retry the idempotent enqueue even when a prior attempt inserted the ledger.
+  {
     const notes = wasPaused ? " ⚠️ Estaba PAUSADA: restaure su web (sáquela del archivo) hoy." : "";
     await deps.alert(
       `paid-invoice:${invoiceId}`,
       `${paymentReceivedText({ business: current.business_name, amount: money(cents, invoice.currency ?? null), via: "stripe", paidThrough: current.paid_through })}\nCobro mensual automático · ${current.whatsapp}.${notes}`,
     );
   }
+  await markStripePaymentAlerted(invoiceId, now);
   return { duplicate: false, handled: "invoice_paid", signupId: s.id };
 }
 
@@ -749,11 +771,21 @@ async function processEvent(event: StripeEvent, deps: PaymentDeps): Promise<Stri
 export async function handleStripeEvent(event: StripeEvent, deps: PaymentDeps): Promise<StripeHandleResult> {
   if (!(await claimEvent(event))) return { duplicate: true, handled: "duplicate", signupId: null };
   try {
-    const result = await processEvent(event, deps);
+    const result = await processEvent(event, {
+      ...deps,
+      alert: async (key, text) => {
+        if (!(await deps.alert(key, text))) throw new Error(`Stripe alert not queued: ${key}`);
+        return true;
+      },
+    });
     await finishEvent(event.id, result.handled === "ignored" ? "ignored" : "processed", result.signupId);
     return result;
   } catch (error) {
-    await finishEvent(event.id, "failed", null, error instanceof Error ? error.message : String(error));
+    try {
+      await finishEvent(event.id, "failed", null, error instanceof Error ? error.message : String(error));
+    } catch (finishError) {
+      console.error("[WebGratis:stripe] could not record failed event", event.id, finishError);
+    }
     throw error;
   }
 }
@@ -817,7 +849,7 @@ export async function alertNewPayments(
     if (!options.onlySignupIds && isTestSignupName(business)) continue;
     try {
       const text = `${paymentReceivedText({ business, amount: amountLabel(row.amount_cents, row.currency), via: row.via, paidThrough: row.paid_through })}\n${KIND_NOTE[row.kind]} · ${row.signup?.whatsapp ?? ""}. Los recordatorios de pago de este mes se detienen solos.`;
-      if (!(await deps.alert(`payment:${row.id}`, text))) {
+      if (!(await deps.alert(paymentAlertKey(row), text))) {
         out.errors.push(`payment ${row.id}: alert not queued`);
         continue;
       }
