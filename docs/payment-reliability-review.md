@@ -7,7 +7,10 @@ failures so Stripe can retry. Confirmed payments are inserted before changing
 signup state, preserving first-payment/reactivation classification on retry.
 The ledger remains unalerted until the outbox acknowledges it. The recovery
 sweep and webhook share an outbox key, so either can recover an unfinished
-notification without queuing a second alert.
+notification without queuing a second alert. Replays use the durable payment
+coverage, payment timestamp and kind, preserving reactivation warnings. Recovery
+alerts retain build/form warnings and prompt staff to check WhatsApp history
+when the sweep wins the race with the detailed webhook alert.
 
 Run `node --test tests/payment-reliability.test.cjs`. These are offline tests
 of the actual handler with an in-memory PostgREST boundary and captured alerts.
@@ -17,7 +20,10 @@ it creates test rows and is outside this change's authorization.
 ## Remaining recovery work
 
 This is retry-based durability, not a cross-table transaction. A process crash
-between the ledger and signup writes still needs Stripe redelivery. An alert
+between the ledger and signup writes still needs Stripe redelivery. The existing
+event lease also treats a concurrent still-processing delivery as a duplicate;
+a later redelivery or reconciliation is needed after a crashed processing
+attempt whose failed-state write also fails. An alert
 acknowledgment means accepted by the outbox, not delivered to Telegram/email.
 Existing processed events with missing ledger rows and historically premarked
 alerts are not repaired by this patch. Referral-credit alert recovery is a
@@ -54,4 +60,4 @@ CSS-module purity error without changing its intended board styling.
 `npm run build -- --webpack` passes with an empty environment plus a dummy
 Supabase URL (`http://127.0.0.1:9`) and dummy anon key; no live configuration
 is loaded. Default Turbopack validation was blocked by this executor's sandbox.
-The focused suite passes 10/10; the unchanged baseline fails 8 of those tests.
+The focused suite passes 15/15; the unchanged baseline fails 13 of those tests.

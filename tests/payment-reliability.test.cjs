@@ -25,7 +25,7 @@ function fixture(overrides = {}) {
   const queued = new Map();
   let rejectAlert = false;
   const db = { from(table) {
-    let op = 'select', value, one = false, filters = [], reclaim = false;
+    let op = 'select', value, one = false, required = false, filters = [], reclaim = false;
     const q = {
       select() { return q; }, insert(v) { op = 'insert'; value = v; return q; },
       update(v) { op = 'update'; value = v; return q; },
@@ -34,7 +34,7 @@ function fixture(overrides = {}) {
       in(k, v) { filters.push(r => v.includes(r[k])); return q; },
       not() { return q; }, order() { return q; }, limit() { return q; },
       or() { reclaim = true; return q; },
-      single() { one = true; return q; }, maybeSingle() { one = true; return q; },
+      single() { one = true; required = true; return q; }, maybeSingle() { one = true; return q; },
       then(resolve, reject) {
         return Promise.resolve().then(() => {
           const fault = faults.findIndex(f => f.table === table && f.op === op && (!f.when || f.when(value)));
@@ -49,6 +49,7 @@ function fixture(overrides = {}) {
           let matched = data.filter(r => filters.every(f => f(r)) && (!reclaim || r.status === 'failed'));
           if (op === 'update') matched.forEach(r => Object.assign(r, value));
           matched = matched.map(r => ({ ...r, ...(table === PAYMENTS ? { signup: rows[SIGNUPS][0] } : {}) }));
+          if (required && matched.length !== 1) return { data: null, error: { code: 'PGRST116' } };
           return { data: one ? matched[0] ?? null : matched, error: null };
         }).then(resolve, reject);
       },
@@ -193,4 +194,64 @@ test('reactivation ledger failure preserves classification and paid access on re
   await f.api.handleStripeEvent(invoice(), f.deps);
   assert.equal(f.rows[PAYMENTS][0].kind, 'reactivation');
   assert.equal(f.rows[SIGNUPS][0].status, 'activa');
+});
+
+test('checkout redelivery the next day uses original ledger coverage', async () => {
+  const f = fixture({ status: 'entregada', activated_at: null, paid_through: null });
+  f.failAlert(true);
+  await assert.rejects(f.api.handleStripeEvent(checkout(), f.deps));
+  const originalCoverage = f.rows[PAYMENTS][0].paid_through;
+  f.deps.now = () => new Date('2026-10-02T12:00:00Z');
+  f.failAlert(false);
+  await f.api.handleStripeEvent(checkout(), f.deps);
+  assert.equal(f.rows[SIGNUPS][0].paid_through, originalCoverage);
+  assert.equal(f.rows[SIGNUPS][0].last_payment_at, f.rows[PAYMENTS][0].paid_at);
+  assert.equal(f.rows[SIGNUPS][0].last_payment_at, f.rows[SIGNUPS][0].activated_at);
+  assert.equal(f.rows[PAYMENTS].length, 1);
+});
+
+for (const [name, event] of [['checkout', checkout], ['renewal', invoice]]) {
+  test(`${name}: reactivation warning survives a rejected enqueue and retry`, async () => {
+    const f = fixture({ status: 'pausada' });
+    f.failAlert(true);
+    await assert.rejects(f.api.handleStripeEvent(event(), f.deps));
+    assert.equal(f.rows[SIGNUPS][0].status, 'activa');
+    f.failAlert(false);
+    await f.api.handleStripeEvent(event(), f.deps);
+    assert.equal(f.queued.size, 1);
+    assert.match([...f.queued.values()][0], /restaur/i);
+  });
+}
+
+test('sweep winning the webhook race preserves build and confirmation warnings', async () => {
+  const f = fixture({ status: 'en_construccion', activated_at: null, paid_through: null });
+  const enqueue = f.deps.alert;
+  let swept = false;
+  f.deps.alert = async (key, text) => {
+    if (!swept) {
+      swept = true;
+      await f.api.alertNewPayments({ alert: enqueue }, { onlySignupIds: [ID] });
+    }
+    return enqueue(key, text);
+  };
+  await f.api.handleStripeEvent(checkout(), f.deps);
+  assert.equal(f.queued.size, 1);
+  const text = [...f.queued.values()][0];
+  assert.match(text, /AÚN NO está entregada/);
+  assert.match(text, /confirmación por WhatsApp/);
+  assert.match(text, /consentimiento/);
+  assert.equal(f.rows[SIGNUPS][0].status, 'en_construccion');
+});
+
+test('a failed ledger read after insert retries using the original persisted payment', async () => {
+  const f = fixture({ status: 'entregada', activated_at: null, paid_through: null });
+  f.faults.push({ table: PAYMENTS, op: 'select' });
+  await assert.rejects(f.api.handleStripeEvent(checkout(), f.deps));
+  assert.equal(f.rows[SIGNUPS][0].activated_at, null);
+  assert.equal(f.rows[PAYMENTS].length, 1);
+  f.deps.now = () => new Date('2026-10-02T12:00:00Z');
+  await f.api.handleStripeEvent(checkout(), f.deps);
+  assert.equal(f.rows[PAYMENTS].length, 1);
+  assert.equal(f.rows[SIGNUPS][0].paid_through, f.rows[PAYMENTS][0].paid_through);
+  assert.equal(f.rows[PAYMENTS][0].kind, 'first');
 });

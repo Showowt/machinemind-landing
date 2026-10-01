@@ -332,7 +332,8 @@ export interface PaymentRow {
 /**
  * Record a Stripe payment (idempotent on the Stripe id). The webhook alerts it
  * itself, but the row stays unalerted until the outbox accepts the alert.
- * False means an idempotent duplicate; other failures must retry the webhook.
+ * Return the durable row on both insert and duplicate, so retries use its
+ * original coverage and payment kind; other failures must retry the webhook.
  */
 async function recordStripePayment(p: {
   signupId: string;
@@ -343,7 +344,7 @@ async function recordStripePayment(p: {
   source: "stripe_checkout" | "stripe_invoice";
   externalId: string;
   now: Date;
-}): Promise<boolean> {
+}): Promise<PaymentRow> {
   const { error } = await getDb()
     .from(PAYMENTS_TABLE)
     .insert({
@@ -358,9 +359,14 @@ async function recordStripePayment(p: {
       external_id: p.externalId.slice(0, 200),
       alerted_at: null,
     });
-  if (!error) return true;
-  if (error.code === "23505") return false;
-  throw error;
+  if (error && error.code !== "23505") throw error;
+  const { data, error: readError } = await getDb().from(PAYMENTS_TABLE)
+    .select("*").eq("external_id", p.externalId).single();
+  if (readError) throw readError;
+  if (!data || data.signup_id !== p.signupId || data.source !== p.source) {
+    throw new Error(`Stripe payment ledger mismatch: ${p.externalId}`);
+  }
+  return data as PaymentRow;
 }
 
 /** Use the same outbox key in the webhook and the recovery sweep. */
@@ -529,7 +535,7 @@ async function onPaid(event: StripeEvent, deps: PaymentDeps): Promise<StripeHand
   }
   // Persist the confirmed payment before activation: a failed ledger write must
   // not turn a first payment / reactivation into a renewal on the next attempt.
-  await recordStripePayment({
+  const payment = await recordStripePayment({
     signupId: ref,
     kind: !prior.activated_at ? "first" : ["pausada", "cancelada", "descartada"].includes(prior.status) ? "reactivation" : "renewal",
     amountCents: num(o.amount_total),
@@ -539,7 +545,7 @@ async function onPaid(event: StripeEvent, deps: PaymentDeps): Promise<StripeHand
     externalId: event.id,
     now,
   });
-  const result = await activateSignup(ref, "stripe", { stripeCustomerId: customerId, stripeSubscriptionId: subscriptionId, paidThrough }, now);
+  const result = await activateSignup(ref, "stripe", { stripeCustomerId: customerId, stripeSubscriptionId: subscriptionId, paidThrough: payment.paid_through }, new Date(payment.paid_at));
   if (!result) throw new Error(`Paid signup disappeared during activation: ${ref}`);
   const s = result.signup;
 
@@ -567,6 +573,9 @@ async function onPaid(event: StripeEvent, deps: PaymentDeps): Promise<StripeHand
     notes.push("⚠️ Estaba PAUSADA: restaure su web (sáquela del archivo) hoy.");
   } else if (result.previousStatus === "cancelada" || result.previousStatus === "descartada") {
     notes.push(`⚠️ Estaba ${STATUS_WORD[result.previousStatus].toUpperCase()}: revise su web y el cobro.`);
+  }
+  if (payment.kind === "reactivation" && !["pausada", "cancelada", "descartada"].includes(result.previousStatus)) {
+    notes.push("⚠️ Este pago reactivó su web: verifique que esté restaurada (fuera del archivo).");
   }
   const priorSub = (prior?.stripe_subscription_id as string | null | undefined) ?? null;
   if (prior?.activated_at && (prior.paid_via !== "stripe" || (priorSub && subscriptionId && priorSub !== subscriptionId))) {
@@ -649,7 +658,7 @@ async function onInvoicePaid(event: StripeEvent, deps: PaymentDeps): Promise<Str
 
   const wasPaused = s.status === "pausada" || s.status === "cancelada" || s.status === "descartada";
   const invoiceId = invoice.id ?? event.id;
-  await recordStripePayment({
+  const payment = await recordStripePayment({
     signupId: s.id,
     kind: wasPaused ? "reactivation" : "renewal",
     amountCents: cents,
@@ -659,17 +668,18 @@ async function onInvoicePaid(event: StripeEvent, deps: PaymentDeps): Promise<Str
     externalId: invoiceId,
     now,
   });
+  const coveredThrough = payment.paid_through ?? periodEnd;
   let current: WebGratisSignup = s;
   if (wasPaused) {
-    const result = await activateSignup(s.id, "stripe", { paidThrough: periodEnd }, now);
+    const result = await activateSignup(s.id, "stripe", { paidThrough: coveredThrough }, new Date(payment.paid_at));
     if (!result) throw new Error(`Paid signup disappeared during reactivation: ${s.id}`);
     current = result.signup;
   } else {
     const { data, error } = await getDb()
       .from(SIGNUPS_TABLE)
       .update({
-        paid_through: !s.paid_through || periodEnd > s.paid_through ? periodEnd : s.paid_through,
-        last_payment_at: now.toISOString(),
+        paid_through: !s.paid_through || coveredThrough > s.paid_through ? coveredThrough : s.paid_through,
+        last_payment_at: payment.paid_at,
         billing_issue: null,
         billing_issue_at: null,
         last_touch_at: now.toISOString(),
@@ -683,7 +693,7 @@ async function onInvoicePaid(event: StripeEvent, deps: PaymentDeps): Promise<Str
   }
   // Retry the idempotent enqueue even when a prior attempt inserted the ledger.
   {
-    const notes = wasPaused ? " ⚠️ Estaba PAUSADA: restaure su web (sáquela del archivo) hoy." : "";
+    const notes = payment.kind === "reactivation" ? " ⚠️ Estaba PAUSADA: restaure su web (sáquela del archivo) hoy." : "";
     await deps.alert(
       `paid-invoice:${invoiceId}`,
       `${paymentReceivedText({ business: current.business_name, amount: money(cents, invoice.currency ?? null), via: "stripe", paidThrough: current.paid_through })}\nCobro mensual automático · ${current.whatsapp}.${notes}`,
@@ -814,7 +824,7 @@ export function defaultBillingDeps(): BillingRunDeps {
 }
 
 type LedgerRowWithSignup = PaymentRow & {
-  signup: { business_name: string; whatsapp: string; referral_code: string } | null;
+  signup: { business_name: string; whatsapp: string; referral_code: string; status: SignupStatus } | null;
 };
 
 const KIND_NOTE: Record<PaymentRow["kind"], string> = {
@@ -836,7 +846,7 @@ export async function alertNewPayments(
   const out = { alerted: 0, errors: [] as string[] };
   let q = db
     .from(PAYMENTS_TABLE)
-    .select("*, signup:web_gratis_signups!inner(business_name, whatsapp, referral_code)")
+    .select("*, signup:web_gratis_signups!inner(business_name, whatsapp, referral_code, status)")
     .is("alerted_at", null)
     .order("id", { ascending: true })
     .limit(50);
@@ -848,7 +858,21 @@ export async function alertNewPayments(
     const business = row.signup?.business_name ?? "cliente";
     if (!options.onlySignupIds && isTestSignupName(business)) continue;
     try {
-      const text = `${paymentReceivedText({ business, amount: amountLabel(row.amount_cents, row.currency), via: row.via, paidThrough: row.paid_through })}\n${KIND_NOTE[row.kind]} · ${row.signup?.whatsapp ?? ""}. Los recordatorios de pago de este mes se detienen solos.`;
+      const notes: string[] = [];
+      if (row.source === "board") {
+        notes.push("Los recordatorios de pago de este mes se detienen solos.");
+      } else {
+        // The sweep can win the dedupe race with the detailed webhook alert.
+        // Preserve operational warnings; do not claim activation or delivery.
+        if (row.signup?.status === "borrador") {
+          notes.push("⚠️ Su formulario está incompleto: complételo en el tablero.");
+        } else if (row.signup && KEEP_STATUS_ON_PAYMENT.includes(row.signup.status)) {
+          notes.push("⚠️ Su web AÚN NO está entregada: sigue en la fila de construcción; entréguela desde el tablero cuando esté lista.");
+        }
+        notes.push("Verifique el estado de su web y la confirmación por WhatsApp en el historial; si falta, confirme a mano respetando su consentimiento y la ventana de WhatsApp.");
+        notes.push("Si ya tenía otra suscripción u otro medio de pago, revise un posible cobro doble.");
+      }
+      const text = `${paymentReceivedText({ business, amount: amountLabel(row.amount_cents, row.currency), via: row.via, paidThrough: row.paid_through })}\n${KIND_NOTE[row.kind]} · ${row.signup?.whatsapp ?? ""}. ${notes.join(" ")}`;
       if (!(await deps.alert(paymentAlertKey(row), text))) {
         out.errors.push(`payment ${row.id}: alert not queued`);
         continue;
@@ -999,7 +1023,7 @@ export async function runCobrosDigest(deps: BillingRunDeps, options: { onlySignu
   const yesterday = addDays(day, -1);
   let pq = getDb()
     .from(PAYMENTS_TABLE)
-    .select("*, signup:web_gratis_signups!inner(business_name, whatsapp, referral_code)")
+    .select("*, signup:web_gratis_signups!inner(business_name, whatsapp, referral_code, status)")
     .gte("paid_at", svDayStart(yesterday).toISOString())
     .lt("paid_at", svDayStart(day).toISOString())
     .order("paid_at", { ascending: true });
