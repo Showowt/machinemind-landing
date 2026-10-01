@@ -86,6 +86,8 @@ export interface WebGratisSignup {
   paused_at: string | null;
   recontact_after: string | null;
   paid_via: "stripe" | "paypal" | "manual" | null;
+  /** Latest recorded payment (20260929 billing migration); absent on older rows. */
+  last_payment_at?: string | null;
   stripe_customer_id: string | null;
   stripe_subscription_id: string | null;
   referred_by_text: string | null;

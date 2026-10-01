@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { supabase } from '@/lib/supabase'
+import { getSupabase } from '@/lib/supabase'
 
 type Lang = 'en' | 'es' | 'fr' | 'pt'
 
@@ -250,6 +250,8 @@ export default function VoxLinkWaitlist() {
 
   async function fetchCount() {
     try {
+      const supabase = getSupabase()
+      if (!supabase) return
       const { count } = await supabase
         .from('voxlink_waitlist')
         .select('*', { count: 'exact', head: true })
@@ -487,6 +489,8 @@ export default function VoxLinkWaitlist() {
     }
     setLoading(true)
     try {
+      const supabase = getSupabase()
+      if (!supabase) throw new Error('Waitlist storage is not configured')
       let existing = null
       if (cleanPhone) { const { data } = await supabase.from('voxlink_waitlist').select('position').eq('phone', cleanPhone).maybeSingle(); existing = data }
       if (!existing && email) { const { data } = await supabase.from('voxlink_waitlist').select('position').eq('email', email.toLowerCase().trim()).maybeSingle(); existing = data }

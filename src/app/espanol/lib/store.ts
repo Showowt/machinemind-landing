@@ -3,13 +3,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import type { TabId, VocabItem, Stats, StreakData, ErrorPattern, Message, CorrectionData, DifficultyState, ShadowResult, ListenResult } from "./types";
-import { createClient } from "@supabase/supabase-js";
-
-// ── Supabase client ───────────────────────────────────────────────────────────
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+import { getSupabase } from "@/lib/supabase";
 
 const STORAGE_KEY = "phil_espanol_v2";
 
@@ -180,6 +174,8 @@ export const useEspanolStore = create<EspanolStore>()(
 
       // Supabase sync
       syncToSupabase: () => {
+        const supabase = getSupabase();
+        if (!supabase) return; // Zustand persist retains local progress.
         const s = get();
         const payload = {
           id: STORAGE_KEY,
@@ -197,6 +193,8 @@ export const useEspanolStore = create<EspanolStore>()(
       },
       loadFromSupabase: async () => {
         try {
+          const supabase = getSupabase();
+          if (!supabase) return;
           const { data } = await supabase.from("espanol_progress").select("*").eq("id", STORAGE_KEY).single();
           if (data) {
             set({

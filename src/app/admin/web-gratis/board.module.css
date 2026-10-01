@@ -84,7 +84,7 @@
   border-color: var(--b-blue);
 }
 
-button:disabled {
+.page button:disabled {
   opacity: 0.5;
   cursor: default;
 }
