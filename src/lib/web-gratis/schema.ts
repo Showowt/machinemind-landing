@@ -42,7 +42,7 @@ export const step1Schema = z.object({
   businessType: trimmed(2, 200),
   city: trimmed(2, 100),
   /** Market the person picked on /web. The stored column is derived from the number. */
-  country: z.enum(["SV", "CO", "OTHER"]).optional(),
+  country: z.enum(["SV", "PA", "CO", "OTHER"]).optional(),
   countryCode: z.enum(countryCodes),
   // Length/format is judged by toE164() so the API can answer "invalid_whatsapp".
   whatsappLocal: z.string().trim().min(1).max(24),

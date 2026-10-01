@@ -18,9 +18,9 @@
 import { randomBytes } from "crypto";
 import { z } from "zod";
 import { documentPathsOf, signupCountry, type BoardCountry, type OpsSignup } from "./admin";
-import { MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, payUrl, referralLink, SITE_ORIGIN, UPLOAD_TYPES_BY_KIND, WEB_GRATIS_PATH } from "./config";
+import { agentNextStart, agentOnDuty, MAX_UPLOAD_BYTES, MAX_UPLOAD_MB, payUrl, referralLink, SITE_ORIGIN, UPLOAD_TYPES_BY_KIND, WEB_GRATIS_PATH } from "./config";
 import { enqueueSystem } from "./outbox";
-import { getDb, listDraftFiles, loadSettings, SIGNUPS_TABLE, storage, type SignupStatus, type WebGratisSignup } from "./server";
+import { agentScheduleOf, getDb, listDraftFiles, loadSettings, SIGNUPS_TABLE, storage, type SignupStatus, type WebGratisSignup } from "./server";
 import { TEMPLATE_LABEL, type TemplateName } from "./templates";
 import { backoffSeconds, freshKey, MAX_ATTEMPTS, MESSAGES_TABLE, type MessageRow } from "./whatsapp";
 
@@ -116,6 +116,13 @@ export interface ClientContext {
   onboardingUrl: string;
   deliveryDays: number | null;
   lastTemplate: TemplateName | null;
+  /** Born from the number-only quick form (2026-09-30); business fields may still be null. */
+  quick: boolean;
+  /** Services stored so far — seeds the funnel line's off-shift collector. */
+  services: string[];
+  /** Fernanda's shift (web_gratis_settings): off shift, the funnel line collects the data in-chat. */
+  agentOnDuty: boolean;
+  agentNextStart: string;
 }
 
 export interface HistoryItem {
@@ -227,6 +234,12 @@ async function buildContext(primary: OpsSignup): Promise<ClientContext> {
     onboardingUrl: `${SITE_ORIGIN}${WEB_GRATIS_PATH}`,
     deliveryDays: settings?.delivery_days ?? null,
     lastTemplate: ((last.data as { template: TemplateName } | null)?.template ?? null) as TemplateName | null,
+    quick: !!primary.quick_capture_at,
+    services: Array.isArray(primary.services) ? primary.services : [],
+    // Settings unreachable → assume ON duty: the collector stays quiet and the
+    // responder behaves exactly as before (fail-safe).
+    agentOnDuty: settings ? agentOnDuty(agentScheduleOf(settings)) : true,
+    agentNextStart: settings ? agentNextStart(agentScheduleOf(settings)) : "mañana a las 9",
   };
 }
 
