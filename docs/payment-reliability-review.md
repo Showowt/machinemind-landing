@@ -57,8 +57,16 @@ policy was changed. Staff decides service access under existing customer terms.
 
 The board's disabled-button selector is scoped to `.page`, fixing webpack's
 CSS-module purity error without changing its intended board styling.
-`npm run build -- --webpack` passes with an empty environment plus a dummy
-Supabase URL (`http://127.0.0.1:9`) and dummy anon key; no live configuration
-is loaded. Default Turbopack validation was blocked by this executor's sandbox.
-The focused suite passes 17/17. The unchanged baseline failed 13 of the initial
-15 regression tests; two additional cases cover interleaved newer payments.
+The first hosted preview compiled and type-checked, then failed prerendering
+`/espanol` because its module eagerly constructed Supabase without a configured
+URL. The shared browser client is now lazy and optional. Español keeps its
+existing local-storage persistence when cloud configuration is absent; VoxLink
+retains its existing connection-error response instead of reporting a saved
+waitlist entry. All client call sites obtain the client inside their handlers.
+
+`npm run build -- --webpack` passes with an empty environment and no Supabase
+configuration. No live configuration is loaded. Default local Turbopack
+validation was blocked by this executor's sandbox.
+The payment suite passes 17/17 and the optional-client suite passes 3/3.
+The unchanged payment baseline failed 13 of the initial 15 regression tests;
+two additional cases cover interleaved newer payments.
