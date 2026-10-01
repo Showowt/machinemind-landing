@@ -255,3 +255,24 @@ test('a failed ledger read after insert retries using the original persisted pay
   assert.equal(f.rows[SIGNUPS][0].paid_through, f.rows[PAYMENTS][0].paid_through);
   assert.equal(f.rows[PAYMENTS][0].kind, 'first');
 });
+
+for (const [name, event] of [['checkout', checkout], ['renewal', invoice]]) {
+  test(`${name}: older failed event replay preserves a newer successful payment`, async () => {
+    const f = fixture();
+    f.failAlert(true);
+    await assert.rejects(f.api.handleStripeEvent(event(), f.deps));
+    f.failAlert(false);
+    f.deps.now = () => new Date('2026-11-01T12:00:00Z');
+    const newer = invoice('evt_newer');
+    newer.data.object.id = 'in_newer';
+    newer.data.object.lines.data[0].period.end = Date.parse('2026-12-01T12:00:00Z') / 1000;
+    await f.api.handleStripeEvent(newer, f.deps);
+    f.deps.now = () => new Date('2026-11-02T12:00:00Z');
+    await f.api.handleStripeEvent(event(), f.deps);
+    assert.equal(f.rows[SIGNUPS][0].last_payment_at, '2026-11-01T12:00:00.000Z');
+    assert.equal(f.rows[SIGNUPS][0].paid_through, '2026-12-01');
+    assert.equal(f.rows[SIGNUPS][0].last_touch_at, '2026-11-02T12:00:00.000Z');
+    assert.equal(f.rows[PAYMENTS].length, 2);
+    assert.equal(f.queued.size, 2);
+  });
+}

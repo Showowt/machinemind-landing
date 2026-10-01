@@ -202,7 +202,7 @@ const KEEP_STATUS_ON_PAYMENT: readonly SignupStatus[] = ["borrador", "nuevo", "e
 export async function activateSignup(
   signupId: string,
   paidVia: "stripe" | "paypal" | "manual",
-  extras: { stripeCustomerId?: string | null; stripeSubscriptionId?: string | null; paidThrough?: string | null },
+  extras: { stripeCustomerId?: string | null; stripeSubscriptionId?: string | null; paidThrough?: string | null; paymentAt?: string },
   now: Date,
 ): Promise<ActivationResult | null> {
   const db = getDb();
@@ -211,16 +211,17 @@ export async function activateSignup(
   if (!current) return null;
   const before = current as WebGratisSignup;
   const nowIso = now.toISOString();
+  const paymentAt = extras.paymentAt ?? nowIso;
   const keep = KEEP_STATUS_ON_PAYMENT.includes(before.status);
 
   const update: Record<string, unknown> = {
     paid_via: paidVia,
-    activated_at: before.activated_at ?? nowIso,
+    activated_at: before.activated_at ?? paymentAt,
     recontact_after: null,
     paused_at: null,
     last_touch_at: nowIso,
     last_touch_kind: `pago_${paidVia}`,
-    last_payment_at: nowIso,
+    last_payment_at: before.last_payment_at && Date.parse(before.last_payment_at) > Date.parse(paymentAt) ? before.last_payment_at : paymentAt,
     billing_issue: null,
     billing_issue_at: null,
   };
@@ -545,7 +546,7 @@ async function onPaid(event: StripeEvent, deps: PaymentDeps): Promise<StripeHand
     externalId: event.id,
     now,
   });
-  const result = await activateSignup(ref, "stripe", { stripeCustomerId: customerId, stripeSubscriptionId: subscriptionId, paidThrough: payment.paid_through }, new Date(payment.paid_at));
+  const result = await activateSignup(ref, "stripe", { stripeCustomerId: customerId, stripeSubscriptionId: subscriptionId, paidThrough: payment.paid_through, paymentAt: payment.paid_at }, now);
   if (!result) throw new Error(`Paid signup disappeared during activation: ${ref}`);
   const s = result.signup;
 
@@ -671,7 +672,7 @@ async function onInvoicePaid(event: StripeEvent, deps: PaymentDeps): Promise<Str
   const coveredThrough = payment.paid_through ?? periodEnd;
   let current: WebGratisSignup = s;
   if (wasPaused) {
-    const result = await activateSignup(s.id, "stripe", { paidThrough: coveredThrough }, new Date(payment.paid_at));
+    const result = await activateSignup(s.id, "stripe", { paidThrough: coveredThrough, paymentAt: payment.paid_at }, now);
     if (!result) throw new Error(`Paid signup disappeared during reactivation: ${s.id}`);
     current = result.signup;
   } else {
@@ -679,7 +680,7 @@ async function onInvoicePaid(event: StripeEvent, deps: PaymentDeps): Promise<Str
       .from(SIGNUPS_TABLE)
       .update({
         paid_through: !s.paid_through || coveredThrough > s.paid_through ? coveredThrough : s.paid_through,
-        last_payment_at: payment.paid_at,
+        last_payment_at: s.last_payment_at && Date.parse(s.last_payment_at) > Date.parse(payment.paid_at) ? s.last_payment_at : payment.paid_at,
         billing_issue: null,
         billing_issue_at: null,
         last_touch_at: now.toISOString(),

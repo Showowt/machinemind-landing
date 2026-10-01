@@ -60,4 +60,5 @@ CSS-module purity error without changing its intended board styling.
 `npm run build -- --webpack` passes with an empty environment plus a dummy
 Supabase URL (`http://127.0.0.1:9`) and dummy anon key; no live configuration
 is loaded. Default Turbopack validation was blocked by this executor's sandbox.
-The focused suite passes 15/15; the unchanged baseline fails 13 of those tests.
+The focused suite passes 17/17. The unchanged baseline failed 13 of the initial
+15 regression tests; two additional cases cover interleaved newer payments.
