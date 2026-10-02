@@ -70,10 +70,11 @@ const QUICK = {
     submitting: "Enviando…",
     consent: `Al enviar acepta que lo llamemos y le escribamos por WhatsApp sobre su página web. Gratis de verdad: diseño $0 y ${FREE_DAYS} días en línea gratis; después $${MONTHLY_PRICE_USD} USD/mes solo si quiere que la sigamos alojando. Sin contrato.`,
     doneOnTitle: "¡Listo! Lo estamos llamando",
-    doneOnBody: "Fernanda, nuestra especialista, lo llama en los próximos minutos desde un número de Estados Unidos. Tenga el teléfono a mano.",
+    doneOnBody:
+      "Un representante de MachineMind se comunicará con usted dentro de las próximas 24 horas —normalmente en minutos— para dejar lista su página web. Le llamaremos desde un número de Estados Unidos: por favor esté atento a sus llamadas y a su WhatsApp para avanzar con su página.",
     doneOffTitle: "¡Recibido!",
     doneOffBody: (next: string) =>
-      `Fernanda, nuestra especialista, lo llama ${next}. ¿Quiere adelantar? Escríbanos por WhatsApp ahora y dejamos su página encaminada de una vez.`,
+      `Un representante de MachineMind se comunicará con usted dentro de las próximas 24 horas (${next}) para dejar lista su página web. Por favor esté atento a sus llamadas y a su WhatsApp. ¿Quiere adelantar? Escríbanos por WhatsApp ahora y dejamos su página encaminada de una vez.`,
     doneWa: "Escribir por WhatsApp ahora",
     doneWaText: (code: string) =>
       `Hola 👋 Acabo de dejar mi número en machinemindconsulting.com/web para mi página web gratis (código ${code}). Quiero dejarla encaminada.`,
@@ -93,10 +94,11 @@ const QUICK = {
     submitting: "Sending…",
     consent: `By sending you agree we may call and message you on WhatsApp about your website. Truly free: $0 design and ${FREE_DAYS} days free online; then $${MONTHLY_PRICE_USD} USD/mo only if you want us to keep hosting it. No contract.`,
     doneOnTitle: "Done! We're calling you",
-    doneOnBody: "Fernanda, our specialist, will call you within minutes from a US number. Keep your phone handy.",
+    doneOnBody:
+      "A MachineMind representative will reach out within the next 24 hours —usually within minutes— to get your website ready. We'll call from a US number, so please keep an eye on your calls and WhatsApp to move your site forward.",
     doneOffTitle: "Received!",
     doneOffBody: (next: string) =>
-      `Fernanda, our specialist, will call you ${next} (El Salvador time). Want to get ahead? Message us on WhatsApp now and we'll get your site moving right away.`,
+      `A MachineMind representative will reach out within the next 24 hours (${next}, El Salvador time) to get your website ready. Please keep an eye on your calls and WhatsApp. Want to get ahead? Message us on WhatsApp now and we'll get your site moving right away.`,
     doneWa: "Message us on WhatsApp now",
     doneWaText: (code: string) =>
       `Hi 👋 I just left my number at machinemindconsulting.com/web for my free website (code ${code}). I'd like to get it moving.`,

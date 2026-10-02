@@ -26,6 +26,7 @@ import { fail, ok } from "@/lib/web-gratis/http";
 import { notifySaveFailed, quickLeadAlert } from "@/lib/web-gratis/notify";
 import { drainIfQuiet, enqueueQuickLead, enqueueSystem } from "@/lib/web-gratis/outbox";
 import { quickRequestSchema } from "@/lib/web-gratis/schema";
+import { sendQuickHeadsUp } from "@/lib/web-gratis/whatsapp";
 import {
   agentScheduleOf,
   findReferrer,
@@ -185,6 +186,14 @@ export async function POST(request: Request) {
         else await notifySaveFailed({ whatsapp, quick: row.id }, "El número quedó guardado pero la alerta no se pudo encolar.");
       } catch (error) {
         console.error("[WebGratis:quick] drain", error);
+      }
+      // Heads-up WhatsApp: warms the number so they answer Fernanda's call and
+      // know a rep is coming within 24h. Best-effort — the done screen is the guarantee.
+      try {
+        const outcome = await sendQuickHeadsUp(row.id);
+        if (outcome === "failed") console.error("[WebGratis:quick] heads-up send failed", row.id);
+      } catch (error) {
+        console.error("[WebGratis:quick] heads-up", error);
       }
       await sendCapiEvent({
         eventName: "Lead",

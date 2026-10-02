@@ -27,6 +27,7 @@ import { DEFAULT_PAYPAL_LINK, demoUrl, FREE_DAYS, MONTHLY_PRICE_USD, payUrl } fr
 import type { SignupStatus } from "./server";
 
 export const TEMPLATE_NAMES = [
+  "cqv_web_heads_up",
   "cqv_web_confirm",
   "cqv_web_ready",
   "cqv_web_day28",
@@ -77,6 +78,8 @@ export function isHoldCode(code: string | null | undefined): boolean {
 export type SendWindow = "transactional" | "reminder";
 
 export const TEMPLATE_WINDOW: Record<TemplateName, SendWindow> = {
+  // Instant acknowledgment of a just-submitted form: sent any hour, like any confirmation.
+  cqv_web_heads_up: "transactional",
   cqv_web_confirm: "transactional",
   cqv_web_ready: "transactional",
   cqv_web_day28: "reminder",
@@ -87,6 +90,7 @@ export const TEMPLATE_WINDOW: Record<TemplateName, SendWindow> = {
 };
 
 export const TEMPLATE_LABEL: Record<TemplateName, string> = {
+  cqv_web_heads_up: "Aviso (lo llamamos)",
   cqv_web_confirm: "Confirmación",
   cqv_web_ready: "Web lista",
   cqv_web_day28: "Día 28",
@@ -333,6 +337,9 @@ export function templatePayload(name: TemplateName, s: TemplateSubject, opts: { 
   const business = businessParam(s.business_name, 60, "estimado cliente");
   const code = s.referral_code;
   switch (name) {
+    case "cqv_web_heads_up":
+      // Instant acknowledgment of a number-only capture: no business name yet, so no params.
+      return { bodyParams: [] };
     case "cqv_web_confirm":
       // Goes to a number nobody has verified yet: shortest, cleanest version.
       return { bodyParams: [businessParam(s.business_name, 30, "gracias")] };
@@ -358,6 +365,8 @@ export function templatePreview(name: TemplateName, s: TemplateSubject, opts: { 
   const p = templatePayload(name, s, opts);
   const [a = "", b = "", c = ""] = p?.bodyParams ?? [];
   switch (name) {
+    case "cqv_web_heads_up":
+      return `¡Hola! 👋 Recibimos su solicitud de página web GRATIS con MachineMind. Un representante se comunicará con usted (llamada o WhatsApp) dentro de las próximas 24 horas —normalmente mucho antes— para dejarla lista. Por favor, esté atento a sus llamadas y WhatsApp; así avanzamos rápido. ¿Tiene alguna pregunta? Escríbanos por aquí. 💛`;
     case "cqv_web_confirm":
       return `¡Recibido, ${a}! Ya empezamos a armar su página web. Le confirmo por acá cuando esté lista (pocos días).`;
     case "cqv_web_ready":

@@ -324,6 +324,9 @@ export function templateStillApplies(t: TemplateName, s: EligibilityInput, now: 
   const free = s.free_until;
   const live = LIVE_FREE.includes(s.status) && !s.activated_at;
   switch (t) {
+    case "cqv_web_heads_up":
+      // Sent inline at capture (not by this scheduler); only ever valid while still a quick borrador.
+      return s.status === "borrador";
     case "cqv_web_confirm":
       return BUILDING.includes(s.status);
     case "cqv_web_ready":
@@ -688,6 +691,95 @@ export async function queueManualTemplate(signupId: string, template: TemplateNa
     throw insertError;
   }
   return true;
+}
+
+/**
+ * Send the "a representative will contact you within 24h — be attentive" WhatsApp
+ * the moment a number-only quick capture comes in (2026-10-02). It warms the
+ * unknown US number so the lead ANSWERS when Fernanda calls, and sets the
+ * expectation that moves the website forward.
+ *
+ * Fired inline from /api/web-gratis/quick (not the scheduler, whose view excludes
+ * borrador): one attempt, logged to the ledger like any template, idempotent per
+ * signup (the unique (signup_id, template) index blocks a second one). It is an
+ * instant acknowledgment of a just-submitted form, so it ignores the send window.
+ * A failure (template not yet approved, opted out, transient) is non-fatal: the
+ * on-page done screen already carries the same promise, and no retry is queued.
+ */
+export async function sendQuickHeadsUp(signupId: string, deps: WaDeps = defaultWaDeps()): Promise<"sent" | "skipped" | "failed" | "held"> {
+  const db = getDb();
+  const now = deps.now();
+  const { data, error } = await db
+    .from(SIGNUPS_TABLE)
+    .select("id, status, business_name, whatsapp, referral_code, site_url, opted_out_at, no_whatsapp_at, quick_capture_at")
+    .eq("id", signupId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return "skipped";
+  const s = data as {
+    id: string; status: SignupStatus; business_name: string | null; whatsapp: string;
+    referral_code: string; site_url: string | null; opted_out_at: string | null;
+    no_whatsapp_at: string | null; quick_capture_at: string | null;
+  };
+  // Quick captures only, and never to a number that opted out / has no WhatsApp.
+  if (s.status !== "borrador" || !s.quick_capture_at || s.opted_out_at || s.no_whatsapp_at) return "skipped";
+
+  // Idempotent: one heads-up per signup. The unique (signup_id, template) index is the real guard;
+  // this check avoids a wasted insert/round-trip on the common re-entry.
+  const { data: existing } = await db
+    .from(MESSAGES_TABLE)
+    .select("id")
+    .eq("signup_id", s.id)
+    .eq("template", "cqv_web_heads_up")
+    .limit(1)
+    .maybeSingle();
+  if (existing) return "skipped";
+
+  const subject: Subject = {
+    id: s.id,
+    business_name: s.business_name ?? "",
+    whatsapp: s.whatsapp,
+    referral_code: s.referral_code,
+    site_url: s.site_url,
+  };
+  const { data: row, error: insertError } = await db
+    .from(MESSAGES_TABLE)
+    .insert({
+      signup_id: s.id,
+      phone: s.whatsapp,
+      direction: "outbound",
+      template: "cqv_web_heads_up",
+      source: "scheduler", // automatic system send (messages.source CHECK allows scheduler/admin/responder/stripe/inbound)
+      status: "queued",
+      attempts: 0,
+      scheduled_for: iso(now),
+      next_attempt_at: iso(now),
+      body: templatePreview("cqv_web_heads_up", subject),
+      meta: { auto: true, reason: "quick capture heads-up" },
+    })
+    .select("*")
+    .single();
+  if (insertError) {
+    if (insertError.code === "23505") return "skipped"; // already has one (idempotent)
+    throw insertError;
+  }
+
+  const msgRow = row as MessageRow;
+  const result = await attemptTemplateSend(msgRow, subject, deps);
+  if (result.sent) return "sent";
+  // No scheduler retries a borrador row (the state view excludes it), so terminalize now:
+  // a hold (template not approved yet, line off) or a real failure both become 'skipped' —
+  // the on-page done screen already carried the same promise, so nothing is lost.
+  const { data: after } = await db.from(MESSAGES_TABLE).select("status, last_error_code").eq("id", msgRow.id).maybeSingle();
+  const errCode = (after as { last_error_code: string | null } | null)?.last_error_code ?? "";
+  const held = isHold(errCode);
+  if ((after as { status: string } | null)?.status === "queued") {
+    await db
+      .from(MESSAGES_TABLE)
+      .update({ status: "skipped", next_attempt_at: null, locked_until: null, last_error: held ? "Aviso no enviado (plantilla aún no aprobada o línea apagada); el lead ya vio el aviso en la página." : "Aviso no enviado; el lead ya vio el aviso en la página." })
+      .eq("id", msgRow.id);
+  }
+  return held ? "held" : "failed";
 }
 
 // ─── Trigger queries ────────────────────────────────────────────────────────
