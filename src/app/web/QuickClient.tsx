@@ -18,12 +18,12 @@ import {
   CLOSED_DIALS,
   COUNTRY_CODES,
   FREE_DAYS,
+  isOpenMarket,
   MARKET_INFO,
   MM_WHATSAPP,
   MM_WHATSAPP_DISPLAY,
   MONTHLY_PRICE_USD,
   OPEN_MARKETS,
-  parseMarket,
   toE164,
   type Market,
 } from "@/lib/web-gratis/config";
@@ -155,9 +155,12 @@ export interface QuickClientProps {
 }
 
 export default function QuickClient({ initialMarket, marketHint }: QuickClientProps) {
+  // Only OPEN markets may frame the page: a Colombian (or any other closed/foreign)
+  // IP hint must never put the wrong flag on an El Salvador + Panamá campaign.
+  const startMarket: Market = initialMarket ?? (isOpenMarket(marketHint) ? (marketHint as Market) : "SV");
   const [lang, setLang] = useState<Lang>("es");
-  const [market, setMarket] = useState<Market>(initialMarket ?? marketHint ?? "SV");
-  const [dial, setDial] = useState<string>(MARKET_INFO[initialMarket ?? marketHint ?? "SV"].dial);
+  const [market, setMarket] = useState<Market>(startMarket);
+  const [dial, setDial] = useState<string>(MARKET_INFO[startMarket].dial);
   const [local, setLocal] = useState("");
   const [honeypot, setHoneypot] = useState("");
   const [error, setError] = useState<string | null>(null);
