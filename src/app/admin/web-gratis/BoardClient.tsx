@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import styles from "./board.module.css";
+import ReviewedSiteEditor from "./ReviewedSiteEditor";
 // Type-only: admin.ts, billing.ts and the billing route are server code (erased from the client bundle).
 import type { BoardCountry, OpsSignup } from "@/lib/web-gratis/admin";
 import type { BillingEvent, BillingState, BillingTimeline } from "@/lib/web-gratis/billing";
@@ -1093,6 +1094,10 @@ function SitePanel({ row, site, config, siteApi, onSite, onReload }: SitePanelPr
   const [flash, setFlash] = useState<{ text: string; bad: boolean } | null>(null);
   const [instructions, setInstructions] = useState(site?.instructions ?? "");
   const [editing, setEditing] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewState, setReviewState] = useState({ busy: false, dirty: false });
+  const panelBusy = busy || reviewState.busy;
+  const publicationBlocked = panelBusy || reviewState.dirty;
   const [more, setMore] = useState(false);
   const [slugDraft, setSlugDraft] = useState(site?.slug ?? "");
   const [domainDraft, setDomainDraft] = useState(site?.customDomain ?? "");
@@ -1144,12 +1149,21 @@ function SitePanel({ row, site, config, siteApi, onSite, onReload }: SitePanelPr
   }
 
   async function publish() {
-    if (!site) return;
+    if (!site || publicationBlocked) return;
     const question = `¿Publicar la web de ${row.business_name} en\n${site.publicUrl}\n\n${
       building ? "Se marca «Entregada» (empieza su mes gratis) y «Web lista» le llega sola por WhatsApp ~10 min después." : "Ya está entregada: solo se actualiza su link."
     }`;
     if (!window.confirm(question)) return;
     const res = await act(`/api/web-gratis/admin/sites/${site.id}/publish`, { method: "POST", body: "{}" });
+    if (res.ok) onReload();
+  }
+
+  async function publishSiteOnly() {
+    if (!site || publicationBlocked) return;
+    if (!window.confirm(`¿Publicar solo el sitio de ${row.business_name} (v${site.version}) en\n${site.publicUrl}?\n\nLa solicitud, entrega y facturación quedan sin cambios. No se enviarán mensajes.`)) return;
+    const res = await act(`/api/web-gratis/admin/sites/${site.id}/publish`, {
+      method: "POST", body: JSON.stringify({ mode: "site_only", expectedVersion: site.version }),
+    });
     if (res.ok) onReload();
   }
 
@@ -1263,28 +1277,38 @@ function SitePanel({ row, site, config, siteApi, onSite, onReload }: SitePanelPr
 
       <div className={styles.siteActions}>
         {status === "draft" || (status === "paused" && !site?.publishedAt) || finishDelivery ? (
-          <button type="button" className={styles.primary} disabled={busy || !config?.vercel} onClick={() => void publish()}>
+          <button type="button" className={styles.primary} disabled={publicationBlocked || !config?.vercel} onClick={() => void publish()}>
             {finishDelivery ? "Terminar entrega (marcar «Entregada»)" : "Publicar"}
           </button>
         ) : null}
+        {site && ["draft", "paused", "published"].includes(site.status) ? (
+          <button type="button" disabled={publicationBlocked || !config?.vercel} onClick={() => void publishSiteOnly()}>
+            Publicar solo sitio (sin entrega ni mensajes)
+          </button>
+        ) : null}
         {live ? (
-          <button type="button" disabled={busy} onClick={() => void setPaused(true)}>
+          <button type="button" disabled={panelBusy} onClick={() => void setPaused(true)}>
             Pausar sitio
           </button>
         ) : null}
         {status === "paused" && site?.publishedAt ? (
-          <button type="button" className={styles.primary} disabled={busy} onClick={() => void setPaused(false)}>
+          <button type="button" className={styles.primary} disabled={panelBusy} onClick={() => void setPaused(false)}>
             Reanudar
           </button>
         ) : null}
         {site && site.version > 0 && !generating ? (
-          <button type="button" disabled={busy} onClick={() => setEditing(!editing)}>
+          <button type="button" disabled={panelBusy} onClick={() => setEditing(!editing)}>
             {editing ? "Cerrar editor" : "Editar textos y colores"}
+          </button>
+        ) : null}
+        {site && ["draft", "paused", "published"].includes(site.status) ? (
+          <button type="button" disabled={panelBusy} onClick={() => setReviewing(!reviewing)}>
+            {reviewing ? "Cerrar contenido revisado" : "Contenido e imágenes revisados"}
           </button>
         ) : null}
         <button
           type="button"
-          disabled={busy || !canGenerate}
+          disabled={panelBusy || !canGenerate}
           title={live ? "Está publicada: páusela para regenerarla, o use el editor." : undefined}
           onClick={() => void generate()}
         >
@@ -1294,6 +1318,9 @@ function SitePanel({ row, site, config, siteApi, onSite, onReload }: SitePanelPr
           {more ? "Menos opciones" : "Instrucciones, dirección y dominio"}
         </button>
       </div>
+
+      {reviewState.busy || reviewState.dirty ? <p className={styles.siteWarn}>Guarde o cierre el contenido revisado antes de publicar.</p> : null}
+      {reviewing && site ? <ReviewedSiteEditor key={site.id} site={site} businessName={row.business_name ?? site.slug} siteApi={siteApi} onSaved={(updated) => onSite(row.id, updated)} onStatusChange={setReviewState} /> : null}
 
       {more ? (
         <div className={styles.siteMore}>
@@ -1315,7 +1342,7 @@ function SitePanel({ row, site, config, siteApi, onSite, onReload }: SitePanelPr
                 />
                 <span className={slugIssue ? styles.error : styles.dim}>{slugIssue ?? `${slugDraft || "…"}.machinemindconsulting.com`}</span>
               </label>
-              <button type="button" disabled={busy || !!slugIssue || !slugDraft || slugDraft === site.slug} onClick={() => void saveSlug()}>
+              <button type="button" disabled={panelBusy || !!slugIssue || !slugDraft || slugDraft === site.slug} onClick={() => void saveSlug()}>
                 Guardar dirección
               </button>
             </div>
@@ -1336,7 +1363,7 @@ function SitePanel({ row, site, config, siteApi, onSite, onReload }: SitePanelPr
                     onChange={(e) => setDomainDraft(e.target.value)}
                   />
                 </label>
-                <button type="button" disabled={busy || !domainValue || !config?.vercel} onClick={() => void connectDomain()}>
+                <button type="button" disabled={panelBusy || !domainValue || !config?.vercel} onClick={() => void connectDomain()}>
                   {site.customDomain && domainValue === site.customDomain ? "Revisar DNS" : "Conectar dominio"}
                 </button>
               </div>
@@ -1361,7 +1388,7 @@ function SitePanel({ row, site, config, siteApi, onSite, onReload }: SitePanelPr
                 )}
               </p>
               {site.customDomain ? (
-                <button type="button" className={styles.linkBtn} disabled={busy} onClick={() => void removeDomain()}>
+                <button type="button" className={styles.linkBtn} disabled={panelBusy} onClick={() => void removeDomain()}>
                   Desconectar {site.customDomain}
                 </button>
               ) : null}
@@ -1878,7 +1905,7 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
         </div>
       ) : null}
 
-      {row.status !== "borrador" && row.status !== "descartada" ? (
+      {(row.status !== "borrador" || site) && row.status !== "descartada" ? (
         <SitePanel row={row} site={site} config={sitesConfig} siteApi={siteApi} onSite={onSite} onReload={onReload} />
       ) : null}
 
@@ -2551,7 +2578,7 @@ export default function BoardClient() {
     async (path: string, init: RequestInit = {}) => {
       const res = await fetch(path, {
         ...init,
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token ?? ""}`, ...(init.headers ?? {}) },
+        headers: { ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }), Authorization: `Bearer ${token ?? ""}`, ...(init.headers ?? {}) },
         cache: "no-store",
       });
       if (res.status === 401) {
@@ -2697,7 +2724,8 @@ export default function BoardClient() {
       try {
         const res = await api(path, init);
         const json = (await res.json().catch(() => null)) as { data: unknown; error: string | null; message: string | null } | null;
-        return { ok: res.ok, status: res.status, data: json?.data ?? null, message: json?.message ?? (res.ok ? null : "No se pudo completar.") };
+        const detail = json?.data && typeof json.data === "object" && "message" in json.data && typeof json.data.message === "string" ? json.data.message : null;
+        return { ok: res.ok, status: res.status, data: json?.data ?? null, message: json?.message ?? detail ?? (res.ok ? null : "No se pudo completar.") };
       } catch (err) {
         console.error("[WebGratis:board] site api", path, err);
         return { ok: false, status: 0, data: null, message: "Sin conexión con el servidor." };

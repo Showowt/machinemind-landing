@@ -6,6 +6,8 @@
  * CNAME at GoDaddy) → status 'published' → purge the renderer's cache → mark
  * the signup delivered through the board's own "→ Entregada" code path (which
  * is what makes the scheduler send the "Web lista" WhatsApp) → alert.
+ * Explicit site_only publication stops after the cache purge: it never updates
+ * the signup or queues delivery, billing, or team/client notifications.
  * If Vercel isn't configured or the hostname can't serve yet, nothing is
  * published and the signup is NOT delivered: the client is never told about a
  * site that doesn't load.
@@ -40,23 +42,22 @@ export interface PublishDeps {
 }
 
 /**
- * A preview can be generated for a lead who hasn't finished the form (scripts/sites/generate-preview.mts),
- * but nothing goes live until they submit it and accept the terms.
+ * The legacy delivery/commercial flow still requires a finished registration and
+ * terms acceptance. Site-only publication is separate and does not start that flow.
  */
 export const NOT_SUBMITTED_MESSAGE =
   "Este cliente aún no terminó su registro (no aceptó los términos). Envíele la vista previa y pídale terminar el formulario.";
 
-const CLOSED_FOR_PUBLISH: Record<string, string> = {
-  borrador: NOT_SUBMITTED_MESSAGE,
+const SUSPENDED_FOR_PUBLISH: Record<string, string> = {
   descartada: "La solicitud está descartada.",
   cancelada: "La solicitud está cancelada.",
   pausada: "La solicitud está pausada (no pagó): reábrala en su tarjeta antes de publicar.",
 };
 
-/** Why this signup's site can't go live, or null. */
+/** Legacy delivery/resume gate; site-only publication applies only suspension checks. */
 export function publishBlocker(signup: { status: string; terms_accepted_at: string | null }): string | null {
   if (signup.status === "borrador" || !signup.terms_accepted_at) return NOT_SUBMITTED_MESSAGE;
-  return CLOSED_FOR_PUBLISH[signup.status] ?? null;
+  return SUSPENDED_FOR_PUBLISH[signup.status] ?? null;
 }
 
 const DNS_MISSING =
@@ -82,12 +83,22 @@ function vercelMissing(): ActionResult<never> {
 
 // ─── Publish ────────────────────────────────────────────────────────────────
 
+/** Legacy delivery stays the default; silent publication requires the reviewed version. */
+export type PublishOptions = { mode: "deliver" } | { mode: "site_only"; expectedVersion: number };
+
 export async function publishSite(
   siteId: string,
   deps: PublishDeps,
-): Promise<ActionResult<{ site: SiteRow; url: string; delivered: "marked" | "already" | "url_updated" | "failed"; warnings: string[] }>> {
+  options: PublishOptions = { mode: "deliver" },
+): Promise<ActionResult<{ site: SiteRow; url: string; delivered: "marked" | "already" | "url_updated" | "failed" | "skipped"; warnings: string[] }>> {
+  if (options.mode === "site_only" && (!Number.isSafeInteger(options.expectedVersion) || options.expectedVersion < 0)) {
+    return { ok: false, status: 400, code: "invalid", message: "Indique la versión revisada antes de publicar solo el sitio." };
+  }
   const site = await getSite(siteId);
   if (!site) return { ok: false, status: 404, code: "not_found", message: "No existe esa web." };
+  if (options.mode === "site_only" && site.version !== options.expectedVersion) {
+    return { ok: false, status: 409, code: "not_eligible", message: `La web cambió (ahora v${site.version}): revise la vista previa antes de publicar.` };
+  }
   if (site.status === "generating") return { ok: false, status: 409, code: "not_eligible", message: "Se está generando: espere a que termine." };
   if (!["draft", "paused", "published"].includes(site.status)) {
     return { ok: false, status: 409, code: "not_eligible", message: "Genere la web primero (está en estado «falló» o archivada)." };
@@ -99,7 +110,11 @@ export async function publishSite(
   }
   const signup = await getSignup(site.signup_id);
   if (!signup) return { ok: false, status: 404, code: "not_found", message: "La solicitud ya no existe." };
-  const blocked = publishBlocker(signup);
+  // Site readiness does not require commercial activation or a terms timestamp.
+  // Explicit site-only publication still respects suspension, without editing the signup.
+  const blocked = options.mode === "site_only"
+    ? SUSPENDED_FOR_PUBLISH[signup.status] ?? null
+    : publishBlocker(signup);
   if (blocked) return { ok: false, status: 409, code: "not_eligible", message: blocked };
   if (!deps.vercel) return vercelMissing();
 
@@ -126,20 +141,36 @@ export async function publishSite(
   }
 
   const nowIso = deps.now().toISOString();
-  const { data: published, error } = await getDb()
+  let update = getDb()
     .from(SITES_TABLE)
     .update({ status: "published", published_at: site.published_at ?? nowIso, paused_at: null })
     .eq("id", site.id)
-    .in("status", ["draft", "paused", "published"])
-    .select("*")
-    .maybeSingle();
+    .in("status", ["draft", "paused", "published"]);
+  if (options.mode === "site_only") {
+    // Version protects the reviewed content; updated_at also catches a changed slug,
+    // pause, or concurrent first publication (whose timestamp must not be overwritten).
+    update = update.eq("version", options.expectedVersion).eq("updated_at", site.updated_at);
+  }
+  const { data: published, error } = await update.select("*").maybeSingle();
   if (error) throw error;
-  if (!published) return { ok: false, status: 409, code: "not_eligible", message: "La web cambió mientras tanto: actualice e intente de nuevo." };
+  if (!published) return {
+    ok: false,
+    status: 409,
+    code: "not_eligible",
+    message: options.mode === "site_only"
+      ? "La web cambió mientras tanto: revise la vista previa e intente de nuevo. La dirección puede haber quedado agregada en Vercel; esta solicitud no publicó ni entregó el sitio."
+      : "La web cambió mientras tanto: actualice e intente de nuevo.",
+  };
   const live = published as SiteRow;
 
   const warnings: string[] = [];
   const cacheWarning = await revalidate(live.slug, deps);
   if (cacheWarning) warnings.push(cacheWarning);
+
+  // Publication alone must not touch signup.site_url or lifecycle fields: the
+  // WhatsApp and billing schedulers watch those fields. No alert is queued either.
+  // published_at intentionally enables the existing token-protected ZIP export.
+  if (options.mode === "site_only") return { ok: true, site: live, url, delivered: "skipped", warnings };
 
   // Deliver through the board's own path (it starts the free month and the "Web lista" WhatsApp).
   let delivered: "marked" | "already" | "url_updated" | "failed" = "already";

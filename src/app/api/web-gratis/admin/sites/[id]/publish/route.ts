@@ -9,6 +9,10 @@
  * scheduler sends the "Web lista" WhatsApp (T2) ~10 minutes later.
  * If Vercel isn't configured or the DNS isn't in place, nothing is published
  * and the signup is not delivered (clear Spanish error for the board).
+ * Explicit {mode: "site_only", expectedVersion} publishes only the reviewed site:
+ * no signup updates, delivery, free-period changes, or notifications. It permits
+ * unfinished registrations without terms acceptance; suspended signups stay blocked.
+ * Empty body / {} preserves the existing delivery flow.
  * Bearer WEB_GRATIS_ADMIN_TOKEN.
  */
 import { z } from "zod";
@@ -17,13 +21,18 @@ import { requireAdmin } from "@/lib/web-gratis/admin";
 import { fail, ok } from "@/lib/web-gratis/http";
 import { vercelEnv } from "@/lib/web-gratis/sites/db";
 import { defaultSitesDeps } from "@/lib/web-gratis/sites/pipeline";
-import { publishSite, type PublishDeps } from "@/lib/web-gratis/sites/publish";
+import { publishSite, type PublishDeps, type PublishOptions } from "@/lib/web-gratis/sites/publish";
 import { toSummary } from "@/lib/web-gratis/sites/summary";
 
 export const dynamic = "force-dynamic";
 // Up to four Vercel calls (15 s timeout each) + the cache purge + the delivery PATCH: 60 s could
 // cut the function off after the site went live but before the signup was marked delivered.
 export const maxDuration = 120;
+
+const bodySchema = z.union([
+  z.object({}).strict(),
+  z.object({ mode: z.literal("site_only"), expectedVersion: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER) }).strict(),
+]);
 
 /** The board's "→ Entregada" handler, called in-process with the caller's own token. */
 function boardDelivery(request: Request): PublishDeps["markDelivered"] {
@@ -52,6 +61,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (denied) return denied;
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) return fail(400, "invalid");
+  let body: unknown;
+  try {
+    const raw = await request.text();
+    body = raw.trim() ? JSON.parse(raw) : {};
+  } catch {
+    return fail(400, "invalid", "Datos de publicación inválidos.");
+  }
+  const parsed = bodySchema.safeParse(body);
+  if (!parsed.success) return fail(400, "invalid", "Para publicar solo el sitio, indique mode: site_only y la versión revisada (expectedVersion).");
+  const options: PublishOptions = parsed.data.mode === "site_only"
+    ? { mode: "site_only", expectedVersion: parsed.data.expectedVersion }
+    : { mode: "deliver" };
   const sites = defaultSitesDeps();
   try {
     const res = await publishSite(id, {
@@ -60,10 +81,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       vercel: vercelEnv(),
       alert: sites.alert,
       markDelivered: boardDelivery(request),
-    });
+    }, options);
     if (!res.ok) return fail(res.status, res.code, res.message);
     const message = [
       `Publicada: ${res.url}.`,
+      res.delivered === "skipped" ? "Solo sitio: esta publicación no marcó entregada, no cambió el período gratis ni envió avisos." : null,
       res.delivered === "marked" ? "Marcada «Entregada»: «Web lista» sale sola por WhatsApp en ~10 min (7:00–20:59)." : null,
       res.delivered === "url_updated" ? "Link actualizado en la solicitud." : null,
       ...res.warnings,
