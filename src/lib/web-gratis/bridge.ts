@@ -307,8 +307,20 @@ async function onInbound(req: Extract<BridgeRequest, { type: "inbound" }>, deps:
     }
   }
 
+  // One acknowledgment per media burst: several photos sent together are separate
+  // parallel webhooks, so the only race-proof "did we already answer this burst?"
+  // is an atomic DB claim here (all those webhooks serialize on this one insert).
+  // ackMedia=true only for the FIRST file of a burst; the rest must stay silent.
+  let ackMedia = true;
+  if (req.msgType === "image" || req.msgType === "document") {
+    const key = primary?.id ?? req.phone;
+    const { data: won, error: claimError } = await db.rpc("web_gratis_claim_media_ack", { p_key: key });
+    if (claimError) console.error("[WebGratis:bridge] media ack claim failed (acking to be safe)", key, claimError);
+    else ackMedia = won === true;
+  }
+
   const [client, history] = await Promise.all([primary ? buildContext(primary) : Promise.resolve(null), historyFor(req.phone, req.wamid)]);
-  return okResult({ duplicate: false, client, history });
+  return okResult({ duplicate: false, client, history, ackMedia });
 }
 
 const PROGRESS_FROM: Record<"sent" | "delivered" | "read" | "failed", string[]> = {
