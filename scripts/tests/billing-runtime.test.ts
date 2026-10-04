@@ -19,7 +19,7 @@ function bind(pool: FixturePool, key: string) {
     for (const p of [client, operator])
         pool.tables.identity_bindings.push({ record_key: key, issuer: 'fixture-issuer', subject: p.subject, role: p.role, revoked_at: null });
 }
-async function website() {
+async function website(authenticate?: Parameters<typeof billingHttp>[0]['authenticate']) {
     let now = START;
     const pool = new FixturePool(), store = new PostgresStore(pool), repo = new PostgresWebsiteRepository(store, false), provider = new FixtureStripe(() => now), stripe = new StripeClient({ secretKey: 'sk_test_fixture_only', livemode: false, transport: provider.transport, now: () => now });
     pool.tables.sites.push({ id: identity.siteId, signup_id: identity.signupId, status: 'published', slug: 'fixture-site', version: 2 });
@@ -32,7 +32,7 @@ async function website() {
         publicRequests.push(String(input));
         return new Response('<!doctype html><html><body>' + 'Synthetic published fixture '.repeat(8) + '</body></html>', { headers: { 'content-type': 'text/html', 'x-mm-site-id': identity.siteId, 'x-mm-site-version': '2' } });
     };
-    const handle = billingHttp({ repository: repo, stripe, now: () => now, origin, signingKey: KEY, webhookSecret: KEY, catalog, agreement: { revision: 'fixture-approved-v1', summary: 'Synthetic approved agreement; USD20 after thirty days.' }, displayTimezone: 'UTC', authenticate: async (r) => { const token = r.headers.get('authorization'); return token === 'fixture-client' ? { issuer: 'fixture-issuer', subject: client.subject } : token === 'fixture-phil' ? { issuer: 'fixture-issuer', subject: operator.subject } : null; }, verifyPublication: publicationVerifier(repo, publicTransport) });
+    const handle = billingHttp({ repository: repo, stripe, now: () => now, origin, signingKey: KEY, webhookSecret: KEY, catalog, agreement: { revision: 'fixture-approved-v1', summary: 'Synthetic approved agreement; USD20 after thirty days.' }, displayTimezone: 'UTC', authenticate: authenticate ?? (async (r) => { const token = r.headers.get('authorization'); return token === 'fixture-client' ? { issuer: 'fixture-issuer', subject: client.subject } : token === 'fixture-phil' ? { issuer: 'fixture-issuer', subject: operator.subject } : null; }), verifyPublication: publicationVerifier(repo, publicTransport) });
     const req = (action: string, data: unknown = {}, role = 'client', extra: Record<string, string> = {}) => handle(new Request(`${origin}/api/web-gratis/billing/${action}?record=${key}`, { method: 'POST', headers: { authorization: `fixture-${role}`, 'content-type': 'application/json', origin, ...extra }, body: JSON.stringify(data) }));
     const state = () => parseLifecycle(pool.tables.records.find(r => r.record_key === key)!.state);
     async function live() { assert.equal((await req('accept', { siteVersion: 2, terms: 'fixture-approved-v1', cents: 2000, currency: 'usd', interval: 'month', approveSiteAndGoLive: true, agreeBilling: true, remindersAgreed: true, evidence: 'fixture-request' })).status, 200); assert.equal((await req('approve', { siteVersion: 2, evidence: 'fixture-phil-review' }, 'phil')).status, 200); assert.equal((await req('go-live', { mode: 'accepted_go_live', siteVersion: 2 }, 'phil')).status, 200); }
@@ -40,6 +40,121 @@ async function website() {
     async function webhook(type: string, id: string, object: Record<string, unknown>) { const raw = JSON.stringify({ id, type, created: now, livemode: false, data: { object } }); return handle(new Request(`${origin}/api/web-gratis/billing/webhook`, { method: 'POST', headers: { 'stripe-signature': sign(raw, now) }, body: raw })); }
     return { pool, repo, stripe, provider, key, handle, req, state, live, link, webhook, publicTransport, publicRequests, time: (n: number) => { now = n; }, now: () => now };
 }
+const acceptanceInput = { siteVersion: 2, terms: 'fixture-approved-v1', cents: 2000, currency: 'usd', interval: 'month', approveSiteAndGoLive: true, agreeBilling: true, remindersAgreed: true, evidence: 'fixture-request' };
+function assertAcceptanceOnly(f: Awaited<ReturnType<typeof website>>, providerRequests: number) {
+    assert.equal(f.state().acceptance?.at, START);
+    assert.equal(f.state().goLiveAt, null);
+    assert.equal(f.state().trialEnd, null);
+    assert.equal(f.pool.tables.audit.length, 1);
+    assert.equal(f.pool.tables.audit[0].kind, 'client_accepted');
+    for (const table of ['reminder_outbox', 'attempts', 'provider_objects', 'payments', 'webhook_events'])
+        assert.equal(f.pool.tables[table].length, 0, table);
+    assert.equal(f.provider.requests.length, providerRequests);
+    assert.equal(f.publicRequests.length, 0);
+}
+test('acceptance JSON lost-response retries preserve original consent despite time, field order and supplied evidence', async () => {
+    const f = await website(), providerRequests = f.provider.requests.length;
+    assert.equal((await f.req('accept', acceptanceInput)).status, 200);
+    const persisted = structuredClone(f.pool.tables);
+    for (const elapsed of [1, 60]) {
+        f.time(START + elapsed);
+        const retry = Object.fromEntries(Object.entries({ ...acceptanceInput, evidence: `retry-${elapsed}` }).reverse());
+        assert.equal((await f.req('accept', retry)).status, 200);
+        assert.deepEqual(f.pool.tables, persisted);
+    }
+    assertAcceptanceOnly(f, providerRequests);
+});
+for (const remindersAgreed of [false, true])
+    test(`acceptance form retries and equivalent JSON preserve consent (reminders=${remindersAgreed})`, async () => {
+        const f = await website(), providerRequests = f.provider.requests.length;
+        const fields: Record<string, string> = { siteVersion: '2', terms: acceptanceInput.terms, cents: '2000', currency: 'usd', interval: 'month', approveSiteAndGoLive: 'on', agreeBilling: 'on', ...(remindersAgreed ? { remindersAgreed: 'on' } : {}) };
+        const submit = (data: Record<string, string>) => f.handle(new Request(`${origin}/api/web-gratis/billing/accept?record=${f.key}`, { method: 'POST', headers: { authorization: 'fixture-client', origin, 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(data) }));
+        assert.equal((await submit(fields)).status, 303);
+        const persisted = structuredClone(f.pool.tables);
+        f.time(START + 1);
+        const retry = await submit(Object.fromEntries(Object.entries({ ...fields, evidence: 'ignored-client-value' }).reverse()));
+        assert.equal(retry.status, 303);
+        assert.equal(retry.headers.get('location'), `/web/billing?record=${f.key}`);
+        f.time(START + 60);
+        assert.equal((await f.req('accept', { ...acceptanceInput, remindersAgreed, evidence: 'json-equivalent' })).status, 200);
+        assert.deepEqual(f.pool.tables, persisted);
+        assert.equal(f.state().acceptance?.remindersAgreed, remindersAgreed);
+        assertAcceptanceOnly(f, providerRequests);
+    });
+test('acceptance retry still rejects changed agreement, version, quote, reminder choice and invalid requests', async () => {
+    const f = await website(), providerRequests = f.provider.requests.length;
+    assert.equal((await f.req('accept', acceptanceInput)).status, 200);
+    const persisted = structuredClone(f.pool.tables);
+    f.time(START + 1);
+    for (const [change, status] of [
+        [{ terms: 'changed-revision' }, 409], [{ siteVersion: 3 }, 409], [{ cents: 1900 }, 409],
+        [{ remindersAgreed: false }, 409], [{ approveSiteAndGoLive: false }, 400], [{ agreeBilling: false }, 400],
+        [{ currency: 'eur' }, 400], [{ interval: 'year' }, 400], [{ evidence: '' }, 400], [{ extra: 'unexpected' }, 400],
+    ] as const) {
+        assert.equal((await f.req('accept', { ...acceptanceInput, ...change })).status, status, JSON.stringify(change));
+        assert.deepEqual(f.pool.tables, persisted);
+    }
+    // Even if the published version advances, retry cannot replace accepted version 2.
+    f.pool.tables.sites[0].version = 3;
+    assert.equal((await f.req('accept', { ...acceptanceInput, siteVersion: 3 })).status, 409);
+    assert.deepEqual(f.state(), persisted.records[0].state);
+    assertAcceptanceOnly(f, providerRequests);
+});
+for (const actorChange of [{ issuer: 'fixture-issuer', subject: 'other-client' }, { issuer: 'other-issuer', subject: client.subject }])
+    test(`acceptance retry is bound to authenticated issuer and subject: ${JSON.stringify(actorChange)}`, async () => {
+        let actor = { issuer: 'fixture-issuer', subject: client.subject };
+        const f = await website(async () => actor), providerRequests = f.provider.requests.length;
+        assert.equal((await f.req('accept', acceptanceInput)).status, 200);
+        // Both are authorized for the record, but cannot take over an existing acceptance.
+        f.pool.tables.identity_bindings.push({ record_key: f.key, ...actorChange, role: 'client', revoked_at: null });
+        const persisted = structuredClone(f.pool.tables);
+        actor = actorChange;
+        f.time(START + 1);
+        assert.equal((await f.req('accept', acceptanceInput)).status, 409);
+        assert.deepEqual(f.pool.tables, persisted);
+        assertAcceptanceOnly(f, providerRequests);
+    });
+test('acceptance evidence is distinct for separately authorized records', async () => {
+    const f = await website(), providerRequests = f.provider.requests.length;
+    assert.equal((await f.req('accept', acceptanceInput)).status, 200);
+    const second = { ...identity, signupId: '44444444-4444-4444-8444-444444444444', siteId: '55555555-5555-4555-8555-555555555555' };
+    f.pool.tables.sites.push({ id: second.siteId, signup_id: second.signupId, status: 'published', slug: 'second-fixture', version: 2 });
+    f.pool.tables.signups.push({ id: second.signupId, status: 'entregada' });
+    const secondKey = await f.repo.initialize(second, '33333333-3333-4333-8333-333333333333');
+    bind(f.pool, secondKey);
+    const response = await f.handle(new Request(`${origin}/api/web-gratis/billing/accept?record=${secondKey}`, { method: 'POST', headers: { authorization: 'fixture-client', origin, 'content-type': 'application/json' }, body: JSON.stringify(acceptanceInput) }));
+    assert.equal(response.status, 200);
+    const other = parseLifecycle(f.pool.tables.records.find(r => r.record_key === secondKey)!.state);
+    assert.notEqual(other.acceptance?.evidence, f.state().acceptance?.evidence);
+    assert.equal(f.provider.requests.length, providerRequests);
+    assert.equal(f.pool.tables.reminder_outbox.length, 0);
+});
+test('acceptance failure rolls back and retry records only the first successful acceptance', async () => {
+    const f = await website(), providerRequests = f.provider.requests.length, before = structuredClone(f.pool.tables);
+    f.pool.failOnce = 'INSERT INTO billing_private.audit';
+    assert.equal((await f.req('accept', acceptanceInput)).status, 409);
+    assert.deepEqual(f.pool.tables, before);
+    assert.equal((await f.req('accept', acceptanceInput)).status, 200);
+    const accepted = structuredClone(f.pool.tables);
+    f.time(START + 1);
+    assert.equal((await f.req('accept', acceptanceInput)).status, 200);
+    assert.deepEqual(f.pool.tables, accepted);
+    assertAcceptanceOnly(f, providerRequests);
+});
+for (const lockedBy of ['go-live', 'withdrawal'])
+    test(`acceptance retry remains locked after ${lockedBy}`, async () => {
+        const f = await website();
+        if (lockedBy === 'go-live') await f.live();
+        else {
+            assert.equal((await f.req('accept', acceptanceInput)).status, 200);
+            assert.equal((await f.req('withdraw', { evidence: 'fixture-withdrawal' })).status, 200);
+        }
+        const persisted = structuredClone(f.pool.tables), providerRequests = f.provider.requests.length;
+        f.time(START + 1);
+        assert.equal((await f.req('accept', acceptanceInput)).status, 409);
+        assert.deepEqual(f.pool.tables, persisted);
+        assert.equal(f.provider.requests.length, providerRequests);
+    });
 test('HTTP -> serializable repository -> Stripe-shaped day15 checkout -> day30 nested invoice -> ledger', async () => {
     const f = await website();
     assert.equal(f.state().goLiveAt, null);

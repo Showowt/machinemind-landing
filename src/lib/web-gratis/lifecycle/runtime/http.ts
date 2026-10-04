@@ -129,11 +129,19 @@ export function billingHttp(options: RuntimeOptions) {
                     input.cents = Number(input.cents);
                     for (const k of ['approveSiteAndGoLive', 'agreeBilling', 'remindersAgreed'])
                         input[k] = input[k] === 'on';
-                    input.evidence = `client-post:${sha256(JSON.stringify([key, actor.subject, input, options.now()]))}`;
+                    input.evidence = 'client-form'; // Forms have no caller-supplied evidence requirement.
                 }
                 const accepted = acceptSchema.parse(input);
                 requireThat(accepted.terms === options.agreement.revision, 'agreement_revision_changed');
-                accepted.evidence = `client-post:${sha256(JSON.stringify([key, actor.issuer, actor.subject, accepted, options.now()]))}`;
+                // Bind the normalized agreement to the authenticated client and record.
+                // A lost-response retry must retain the original acceptance/audit even
+                // when time, field order or the caller's evidence string has changed.
+                accepted.evidence = `client-post:${sha256(JSON.stringify([
+                    'website-acceptance-v1', key, actor.issuer, actor.subject,
+                    accepted.siteVersion, accepted.terms, accepted.cents, accepted.currency,
+                    accepted.interval, accepted.approveSiteAndGoLive, accepted.agreeBilling,
+                    accepted.remindersAgreed,
+                ]))}`;
                 const site = await repository.site(identity);
                 requireThat(site.version === accepted.siteVersion, 'site_version_changed');
                 result = await service.accept(identity, principal, accepted);
