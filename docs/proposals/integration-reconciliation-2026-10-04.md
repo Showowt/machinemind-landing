@@ -1,6 +1,6 @@
 # MachineMind integration reconciliation — 2026-10-04
 
-This is an isolated, undeployed source candidate. No runtime routes/calendar were mounted and no schema, grants, credentials, cron, sends or provider/customer state were changed. All existing release checkouts and the original reviewed billing patch bundle remain intact.
+This record describes the reconciled source prepared for the owner's approved release. Billing runtime routes/calendar remain unmounted, and this source work changes no schema, grants, credentials, cron, sends or provider/customer state. Actual release status belongs in the deployment verification record. All previous release checkouts and the original reviewed billing patch bundle remain intact.
 
 ## Source lineage
 
@@ -36,15 +36,15 @@ Normal flows cover client acceptance plus separate operator approval, served go-
 
 ## Production and release gates
 
-Fresh production reconciliation is blocked: the Vercel connector returned 403 for the existing `showowts-projects` scope (`team_M6Muze7c2ZvOaH8CcRMsq0HF`) and requires re-authentication to that scope. No alternate private access or secret retrieval was attempted. The latest previously verified authoring deployment was `dpl_5X3WAUVDAXYtfgLuFJT5p4NqbjgK` at `7495f13`; renderer was `dpl_FyhzupKsH7ULLRQWCZ9NV4ugbgvf` at `35e9cb1`. These are historical observations, not claims about current production.
+Fresh production reconciliation subsequently succeeded through the same connector's verified default context. Explicit `teamId` calls returned 403, but default-context project listing, aliases and deployment reads resolve the exact existing account and projects. The authenticated user is `showowt`, whose default team is `team_M6Muze7c2ZvOaH8CcRMsq0HF`. No permission change, new credential or alternate private-data access was needed. Authoring production is `dpl_8z7UETXnnGRurvmhQdz1mtCEv2o9` at `6e8e745`; the renderer remains `dpl_FyhzupKsH7ULLRQWCZ9NV4ugbgvf`, previously source-verified at `35e9cb1`. The newer authoring deployment confirms the need to restore the prior reviewed-content and `site_only` paths while retaining its message-burst fixes.
 
 Before deployment or activation:
 
-1. Restore authorized project metadata access and reconcile actual current deployments/source. Use only existing authoring and `mm-sites` projects.
+1. Project metadata access and source reconciliation are complete. The owner authorized deployment of the verified fixes to the existing authoring and `mm-sites` projects. Keep billing handlers unmounted until the remaining gates below are met; release verification must capture actual deployment/alias results.
 2. Approve an attributable individual identity verifier at the billing origin; provide immutable owner/tenant/signup/site mappings, actual client and Phil subjects, and the verified Michoacana exception UUID. Shared board credentials and matching phone/name do not establish these facts.
 3. Obtain real agreement/version/quote acceptance and separate approval. `site_only` publication never implies consent or starts the 30-day clock.
 4. Wire legacy exclusion before every old billing/send effect and coordinate enrollment with queued and in-flight work. The current helper and fresh signup read do not supply that coordination.
 5. Validate the proposed SQL/permissions and concurrency in an authorized isolated database; validate pinned-account provider fixtures and browser acceptance. No schema was applied here.
 6. Reconcile Sophia's signed projection and held work through its owner. Verify SimmerDown customer, timezone, paid receipt and recurring schedule consent separately.
 
-See [runtime integration](billing-runtime-integration.md) and [activation contract](billing-activation-contract.md). Deployment, cron, sends and charging remain held behind these gates. No new paid plan or project is required by this source correction.
+See [runtime integration](billing-runtime-integration.md) and [activation contract](billing-activation-contract.md). Activation of billing routes, cron, sends and charging remains held behind these gates; deployment of the independently verified publication/renderer fixes is authorized. No new paid plan or project is required by this source correction.
