@@ -131,6 +131,11 @@ export async function POST(request: Request) {
       return fail(400, "market_closed");
     }
 
+    // The off-shift funnel-line collector submits after confirming the deal IN CHAT
+    // (it sends its own "¡Listo! su solicitud quedó registrada" there). Mark it
+    // confirmed so the T1 cqv_web_confirm template doesn't send a near-identical
+    // "¡Recibido! ya empezamos a armar su web" 15 min later (the redundant double).
+    const confirmedInChat = req.attribution?.utm_campaign === "wa_line_collect";
     const submission = {
       ...content,
       ...mergeWhatsappUploads(formUploads, existing),
@@ -139,6 +144,7 @@ export async function POST(request: Request) {
       submitted_at: now,
       terms_accepted_at: now,
       share_commitment_at: now,
+      ...(confirmedInChat ? { confirmed_at: now } : {}),
     };
     // First consent wins: the step-1 timestamp/wording is kept; submit records one only if none exists.
     const firstConsent = { whatsapp_consent_at: now, whatsapp_consent_version: WHATSAPP_CONSENT_VERSION_SUBMIT };

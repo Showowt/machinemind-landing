@@ -92,6 +92,13 @@ export const bridgeRequestSchema = z.discriminatedUnion("type", [
     kind: z.enum(["photo", "logo", "document"]),
     wamid: wamid.optional().nullable(),
   }),
+  // Re-read the conversation tail after a debounce, to coalesce a rapid burst:
+  // Rewired asks "is <wamid> still the latest inbound for this phone, and give me
+  // the fresh client + history" so only the last message of a burst replies.
+  z.object({
+    type: z.literal("conversation_tail"),
+    phone: e164,
+  }),
 ]);
 
 export type BridgeRequest = z.infer<typeof bridgeRequestSchema>;
@@ -246,15 +253,20 @@ async function buildContext(primary: OpsSignup): Promise<ClientContext> {
 async function historyFor(phone: string, selfWamid: string): Promise<HistoryItem[]> {
   const { data, error } = await getDb()
     .from(MESSAGES_TABLE)
-    .select("direction, body, msg_type, created_at, status, wa_message_id")
+    .select("direction, body, msg_type, created_at, received_at, sent_at, status, wa_message_id")
     .eq("phone", phone)
     .not("status", "in", "(queued,skipped,failed)")
     .order("created_at", { ascending: false })
     .limit(12);
   if (error) throw error;
-  type Row = { direction: "inbound" | "outbound"; body: string | null; msg_type: string | null; created_at: string; wa_message_id: string | null };
-  return ((data ?? []) as Row[]).reverse().map((m) => ({
-    direction: m.direction,
+  type Row = { direction: "inbound" | "outbound"; body: string | null; msg_type: string | null; created_at: string; received_at: string | null; sent_at: string | null; status: string; wa_message_id: string | null };
+  // True chronological order: a message's real time is when it was received (inbound)
+  // or sent (outbound), not its DB insert time — parallel inserts can reorder created_at.
+  const when = (m: Row) => m.received_at ?? m.sent_at ?? m.created_at;
+  return ((data ?? []) as Row[])
+    .sort((a, b) => Date.parse(when(a)) - Date.parse(when(b)))
+    .map((m) => ({
+      direction: m.direction,
     body: m.body ?? MEDIA_LABEL[m.msg_type ?? "other"] ?? "[mensaje]",
     created_at: m.created_at,
     msgType: m.msg_type,
@@ -311,8 +323,12 @@ async function onInbound(req: Extract<BridgeRequest, { type: "inbound" }>, deps:
   // parallel webhooks, so the only race-proof "did we already answer this burst?"
   // is an atomic DB claim here (all those webhooks serialize on this one insert).
   // ackMedia=true only for the FIRST file of a burst; the rest must stay silent.
+  // Any attachment kind can arrive as a burst (photos, docs, videos, HEIC the
+  // ingest rejects) and each is a separate parallel webhook — so claim the burst
+  // slot for every non-text type, not just image/document. Only the winner may
+  // answer that burst (ackMedia); the rest stay silent, whatever the outcome.
   let ackMedia = true;
-  if (req.msgType === "image" || req.msgType === "document") {
+  if (req.msgType === "image" || req.msgType === "document" || req.msgType === "other") {
     const key = primary?.id ?? req.phone;
     const { data: won, error: claimError } = await db.rpc("web_gratis_claim_media_ack", { p_key: key });
     if (claimError) console.error("[WebGratis:bridge] media ack claim failed (acking to be safe)", key, claimError);
@@ -676,5 +692,34 @@ export async function handleBridge(req: BridgeRequest, deps: BridgeDeps): Promis
       return onMediaUploadUrl(req);
     case "media_attached":
       return onMediaAttached(req, deps);
+    case "conversation_tail":
+      return onConversationTail(req);
   }
+}
+
+/**
+ * The latest inbound wamid for this phone plus fresh client context + chronological
+ * history. Rewired calls this after a short debounce so only the LAST message of a
+ * rapid burst composes a reply (the earlier ones see a newer wamid and stay silent),
+ * and that reply is built from the whole coalesced burst.
+ */
+async function onConversationTail(req: Extract<BridgeRequest, { type: "conversation_tail" }>): Promise<BridgeResult> {
+  const db = getDb();
+  const { data: latest, error } = await db
+    .from(MESSAGES_TABLE)
+    .select("wa_message_id")
+    .eq("phone", req.phone)
+    .eq("direction", "inbound")
+    .order("received_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  const latestInboundWamid = (latest as { wa_message_id: string | null } | null)?.wa_message_id ?? null;
+  const primary = pickPrimary(await signupsFor(req.phone));
+  const [client, history] = await Promise.all([
+    primary ? buildContext(primary) : Promise.resolve(null),
+    historyFor(req.phone, latestInboundWamid ?? ""),
+  ]);
+  return okResult({ latestInboundWamid, client, history });
 }
