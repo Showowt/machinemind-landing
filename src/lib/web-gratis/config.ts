@@ -7,8 +7,9 @@
 export const WEB_GRATIS_PATH = "/web";
 export const SITE_ORIGIN = "https://machinemindconsulting.com";
 
-/** Monthly price after the free month, in USD. Stated on the form before submit. */
-export const MONTHLY_PRICE_USD = 19;
+/** Monthly price after the free month, in USD, for NEW clients (Phil 2026-10-05: $20;
+ *  Toxica is the only grandfathered $19, handled manually at its enrollment). */
+export const MONTHLY_PRICE_USD = 20;
 export const FREE_DAYS = 30;
 
 /**
@@ -348,7 +349,7 @@ export function agentNextStart(schedule: AgentSchedule, date: Date = new Date())
 }
 
 /** PayPal fallback when the board has no PayPal link saved. */
-export const DEFAULT_PAYPAL_LINK = "https://paypal.me/MachineMind/19USD";
+export const DEFAULT_PAYPAL_LINK = "https://paypal.me/MachineMind/20USD";
 
 /** Payment page for one signup (the day-28/30 templates link here). */
 export function payUrl(code: string): string {
