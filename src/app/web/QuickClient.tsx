@@ -48,6 +48,7 @@ interface Attribution {
 
 interface Done {
   referralCode: string;
+  leadEventId: string | null;
   onDuty: boolean;
   nextStart: string;
 }
@@ -60,6 +61,8 @@ interface QuickConfig {
 
 const QUICK = {
   es: {
+    marketsLabel: "Países disponibles",
+    coverage: "Páginas web para negocios de El Salvador y Panamá.",
     lede: "Deje su número de WhatsApp y nuestra especialista lo llama para dejar todo listo. Sin formularios largos: todo lo demás lo vemos en la llamada.",
     chips: ["Diseño $0", `${FREE_DAYS} días gratis en línea`, "Solo su número — 10 segundos"],
     cardTitle: "Su página web gratis empieza aquí",
@@ -84,6 +87,8 @@ const QUICK = {
     errorFallback: "No se pudo enviar. Escríbanos por WhatsApp y lo resolvemos:",
   },
   en: {
+    marketsLabel: "Available countries",
+    coverage: "Websites for businesses in El Salvador and Panama.",
     lede: "Leave your WhatsApp number and our specialist calls you to get everything set up. No long forms — we cover the rest on the call.",
     chips: ["$0 design", `${FREE_DAYS} days free online`, "Just your number — 10 seconds"],
     cardTitle: "Your free website starts here",
@@ -117,7 +122,7 @@ function newId(): string {
   try {
     return crypto.randomUUID();
   } catch {
-    return `${Date.now().toString(16)}-xxxx-4xxx-yxxx-xxxxxxxxxxxx`.replace(/[xy]/g, (c) => {
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
       const r = (Math.random() * 16) | 0;
       return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
     });
@@ -246,11 +251,15 @@ export default function QuickClient({ initialMarket, marketHint }: QuickClientPr
         error?: WebGratisErrorCode;
       } | null;
       if (res.ok && json?.data) {
-        if (!trackedRef.current && typeof window.fbq === "function") {
-          trackedRef.current = true;
-          window.fbq("track", "Lead", {}, { eventID: `${quickIdRef.current}-lead` });
-        }
         setDone(json.data);
+        if (!trackedRef.current && json.data.leadEventId && typeof window.fbq === "function") {
+          trackedRef.current = true;
+          try {
+            window.fbq("track", "Lead", {}, { eventID: json.data.leadEventId });
+          } catch {
+            // A blocked pixel cannot turn a successfully saved lead into a form error.
+          }
+        }
       } else {
         setError(json?.error ? (c.errors[json.error] ?? c.errors.server_error) : c.errors.network);
       }
@@ -299,17 +308,21 @@ export default function QuickClient({ initialMarket, marketHint }: QuickClientPr
         <div className={styles.layout}>
           <section className={styles.hero}>
             <p className={`${styles.badge} ${styles.rise}`}>
-              <span className={`${styles.flagStripe} ${flagClass(market)}`} aria-hidden="true" />
-              <span>
-                {c.badge}
-                <span className={styles.badgeCountry}> · {mc.name}</span>
-              </span>
+              {c.badge}
             </p>
+            <ul className={`${styles.campaignMarkets} ${styles.rise}`} aria-label={t.marketsLabel}>
+              {OPEN_MARKETS.map((m) => (
+                <li key={m}>
+                  <span className={`${styles.flagStripe} ${flagClass(m)}`} aria-hidden="true" />
+                  <span>{c.market[m].name}</span>
+                </li>
+              ))}
+            </ul>
             <h1 className={`${styles.title} ${styles.rise} ${styles.d1}`}>
               {c.titleA}
               <span className={styles.titleB}>{c.titleB}</span>
             </h1>
-            <p className={`${styles.align} ${styles.rise} ${styles.d1}`}>{mc.align}</p>
+            <p className={`${styles.align} ${styles.rise} ${styles.d1}`}>{t.coverage}</p>
             <p className={`${styles.lede} ${styles.rise} ${styles.d2}`}>{t.lede}</p>
             {config?.highDemand ? <p className={styles.demand}>{t.highDemand}</p> : null}
             <ul className={`${styles.chips} ${styles.rise} ${styles.d3}`}>

@@ -17,7 +17,12 @@ const sha256 = (value: string) => createHash("sha256").update(value.trim().toLow
 function cookie(request: Request, name: string): string | undefined {
   const raw = request.headers.get("cookie") ?? "";
   const match = raw.split(/;\s*/).find((c) => c.startsWith(`${name}=`));
-  return match ? decodeURIComponent(match.slice(name.length + 1)) : undefined;
+  if (!match) return undefined;
+  try {
+    return decodeURIComponent(match.slice(name.length + 1));
+  } catch {
+    return undefined; // A malformed optional cookie must not interrupt lead tracking.
+  }
 }
 
 export interface CapiEvent {
@@ -48,6 +53,7 @@ export async function sendCapiEvent(event: CapiEvent): Promise<void> {
   };
   // ISO country (lowercase, hashed) sharpens Meta's match for both markets.
   if (digits.startsWith("503")) userData.country = [sha256("sv")];
+  else if (digits.startsWith("507")) userData.country = [sha256("pa")];
   else if (digits.startsWith("57")) userData.country = [sha256("co")];
 
   const body: Record<string, unknown> = {

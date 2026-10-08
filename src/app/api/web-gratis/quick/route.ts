@@ -62,6 +62,49 @@ async function dutyNow(): Promise<Duty> {
   }
 }
 
+/** Re-entry repairs an interrupted alert enqueue using the saved row's unique
+ * quick:<id> key. Attribution and conversion identity always belong to that row. */
+async function captureSaved(row: WebGratisSignup, request: Request) {
+  const duty = await dutyNow();
+  const capturedAt = row.quick_capture_at ? Date.parse(row.quick_capture_at) : NaN;
+  const pendingQuick = row.status === "borrador" && Number.isFinite(capturedAt)
+    && capturedAt > Date.now() - 24 * 60 * 60 * 1000 && capturedAt <= Date.now()
+    && !row.opted_out_at && !row.no_whatsapp_at && !row.declined_at;
+  if (!pendingQuick) {
+    return ok({ referralCode: row.referral_code, leadEventId: null, onDuty: duty.onDuty, nextStart: duty.nextStart });
+  }
+  let alerted = false;
+  try {
+    alerted = await enqueueQuickLead(row.id, quickLeadAlert(row, duty));
+  } catch (error) {
+    console.error("[WebGratis:quick] enqueue", error);
+  }
+  after(async () => {
+    try {
+      if (alerted) await drainIfQuiet();
+      else await notifySaveFailed({ whatsapp: row.whatsapp, quick: row.id }, "El número quedó guardado pero la alerta no se pudo encolar.");
+    } catch (error) {
+      console.error("[WebGratis:quick] drain", error);
+    }
+    try {
+      const outcome = await sendQuickHeadsUp(row.id);
+      if (outcome === "failed") console.error("[WebGratis:quick] heads-up send failed", row.id);
+    } catch (error) {
+      console.error("[WebGratis:quick] heads-up", error);
+    }
+    await sendCapiEvent({
+      eventName: "Lead",
+      eventId: `${row.id}-lead`,
+      whatsapp: row.whatsapp,
+      externalId: row.id,
+      sourceUrl: row.landing_url,
+      fbclid: row.fbclid,
+      request,
+    });
+  });
+  return ok({ referralCode: row.referral_code, leadEventId: `${row.id}-lead`, onDuty: duty.onDuty, nextStart: duty.nextStart });
+}
+
 export async function POST(request: Request) {
   let body: unknown;
   try {
@@ -75,7 +118,7 @@ export async function POST(request: Request) {
   const req = parsed.data;
 
   // Honeypot filled → a bot. Pretend success, store nothing.
-  if (req.website) return ok({ referralCode: newReferralCode(), onDuty: true, nextStart: "" });
+  if (req.website) return ok({ referralCode: newReferralCode(), leadEventId: null, onDuty: true, nextStart: "" });
 
   const whatsapp = toE164(req.countryCode, req.whatsappLocal);
   if (!whatsapp) return fail(400, "invalid_whatsapp");
@@ -87,13 +130,13 @@ export async function POST(request: Request) {
     // Idempotent double-tap on the same quickId.
     const { data: existing, error: readError } = await db
       .from(SIGNUPS_TABLE)
-      .select("id, referral_code, status")
+      .select("*")
       .eq("id", req.quickId)
       .maybeSingle();
     if (readError) throw readError;
     if (existing) {
-      const duty = await dutyNow();
-      return ok({ referralCode: existing.referral_code as string, onDuty: duty.onDuty, nextStart: duty.nextStart });
+      if (existing.whatsapp !== whatsapp) return fail(409, "invalid");
+      return captureSaved(existing as WebGratisSignup, request);
     }
 
     // The same phone re-submitted (reload, second tap with a fresh id) inside
@@ -101,7 +144,7 @@ export async function POST(request: Request) {
     const dayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const { data: samePhone, error: phoneError } = await db
       .from(SIGNUPS_TABLE)
-      .select("id, referral_code")
+      .select("*")
       .eq("whatsapp", whatsapp)
       .eq("status", "borrador")
       .not("quick_capture_at", "is", null)
@@ -110,8 +153,7 @@ export async function POST(request: Request) {
       .maybeSingle();
     if (phoneError) throw phoneError;
     if (samePhone) {
-      const duty = await dutyNow();
-      return ok({ referralCode: samePhone.referral_code as string, onDuty: duty.onDuty, nextStart: duty.nextStart });
+      return captureSaved(samePhone as WebGratisSignup, request);
     }
 
     const hash = ipHash(request);
@@ -166,10 +208,11 @@ export async function POST(request: Request) {
         .single();
       if (error && isReferralCodeCollision(error)) continue;
       if (error && error.code === "23505" && /_pkey/.test(error.message ?? "")) {
-        const { data: winner } = await db.from(SIGNUPS_TABLE).select("referral_code").eq("id", req.quickId).single();
+        const { data: winner, error: winnerError } = await db.from(SIGNUPS_TABLE).select("*").eq("id", req.quickId).single();
+        if (winnerError) throw winnerError;
         if (winner) {
-          const duty = await dutyNow();
-          return ok({ referralCode: winner.referral_code as string, onDuty: duty.onDuty, nextStart: duty.nextStart });
+          if (winner.whatsapp !== whatsapp) return fail(409, "invalid");
+          return captureSaved(winner as WebGratisSignup, request);
         }
       }
       if (error) throw error;
@@ -177,35 +220,7 @@ export async function POST(request: Request) {
     }
     if (!inserted) throw new Error("referral code generation exhausted");
 
-    const row = inserted;
-    const duty = await dutyNow();
-    const alerted = await enqueueQuickLead(row.id, quickLeadAlert(row, duty));
-    after(async () => {
-      try {
-        if (alerted) await drainIfQuiet();
-        else await notifySaveFailed({ whatsapp, quick: row.id }, "El número quedó guardado pero la alerta no se pudo encolar.");
-      } catch (error) {
-        console.error("[WebGratis:quick] drain", error);
-      }
-      // Heads-up WhatsApp: warms the number so they answer Fernanda's call and
-      // know a rep is coming within 24h. Best-effort — the done screen is the guarantee.
-      try {
-        const outcome = await sendQuickHeadsUp(row.id);
-        if (outcome === "failed") console.error("[WebGratis:quick] heads-up send failed", row.id);
-      } catch (error) {
-        console.error("[WebGratis:quick] heads-up", error);
-      }
-      await sendCapiEvent({
-        eventName: "Lead",
-        eventId: `${row.id}-lead`,
-        whatsapp: row.whatsapp,
-        externalId: row.id,
-        sourceUrl: row.landing_url,
-        fbclid: row.fbclid,
-        request,
-      });
-    });
-    return ok({ referralCode: row.referral_code, onDuty: duty.onDuty, nextStart: duty.nextStart });
+    return captureSaved(inserted, request);
   } catch (error) {
     console.error("[WebGratis:quick]", error);
     if (req.attempt === undefined || req.attempt >= 2) {

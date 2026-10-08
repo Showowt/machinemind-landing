@@ -124,7 +124,7 @@
 }
 
 .flagPA {
-  background: linear-gradient(90deg, #005293 0 25%, #ffffff 25% 75%, #d21034 75%);
+  background: #fff url("/flags/pa.svg") center / 100% 100% no-repeat;
 }
 
 .langBtn {
@@ -211,6 +211,25 @@
 .badgeCountry {
   color: var(--wg-blue);
   white-space: nowrap;
+}
+
+.campaignMarkets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 22px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--wg-fg);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.campaignMarkets li {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
 }
 
 .flagStripe {

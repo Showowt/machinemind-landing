@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 150 100">
+  <title>Bandera de Panamá</title>
+  <path fill="#fff" d="M0 0h150v100H0z"/>
+  <path fill="#d21034" d="M75 0h75v50H75z"/>
+  <path fill="#005293" d="M0 50h75v50H0z"/>
+  <path fill="#005293" transform="translate(37.5 25)" d="M0-15 3.37-4.64 14.27-4.64 5.45 1.77 8.82 12.14 0 5.73-8.82 12.14-5.45 1.77-14.27-4.64-3.37-4.64z"/>
+  <path fill="#d21034" transform="translate(112.5 75)" d="M0-15 3.37-4.64 14.27-4.64 5.45 1.77 8.82 12.14 0 5.73-8.82 12.14-5.45 1.77-14.27-4.64-3.37-4.64z"/>
+</svg>
