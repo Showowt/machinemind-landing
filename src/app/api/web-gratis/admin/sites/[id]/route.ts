@@ -1,7 +1,7 @@
 /**
  * /api/web-gratis/admin/sites/:id — one website, for the board's editor.
  *
- * GET    → { site (summary), content, sources }
+ * GET    → { site (summary), content, sources, readback (read-only persisted evidence) }
  * PATCH  → one of:
  *   { edits, expectedVersion }  quick edits (tagline, hero, about, services
  *                               name/description/price, palette primary/bg/text)
@@ -16,6 +16,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/web-gratis/admin";
 import { fail, ok } from "@/lib/web-gratis/http";
 import { getSite } from "@/lib/web-gratis/sites/pipeline";
+import { readSiteReadback } from "@/lib/web-gratis/sites/readback";
 import { changeSlug, editSiteContent, saveInstructions } from "@/lib/web-gratis/sites/publish";
 import { statsFor, toSummary } from "@/lib/web-gratis/sites/summary";
 
@@ -68,10 +69,15 @@ export async function GET(request: Request, { params }: Params) {
   const { id } = await params;
   if (!z.uuid().safeParse(id).success) return fail(400, "invalid");
   try {
+    const startedAt = new Date();
     const site = await getSite(id);
     if (!site) return fail(404, "not_found", "No existe esa web.");
+    if (site.id !== id) throw new Error("Readback site identity mismatch.");
+    const readback = await readSiteReadback(site, startedAt);
     const stats = site.published_at ? await statsFor(site.id).catch(() => null) : null;
-    return ok({ site: toSummary(site, stats), content: site.content, sources: site.sources });
+    return ok({ site: toSummary(site, stats), content: site.content, sources: site.sources, readback }, {
+      headers: { "Cache-Control": "private, no-store" },
+    });
   } catch (error) {
     console.error("[Sites:admin:get]", id, error);
     return fail(500, "server_error");
