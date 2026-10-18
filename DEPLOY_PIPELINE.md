@@ -24,3 +24,22 @@ Re-arm after a fresh clone (hooks live outside version control):
 ```bash
 bash ~/.claude/scripts/install-deploy-hook.sh ~/projects/builds/machinemind-landing
 ```
+
+## Showcase link health (added 2026-10-18)
+
+The homepage badges every ELITE row "Live in Production" and every portfolio
+card "View Live". Nothing verified those claims, so Ballantir, Street Legal AI
+and Movvia advertised themselves as live for weeks while serving maintenance
+pages.
+
+```bash
+npm run check:links          # renders every showcased URL in headless Chrome
+node scripts/link-health.mjs --json
+node scripts/link-health.mjs --url=https://example.com
+```
+
+Exit 1 = an ELITE platform is down (treat as a deploy blocker), exit 2 = only
+portfolio links are down. A plain status check is not enough — a maintenance
+page answers 200 with a cheerful title — so the script reads rendered text.
+Run it before any deploy that touches the portfolio, and periodically: client
+platforms go dark without telling us.

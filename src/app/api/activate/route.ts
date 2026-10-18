@@ -6,6 +6,7 @@
  *
  * Accepts multipart form data:
  *   - businessName, phone, method (required)
+ *   - plan ("standard" | "premium") — priced server-side from activation-plans
  *   - reference (optional confirmation number)
  *   - screenshot (optional file)
  */
@@ -13,6 +14,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { randomBytes } from "crypto";
+import { getActivationPlan, isActivationPlanId } from "@/lib/activation-plans";
 
 const OUTREACH_URL =
   process.env.OUTREACH_SUPABASE_URL ||
@@ -99,6 +101,7 @@ export async function POST(request: Request) {
     const businessName = (formData.get("businessName") as string | null)?.trim();
     const phone = (formData.get("phone") as string | null)?.trim();
     const method = formData.get("method") as string | null;
+    const planField = formData.get("plan");
     const reference = (formData.get("reference") as string | null)?.trim() || null;
     const screenshot = formData.get("screenshot") as File | null;
 
@@ -119,6 +122,15 @@ export async function POST(request: Request) {
       );
     }
 
+    // Price from the plan id, never from anything the client could set. A
+    // client that posts no plan (an old tab mid-flow during a deploy) still has
+    // its proof of payment recorded — with amount 0 and a loud flag, because a
+    // guessed amount in the ledger is worse than a blank one.
+    const planId = isActivationPlanId(planField) ? planField : null;
+    const plan = planId ? getActivationPlan(planId) : null;
+    const amountUsd = plan ? plan.monthlyUsd : 0;
+    const planLabel = plan ? plan.nameEs : "SIN ESPECIFICAR";
+
     const db = getDb();
     const code = generateCode(12);
     const paymentReference = `MM-${code.slice(0, 6).toUpperCase()}`;
@@ -127,7 +139,7 @@ export async function POST(request: Request) {
     // Build notes
     const noteParts = [
       `Universal activate (machinemindconsulting.com)`,
-      `$150/mo x2 then $179/mo`,
+      plan ? `Plan ${plan.nameEs}: $${plan.monthlyUsd}/mo` : `PLAN NOT SPECIFIED — verify amount manually`,
     ];
     if (reference) noteParts.push(`Client ref: ${reference}`);
     if (screenshot && screenshot.size > 0) noteParts.push(`Screenshot uploaded`);
@@ -139,9 +151,9 @@ export async function POST(request: Request) {
         code,
         phone: cleanPhone,
         business_name: businessName,
-        plan: "custom",
-        amount_usd: 150,
-        monthly_amount_usd: 150,
+        plan: planId ?? "unspecified",
+        amount_usd: amountUsd,
+        monthly_amount_usd: amountUsd,
         currency_local: "USD",
         status: "claimed_paid",
         payment_method: method,
@@ -164,7 +176,7 @@ export async function POST(request: Request) {
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `<b>${businessName}</b>\n` +
       `${phone}\n` +
-      `$150 USD via ${methodLabel}\n` +
+      `${plan ? `$${plan.monthlyUsd} USD` : "AMOUNT UNKNOWN"} · plan ${planLabel} via ${methodLabel}\n` +
       `${reference ? `Ref: ${reference}\n` : ""}` +
       `Code: ${paymentReference}\n\n` +
       `wa.me/${phoneDigits}\n` +

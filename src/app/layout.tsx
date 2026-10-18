@@ -43,6 +43,58 @@ export const metadata: Metadata = {
     index: true,
     follow: true,
   },
+  alternates: {
+    canonical: "/",
+  },
+};
+
+/**
+ * Structured data — lets search and AI answer engines state what MachineMind
+ * is, where it operates and how to reach it, instead of inferring it from
+ * animated hero copy. Every claim here is already public on the page.
+ */
+const STRUCTURED_DATA = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "ProfessionalService",
+      "@id": "https://machinemindconsulting.com/#organization",
+      name: "MachineMind Consulting",
+      alternateName: "MachineMind",
+      url: "https://machinemindconsulting.com",
+      logo: "https://machinemindconsulting.com/logo-stacked.png",
+      image: "https://machinemindconsulting.com/og-image.png",
+      description:
+        "AI automation consultancy building autonomous intelligence infrastructure — WhatsApp AI concierges, cinematic web platforms, and full-stack software for hospitality, real estate, and private capital.",
+      founder: { "@type": "Person", name: "Phil McGill" },
+      email: "Phil@machinemindconsulting.com",
+      address: {
+        "@type": "PostalAddress",
+        addressLocality: "Cartagena",
+        addressCountry: "CO",
+      },
+      areaServed: [
+        { "@type": "Country", name: "Colombia" },
+        { "@type": "Country", name: "El Salvador" },
+        { "@type": "Country", name: "Panamá" },
+        { "@type": "Country", name: "United States" },
+      ],
+      knowsLanguage: ["es", "en"],
+      sameAs: [
+        "https://www.linkedin.com/company/machinemindconsulting",
+        "https://x.com/machinemindai",
+        "https://instagram.com/machinemindconsulting",
+      ],
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://machinemindconsulting.com/#website",
+      url: "https://machinemindconsulting.com",
+      name: "MachineMind",
+      inLanguage: ["en", "es"],
+      publisher: { "@id": "https://machinemindconsulting.com/#organization" },
+    },
+  ],
 };
 
 export default function RootLayout({
@@ -85,6 +137,10 @@ export default function RootLayout({
         </noscript>
       </head>
       <body className="antialiased">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(STRUCTURED_DATA) }}
+        />
         {children}
       </body>
     </html>

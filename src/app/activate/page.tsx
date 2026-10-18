@@ -1,11 +1,19 @@
 "use client";
 
 import { useState, useRef } from "react";
+import {
+  ACTIVATION_PLANS,
+  ACTIVATION_PLAN_ORDER,
+  DEFAULT_ACTIVATION_PLAN,
+  formatUsd,
+  type ActivationPlanId,
+} from "@/lib/activation-plans";
 
 type PaymentMethod = "paypal" | "zelle" | "bank_transfer" | "other";
 
 export default function ActivatePage() {
   const [step, setStep] = useState<"info" | "payment" | "confirm" | "done">("info");
+  const [planId, setPlanId] = useState<ActivationPlanId>(DEFAULT_ACTIVATION_PLAN);
   const [businessName, setBusinessName] = useState("");
   const [phone, setPhone] = useState("");
   const [selectedMethod, setSelectedMethod] = useState<PaymentMethod | null>(null);
@@ -17,15 +25,17 @@ export default function ActivatePage() {
   const [error, setError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const plan = ACTIVATION_PLANS[planId];
+  const priceLabel = formatUsd(plan.monthlyUsd);
   const canProceed = businessName.trim().length >= 2 && phone.trim().length >= 6;
   const hasProof = reference.trim().length > 0 || screenshot !== null;
 
   const goToConfirm = (method: PaymentMethod) => {
     setSelectedMethod(method);
     setError("");
-    // PayPal: open payment link directly
+    // PayPal: open the payment link for the selected plan directly
     if (method === "paypal") {
-      window.open("https://paypal.me/MachineMind/150USD", "_blank");
+      window.open(plan.paypalUrl, "_blank");
     }
     setStep("confirm");
   };
@@ -63,6 +73,8 @@ export default function ActivatePage() {
       formData.append("businessName", businessName.trim());
       formData.append("phone", phone.trim());
       formData.append("method", selectedMethod);
+      // The server prices the plan; only its id travels from the browser.
+      formData.append("plan", planId);
       if (reference.trim()) formData.append("reference", reference.trim());
       if (screenshot) formData.append("screenshot", screenshot);
 
@@ -108,8 +120,9 @@ export default function ActivatePage() {
             </p>
             <div className="text-left space-y-3 p-4" style={{ backgroundColor: "var(--glass)", border: "1px solid var(--glass-border)" }}>
               <InfoRow label="Negocio" value={businessName} />
+              <InfoRow label="Plan" value={plan.nameEs} />
               <InfoRow label="Referencia" value={paymentRef} mono />
-              <InfoRow label="Primer pago" value="$150 USD" bold />
+              <InfoRow label="Primer pago" value={priceLabel} bold />
             </div>
             <p className="text-xs mt-6" style={{ color: "rgba(240,240,243,0.2)" }}>
               Sofia se activa en 48 horas despues de confirmar el pago.
@@ -133,28 +146,67 @@ export default function ActivatePage() {
           <p className="text-sm max-w-sm mx-auto" style={{ color: "var(--dim)" }}>Tu asistente de IA que responde clientes 24/7 por WhatsApp</p>
         </div>
 
-        {/* Pricing */}
-        <div className="p-6 text-center" style={{ background: "linear-gradient(135deg, rgba(201,168,110,0.12) 0%, rgba(201,168,110,0.04) 100%)", border: "1px solid rgba(201,168,110,0.25)" }}>
-          <div className="text-[10px] uppercase tracking-[3px] font-semibold mb-3" style={{ color: "var(--accent)" }}>OFERTA DE LANZAMIENTO</div>
-          <div className="flex items-baseline justify-center gap-1">
-            <span className="text-5xl font-bold" style={{ color: "var(--fg)", fontFamily: "var(--font-clash)" }}>$150</span>
-            <span className="text-lg" style={{ color: "var(--dim)" }}>/mes</span>
+        {/* Plan — selectable only before the client commits to a method, so the
+            price they paid can never drift from the price we record. */}
+        {step === "info" ? (
+          <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            {ACTIVATION_PLAN_ORDER.map((id) => ACTIVATION_PLANS[id]).map((option) => {
+              const active = option.id === planId;
+              return (
+                <button
+                  key={option.id}
+                  onClick={() => setPlanId(option.id)}
+                  aria-pressed={active}
+                  className="p-5 text-left transition-all"
+                  style={{
+                    background: active
+                      ? "linear-gradient(135deg, rgba(201,168,110,0.14) 0%, rgba(201,168,110,0.04) 100%)"
+                      : "var(--glass)",
+                    border: `1px solid ${active ? "rgba(201,168,110,0.55)" : "var(--glass-border)"}`,
+                  }}
+                >
+                  <div className="text-[10px] uppercase tracking-[3px] font-semibold mb-2" style={{ color: active ? "var(--accent)" : "var(--dim)" }}>
+                    {option.nameEs}
+                  </div>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-4xl font-bold" style={{ color: "var(--fg)", fontFamily: "var(--font-clash)" }}>${option.monthlyUsd}</span>
+                    <span className="text-sm" style={{ color: "var(--dim)" }}>/mes</span>
+                  </div>
+                  <p className="text-xs mt-2" style={{ color: "var(--dim)" }}>{option.taglineEs}</p>
+                </button>
+              );
+            })}
           </div>
-          <p className="text-sm mt-1" style={{ color: "var(--dim)" }}>Primeros 2 meses &middot; Despues $179/mes</p>
-          <p className="text-xs mt-1" style={{ color: "rgba(240,240,243,0.2)" }}>Sin contratos. Cancela cuando quieras.</p>
-        </div>
+          <p className="text-xs text-center" style={{ color: "rgba(240,240,243,0.2)" }}>Sin contratos. Cancela cuando quieras.</p>
+          </div>
+        ) : (
+          <div className="p-6 text-center" style={{ background: "linear-gradient(135deg, rgba(201,168,110,0.12) 0%, rgba(201,168,110,0.04) 100%)", border: "1px solid rgba(201,168,110,0.25)" }}>
+            <div className="text-[10px] uppercase tracking-[3px] font-semibold mb-3" style={{ color: "var(--accent)" }}>PLAN {plan.nameEs.toUpperCase()}</div>
+            <div className="flex items-baseline justify-center gap-1">
+              <span className="text-5xl font-bold" style={{ color: "var(--fg)", fontFamily: "var(--font-clash)" }}>${plan.monthlyUsd}</span>
+              <span className="text-lg" style={{ color: "var(--dim)" }}>/mes</span>
+            </div>
+            <p className="text-xs mt-2" style={{ color: "rgba(240,240,243,0.2)" }}>Sin contratos. Cancela cuando quieras.</p>
+          </div>
+        )}
 
         {/* Features */}
         <div className="p-5" style={{ backgroundColor: "var(--glass)", border: "1px solid var(--glass-border)" }}>
           <p className="text-[10px] uppercase tracking-[3px] font-semibold mb-4" style={{ color: "var(--accent)" }}>QUE INCLUYE</p>
           <div className="space-y-3">
-            {["Chatbot IA entrenado en tu negocio", "Responde en segundos por WhatsApp, 24/7", "Pagina web profesional incluida", "Sistema de reservas inteligente", "Reportes y analiticas en tiempo real", "Setup completo en 48 horas", "Soporte directo con el equipo"].map((text) => (
+            {plan.features.map((text) => (
               <div key={text} className="flex items-center gap-3 text-sm" style={{ color: "rgba(240,240,243,0.7)" }}>
                 <svg className="w-4 h-4 shrink-0" style={{ color: "#22c55e" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
                 <span style={{ fontFamily: "var(--font-satoshi)" }}>{text}</span>
               </div>
             ))}
           </div>
+          {step === "info" && planId === "standard" && (
+            <p className="text-xs mt-4 pt-4" style={{ color: "var(--dim)", borderTop: "1px solid var(--glass-border)" }}>
+              Necesitas reservas o citas automaticas? Elige Premium.
+            </p>
+          )}
         </div>
 
         {/* ═══════════════════════════════════════════════════════════════
@@ -194,8 +246,8 @@ export default function ActivatePage() {
                 <p className="text-xs" style={{ color: "var(--dim)" }}>{phone}</p>
               </div>
               <div className="text-right">
-                <p className="font-semibold" style={{ color: "var(--fg)" }}>$150 USD</p>
-                <p className="text-xs" style={{ color: "var(--dim)" }}>Primer mes</p>
+                <p className="font-semibold" style={{ color: "var(--fg)" }}>{priceLabel}</p>
+                <p className="text-xs" style={{ color: "var(--dim)" }}>{plan.nameEs} &middot; primer mes</p>
               </div>
             </div>
 
@@ -205,7 +257,7 @@ export default function ActivatePage() {
                 <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 0 0-.607-.541c-.013.076-.026.175-.041.254-.93 4.778-4.005 7.201-9.138 7.201h-2.19a.563.563 0 0 0-.556.479l-1.187 7.527h-.506l-.24 1.516a.56.56 0 0 0 .554.647h3.882c.46 0 .85-.334.922-.788.06-.26.76-4.852.816-5.09a.932.932 0 0 1 .923-.788h.58c3.76 0 6.705-1.528 7.565-5.946.36-1.847.174-3.388-.777-4.471z" />
               </svg>
               <div className="flex-1">
-                <div className="text-sm font-semibold" style={{ color: "#4da6ff" }}>Pagar con PayPal — $150 USD</div>
+                <div className="text-sm font-semibold" style={{ color: "#4da6ff" }}>{`Pagar con PayPal — ${priceLabel}`}</div>
                 <div className="text-xs" style={{ color: "var(--dim)" }}>Se abre PayPal para pagar directamente</div>
               </div>
               <svg className="w-4 h-4 shrink-0" style={{ color: "var(--dim)" }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6M15 3h6v6M10 14L21 3" /></svg>
@@ -253,9 +305,9 @@ export default function ActivatePage() {
             {selectedMethod === "paypal" && (
               <div className="p-4 text-sm space-y-2" style={{ backgroundColor: "rgba(0,112,221,0.05)", border: "1px solid rgba(0,112,221,0.2)" }}>
                 <p style={{ color: "rgba(240,240,243,0.8)" }}>
-                  PayPal se abrio en otra ventana. Completa el pago de <strong style={{ color: "var(--fg)" }}>$150 USD</strong> y vuelve aqui para confirmar.
+                  PayPal se abrio en otra ventana. Completa el pago de <strong style={{ color: "var(--fg)" }}>{priceLabel}</strong> y vuelve aqui para confirmar.
                 </p>
-                <a href="https://paypal.me/MachineMind/150USD" target="_blank" rel="noopener noreferrer" className="inline-block text-sm font-medium" style={{ color: "#4da6ff" }}>
+                <a href={plan.paypalUrl} target="_blank" rel="noopener noreferrer" className="inline-block text-sm font-medium" style={{ color: "#4da6ff" }}>
                   Abrir PayPal de nuevo
                 </a>
               </div>
@@ -267,7 +319,7 @@ export default function ActivatePage() {
                 <div className="p-3 space-y-2" style={{ backgroundColor: "rgba(255,255,255,0.02)", border: "1px solid var(--glass-border)" }}>
                   <Row label="Email" value="machinemindconsulting@gmail.com" mono />
                   <Row label="Nombre" value="Philip McGill" />
-                  <Row label="Monto" value="$150 USD" bold />
+                  <Row label="Monto" value={priceLabel} bold />
                 </div>
               </div>
             )}
@@ -280,7 +332,7 @@ export default function ActivatePage() {
                   <Row label="Routing" value="256074974" mono />
                   <Row label="SWIFT" value="NFCUUS33XXX" mono />
                   <Row label="Titular" value="Philip McGill" />
-                  <Row label="Monto" value="$150 USD" bold />
+                  <Row label="Monto" value={priceLabel} bold />
                 </div>
                 <p style={{ color: "var(--dim)" }}>Para el numero de cuenta, contacta al +1 (954) 445-1638</p>
               </div>
