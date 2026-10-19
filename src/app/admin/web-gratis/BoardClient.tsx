@@ -411,8 +411,8 @@ function expiryHoldDescription(t: BillingTimeline): string {
   if (!hold.startsAt || !hold.endsAt) return `Fechas de evaluación pendientes; vencimiento legado retenido. Esta retención no activa cobros.${paymentWarning}`;
   const formatter = new Intl.DateTimeFormat("es-SV", { dateStyle: "medium", timeStyle: "short", timeZone: hold.timezone });
   const interval = `${formatter.format(new Date(hold.startsAt))} – ${formatter.format(new Date(hold.endsAt))} (El Salvador)`;
-  const phase = hold.phase === "scheduled" ? "Intervalo acordado, aún no iniciado" : hold.phase === "active" ? "Dentro del intervalo acordado" : "Intervalo concluido; revisión manual pendiente";
-  return `${phase}: ${interval}. Esta retención no activa cobros; vencimiento legado retenido.${paymentWarning}`;
+  const phase = hold.phase === "scheduled" ? "Período programado, aún no iniciado" : hold.phase === "active" ? "Dentro del período programado según el reloj" : "Período concluido según el reloj; revisión manual pendiente";
+  return `${phase}: ${interval}. Fechas confirmadas por respuesta en contexto; aviso exacto verificado. El estado se calcula por fecha y no registra una activación. Esta retención no activa cobros; vencimiento legado retenido.${paymentWarning}`;
 }
 
 /** How the client's month stands, for the "Mes" cell and the card line. */

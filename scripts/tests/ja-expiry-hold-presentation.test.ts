@@ -44,9 +44,11 @@ const renderRow = (id: string, overrides: Partial<BillingSignup> = {}) => render
   onPatch: async () => { throw new Error("A render must never write"); },
 }));
 
-test("JA billing render has explicit pending-date hold and no payment send/link/activation controls", () => {
+test("JA billing render shows the clock-derived period and contextual consent and no payment send/link/activation controls", () => {
   const html = renderRow(JA);
-  assert.match(html, /Fechas de evaluación pendientes/);
+  assert.match(html, /Dentro del período programado según el reloj/);
+  assert.match(html, /Fechas confirmadas por respuesta en contexto/);
+  assert.match(html, /no registra una activación/);
   assert.match(html, /Vencimiento legado retenido/);
   assert.match(html, /Sin activación de pago registrada/);
   for (const forbidden of ["WhatsApp: pedir el pago", "Pagó (PayPal)", "Pagó (a mano)", "Copiar enlace de pago", "wa.me/", "Vence pronto"]) assert.ok(!html.includes(forbidden), forbidden);
@@ -60,7 +62,7 @@ test("JA billing render has explicit pending-date hold and no payment send/link/
 test("synthetic approved interval descriptions distinguish scheduled, active and ended without activating payment", () => {
   const value = billingTimeline(fixture(JA), [], new Date("2026-10-19T16:00:00Z"), { hasPaymentMethod: true });
   const describe = board.expiryHoldDescription as (timeline: BillingTimeline) => string;
-  for (const [phase, phrase] of [["scheduled", "aún no iniciado"], ["active", "Dentro del intervalo acordado"], ["ended", "revisión manual pendiente"]] as const) {
+  for (const [phase, phrase] of [["scheduled", "aún no iniciado"], ["active", "Dentro del período programado según el reloj"], ["ended", "revisión manual pendiente"]] as const) {
     const synthetic: BillingTimeline = { ...value, expiryHold: { ...value.expiryHold!, phase, startsAt: "2026-10-20T15:00:00.000Z", endsAt: "2026-11-19T15:00:00.000Z" } };
     assert.ok(describe(synthetic).includes(phrase));
     assert.ok(describe(synthetic).includes("Esta retención no activa cobros"));
@@ -97,7 +99,10 @@ test("bridge context suppresses only JA operative legacy deadline and retains hi
   assert.equal(ja.legacyFreeUntil, "2026-10-26");
   assert.equal(ja.paymentRequestsAllowed, false);
   assert.equal(ja.activated, false);
-  assert.equal((ja.expiryHold as Record<string, unknown>).phase, "awaiting_dates");
+  assert.ok(["scheduled", "active", "ended"].includes((ja.expiryHold as Record<string, unknown>).phase as string));
+  assert.equal((ja.expiryHold as Record<string, unknown>).phaseBasis, "configured_window_clock");
+  assert.equal((ja.expiryHold as Record<string, unknown>).actualActivationObservedAt, null);
+  assert.equal((ja.expiryHold as Record<string, unknown>).consentBasis, "contextual_affirmative");
   const ordinary = await context({ ...fixture(OTHER), ...extra });
   assert.equal(ordinary.freeUntil, "2026-10-26");
   assert.equal(ordinary.activated, false);

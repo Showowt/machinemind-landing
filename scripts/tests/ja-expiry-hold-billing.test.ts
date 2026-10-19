@@ -15,7 +15,7 @@ const timeline = (row: BillingSignup, at: string, messages: BillingMessage[] = [
 
 test("JA deadline remains historical before, during and after the legacy expiry without a synthetic trial", () => {
   const row = fixture(), before = structuredClone(row);
-  for (const at of ["2026-10-19T16:00:00Z", "2026-10-24T16:00:00Z", "2026-10-26T16:00:00Z", "2027-01-04T16:00:00Z"]) {
+  for (const [at, phase] of [["2026-10-19T23:59:00Z", "scheduled"], ["2026-10-24T16:00:00Z", "active"], ["2026-10-26T16:00:00Z", "active"], ["2027-01-04T16:00:00Z", "ended"]]) {
     const value = timeline(row, at);
     assert.equal(value.state, "evaluation_hold");
     assert.equal(value.freeUntil, "2026-10-26");
@@ -25,9 +25,11 @@ test("JA deadline remains historical before, during and after the legacy expiry 
     assert.equal(value.daysLeft, null);
     assert.equal(value.next, null);
     assert.deepEqual(value.history, []);
-    assert.equal(value.expiryHold?.phase, "awaiting_dates");
-    assert.equal(value.expiryHold?.startsAt, null);
-    assert.equal(value.expiryHold?.endsAt, null);
+    assert.equal(value.expiryHold?.phase, phase);
+    assert.equal(value.expiryHold?.startsAt, "2026-10-20T15:00:00.000Z");
+    assert.equal(value.expiryHold?.endsAt, "2026-11-19T15:00:00.000Z");
+    assert.equal(value.expiryHold?.phaseBasis, "configured_window_clock");
+    assert.equal(value.expiryHold?.actualActivationObservedAt, null);
     assert.equal(value.expiryHold?.legacyAutomaticPauseHeld, true);
     assert.equal(value.expiryHold?.doesNotActivateBilling, true);
   }

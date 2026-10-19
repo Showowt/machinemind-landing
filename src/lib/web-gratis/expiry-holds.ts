@@ -6,12 +6,17 @@
 export interface ApprovedEvaluationWindow {
   startsAt: string;
   endsAt: string;
-  consentedAt: string;
   recordedAt: string;
-  /** Hash of the separately retained, exact client-date acceptance receipt. */
-  consentReceiptSha256: string;
-  /** Hash of the operator approval to record this exact window. */
-  operatorApprovalSha256: string;
+  evaluationAuthority: "owner_authorized_schedule_with_contextual_client_affirmation";
+  consentBasis: "contextual_affirmative";
+  /** Snapshot observation time, not an invented incoming-message timestamp. */
+  consentObservedAt: string;
+  clientAcknowledgmentReceivedAt: string | null;
+  /** Selected client evidence, owner authorization and outgoing notice stay separate. */
+  clientEvidenceReceiptSha256: string;
+  operatorApprovalReceiptSha256: string;
+  scheduleNoticeReceiptSha256: string;
+  scheduleNoticeVerifiedAt: string;
 }
 
 export interface ExpiryHold {
@@ -25,16 +30,31 @@ export interface ExpiryHold {
   evaluation: Readonly<ApprovedEvaluationWindow> | null;
 }
 
-/** No proposed dates are recorded as consent. A later reviewed change is required. */
+/**
+ * Exact dates were clarified and affirmed in context, then separately authorized
+ * and notified. Only receipt hashes are bundled; raw conversation stays private.
+ */
 const JA_HOLD: Readonly<ExpiryHold> = Object.freeze({
   policyId: "ja-legacy-expiry-consent-hold-v1",
   signupId: "1afdbfc5-8703-4ecd-9405-fa2aebb4d708",
   siteId: "65005b57-c4bd-4837-8420-8fb6c2d9e283",
   referralCode: "E67BBT",
-  reason: "Vencimiento heredado retenido por discrepancia de consentimiento; evaluación y seguimiento manuales.",
+  reason: "Vencimiento heredado retenido; período programado con consentimiento en contexto y seguimiento manual.",
   timezone: "America/El_Salvador",
   monthlyPriceUsd: 20,
-  evaluation: null,
+  evaluation: Object.freeze({
+    startsAt: "2026-10-20T15:00:00.000Z",
+    endsAt: "2026-11-19T15:00:00.000Z",
+    recordedAt: "2026-10-19T23:53:11.390Z",
+    evaluationAuthority: "owner_authorized_schedule_with_contextual_client_affirmation",
+    consentBasis: "contextual_affirmative",
+    consentObservedAt: "2026-10-19T23:49:10.092Z",
+    clientAcknowledgmentReceivedAt: null,
+    clientEvidenceReceiptSha256: "c4dae42a4ebf51093a2d5e05f3e2e062b47a45cf811b94e74c86355b9405e916",
+    operatorApprovalReceiptSha256: "afd402e02ecc58a714077282525956d844f0cc867f0837b76ec46b377c4186cb",
+    scheduleNoticeReceiptSha256: "1c0367ed548282d75977d1365b9edcc53a1381f84f0bf747c4e34b11750a6b5a",
+    scheduleNoticeVerifiedAt: "2026-10-19T23:49:33.941Z",
+  }),
 });
 
 export const EXPIRY_HOLD_CODE = "manual_evaluation_hold";
@@ -50,14 +70,21 @@ export function isLegacyExpiryTemplateHeld(signupId: string | null | undefined, 
   return !!getExpiryHold(signupId) && typeof template === "string" && HELD_TEMPLATES.has(template);
 }
 
-/** Pure validation: malformed/backdated/unapproved windows never become active. */
+/** Pure validation: malformed, backdated or incompletely evidenced windows stay held. */
 export function validEvaluationWindow(window: Readonly<ApprovedEvaluationWindow>): boolean {
-  const canonical = (value: string) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) &&
+  const canonical = (value: unknown): value is string => typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value) &&
     Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
-  if (![window.startsAt, window.endsAt, window.consentedAt, window.recordedAt].every(canonical)) return false;
-  if (![window.consentReceiptSha256, window.operatorApprovalSha256].every((v) => /^[a-f0-9]{64}$/.test(v))) return false;
+  if (![window.startsAt, window.endsAt, window.consentObservedAt, window.scheduleNoticeVerifiedAt, window.recordedAt].every(canonical)) return false;
+  if (window.evaluationAuthority !== "owner_authorized_schedule_with_contextual_client_affirmation" || window.consentBasis !== "contextual_affirmative") return false;
+  const hashes = [window.clientEvidenceReceiptSha256, window.operatorApprovalReceiptSha256, window.scheduleNoticeReceiptSha256];
+  if (!hashes.every((value) => typeof value === "string" && /^[a-f0-9]{64}$/.test(value)) || new Set(hashes).size !== 3) return false;
+  if (window.clientAcknowledgmentReceivedAt !== null && (!canonical(window.clientAcknowledgmentReceivedAt) ||
+    Date.parse(window.clientAcknowledgmentReceivedAt) > Date.parse(window.consentObservedAt))) return false;
   return Date.parse(window.endsAt) - Date.parse(window.startsAt) === 30 * 24 * 60 * 60 * 1000 &&
-    Date.parse(window.consentedAt) <= Date.parse(window.recordedAt) && Date.parse(window.recordedAt) <= Date.parse(window.startsAt);
+    Date.parse(window.consentObservedAt) <= Date.parse(window.scheduleNoticeVerifiedAt) &&
+    Date.parse(window.scheduleNoticeVerifiedAt) <= Date.parse(window.recordedAt) &&
+    Date.parse(window.recordedAt) <= Date.parse(window.startsAt);
 }
 
 export type EvaluationPhase = "awaiting_dates" | "scheduled" | "active" | "ended";
@@ -83,8 +110,19 @@ export function getExpiryHoldState(signupId: string | null | undefined, now: Dat
     doesNotActivateBilling: true as const,
     legacyAutomaticPauseHeld: true as const,
     intervalApproved: !!window,
-    consentReceiptSha256: window?.consentReceiptSha256 ?? null,
-    operatorApprovalSha256: window?.operatorApprovalSha256 ?? null,
+    phaseBasis: "configured_window_clock" as const,
+    /** No native evaluation-start event is inferred from crossing a clock boundary. */
+    actualActivationObservedAt: null,
+    doesNotGrantPaymentAuthorization: true as const,
+    evaluationAuthority: window?.evaluationAuthority ?? null,
+    consentBasis: window?.consentBasis ?? null,
+    consentObservedAt: window?.consentObservedAt ?? null,
+    clientAcknowledgmentReceivedAt: window?.clientAcknowledgmentReceivedAt ?? null,
+    recordedAt: window?.recordedAt ?? null,
+    clientEvidenceReceiptSha256: window?.clientEvidenceReceiptSha256 ?? null,
+    operatorApprovalReceiptSha256: window?.operatorApprovalReceiptSha256 ?? null,
+    scheduleNoticeReceiptSha256: window?.scheduleNoticeReceiptSha256 ?? null,
+    scheduleNoticeVerifiedAt: window?.scheduleNoticeVerifiedAt ?? null,
     /** Explicit: this runtime policy does not write the signup's payment-activation column. */
     storage: "reviewed_source_policy" as const,
   };

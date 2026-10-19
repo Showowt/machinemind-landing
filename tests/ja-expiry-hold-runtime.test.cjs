@@ -185,11 +185,24 @@ function assertJaUnchanged(h, before) {
   assert.ok(!h.db.writes.some(w => w.table === SIGNUPS && w.id === JA));
 }
 
-test('policy identifies JA only, preserves $20, and does not claim any proposed interval approved', () => {
-  const state = policy.getExpiryHoldState(JA, new Date('2026-10-20T15:00:00.000Z'));
-  assert.equal(state.phase, 'awaiting_dates');
-  assert.equal(state.intervalApproved, false);
-  assert.equal(state.startsAt, null); assert.equal(state.endsAt, null);
+test('policy schedules JA only with distinct contextual consent, owner and notice evidence while preserving $20', () => {
+  const state = policy.getExpiryHoldState(JA, new Date('2026-10-20T00:00:00.000Z'));
+  assert.equal(state.phase, 'scheduled');
+  assert.equal(state.phaseBasis, 'configured_window_clock');
+  assert.equal(state.intervalApproved, true);
+  assert.equal(state.startsAt, '2026-10-20T15:00:00.000Z');
+  assert.equal(state.endsAt, '2026-11-19T15:00:00.000Z');
+  assert.equal(state.consentBasis, 'contextual_affirmative');
+  assert.equal(state.evaluationAuthority, 'owner_authorized_schedule_with_contextual_client_affirmation');
+  assert.equal(state.consentObservedAt, '2026-10-19T23:49:10.092Z');
+  assert.equal(state.clientAcknowledgmentReceivedAt, null);
+  assert.equal(Object.hasOwn(state, 'consentedAt'), false);
+  assert.equal(state.scheduleNoticeVerifiedAt, '2026-10-19T23:49:33.941Z');
+  assert.equal(state.clientEvidenceReceiptSha256, 'c4dae42a4ebf51093a2d5e05f3e2e062b47a45cf811b94e74c86355b9405e916');
+  assert.equal(state.operatorApprovalReceiptSha256, 'afd402e02ecc58a714077282525956d844f0cc867f0837b76ec46b377c4186cb');
+  assert.equal(state.scheduleNoticeReceiptSha256, '1c0367ed548282d75977d1365b9edcc53a1381f84f0bf747c4e34b11750a6b5a');
+  assert.equal(state.actualActivationObservedAt, null);
+  assert.equal(state.doesNotGrantPaymentAuthorization, true);
   assert.equal(state.monthlyPriceUsd, 20); assert.equal(state.timezone, 'America/El_Salvador');
   assert.equal(state.doesNotActivateBilling, true); assert.equal(state.legacyAutomaticPauseHeld, true);
   for (const id of [OTHER, undefined, null, '', JA.toUpperCase()]) assert.equal(policy.getExpiryHold(id), null);
@@ -364,11 +377,15 @@ test('JA neutral site-ready communication and control manual reminder retain pri
 });
 
 // SYNTHETIC TEST WINDOW ONLY. These hashes are labeled fixtures, not evidence
-// of real client consent. No window is inserted into the production policy.
+// of real client consent. The real policy has its own separately retained receipts.
 const SYNTHETIC_WINDOW = {
   startsAt: '2026-10-20T15:00:00.000Z', endsAt: '2026-11-19T15:00:00.000Z',
-  consentedAt: '2026-10-19T20:00:00.000Z', recordedAt: '2026-10-19T21:00:00.000Z',
-  consentReceiptSha256: 'a'.repeat(64), operatorApprovalSha256: 'b'.repeat(64),
+  recordedAt: '2026-10-19T21:00:00.000Z',
+  evaluationAuthority: 'owner_authorized_schedule_with_contextual_client_affirmation',
+  consentBasis: 'contextual_affirmative', consentObservedAt: '2026-10-19T20:00:00.000Z',
+  clientAcknowledgmentReceivedAt: null,
+  clientEvidenceReceiptSha256: 'a'.repeat(64), operatorApprovalReceiptSha256: 'b'.repeat(64),
+  scheduleNoticeReceiptSha256: 'c'.repeat(64), scheduleNoticeVerifiedAt: '2026-10-19T20:30:00.000Z',
 };
 test('synthetic exact 30-day window uses El Salvador 09:00 and inclusive start/exclusive end', () => {
   assert.equal(policy.validEvaluationWindow(SYNTHETIC_WINDOW), true);
@@ -379,18 +396,34 @@ test('synthetic exact 30-day window uses El Salvador 09:00 and inclusive start/e
     ['2026-10-20T14:59:59.999Z', 'scheduled'], ['2026-10-20T15:00:00.000Z', 'active'],
     ['2026-11-19T14:59:59.999Z', 'active'], ['2026-11-19T15:00:00.000Z', 'ended'],
     ['2027-01-01T00:00:00.000Z', 'ended'],
-  ]) assert.equal(policy.evaluationPhase(SYNTHETIC_WINDOW, new Date(at)), phase);
+  ]) {
+    assert.equal(policy.evaluationPhase(SYNTHETIC_WINDOW, new Date(at)), phase);
+    const actualPolicy = policy.getExpiryHoldState(JA, new Date(at));
+    assert.equal(actualPolicy.phase, phase);
+    assert.equal(actualPolicy.phaseBasis, 'configured_window_clock');
+    assert.equal(actualPolicy.actualActivationObservedAt, null);
+    assert.equal(actualPolicy.doesNotActivateBilling, true);
+    assert.equal(actualPolicy.doesNotGrantPaymentAuthorization, true);
+    assert.equal(actualPolicy.legacyExpiryActionsHeld, true);
+    assert.equal(actualPolicy.legacyAutomaticPauseHeld, true);
+  }
   // Date classification is separate from the guard: ending never reenables legacy actions.
   for (const t of HELD) assert.equal(policy.isLegacyExpiryTemplateHeld(JA, t), true);
   assert.equal(policy.getExpiryHoldState(JA, new Date('2027-01-01T00:00:00.000Z')).legacyExpiryActionsHeld, true);
 });
 
 for (const [label, patch] of [
-  ['missing evidence', { consentReceiptSha256: '' }], ['missing operator approval', { operatorApprovalSha256: undefined }],
-  ['invalid hash', { consentReceiptSha256: 'x'.repeat(64) }], ['29-day interval', { endsAt: '2026-11-18T15:00:00.000Z' }],
+  ['missing evidence', { clientEvidenceReceiptSha256: '' }], ['missing operator approval', { operatorApprovalReceiptSha256: undefined }],
+  ['missing notice', { scheduleNoticeReceiptSha256: undefined }], ['reused evidence hash', { scheduleNoticeReceiptSha256: 'a'.repeat(64) }],
+  ['unsupported consent basis', { consentBasis: 'assumed' }], ['missing authority', { evaluationAuthority: undefined }],
+  ['invalid hash', { clientEvidenceReceiptSha256: 'x'.repeat(64) }], ['29-day interval', { endsAt: '2026-11-18T15:00:00.000Z' }],
   ['30 days plus 1ms', { endsAt: '2026-11-19T15:00:00.001Z' }], ['invalid calendar', { startsAt: '2026-02-30T15:00:00.000Z' }],
   ['noncanonical offset', { startsAt: '2026-10-20T09:00:00-06:00' }], ['date only', { startsAt: '2026-10-20' }],
-  ['backdated recording', { recordedAt: '2026-10-20T15:00:00.001Z' }], ['acceptance after recording', { consentedAt: '2026-10-19T21:00:00.001Z' }],
+  ['backdated recording', { recordedAt: '2026-10-20T15:00:00.001Z' }], ['observation after notice', { consentObservedAt: '2026-10-19T20:30:00.001Z' }],
+  ['notice after recording', { scheduleNoticeVerifiedAt: '2026-10-19T21:00:00.001Z' }],
+  ['missing acknowledgment timestamp declaration', { clientAcknowledgmentReceivedAt: undefined }],
+  ['claimed receipt after observation', { clientAcknowledgmentReceivedAt: '2026-10-19T20:00:00.001Z' }],
+  ['noncanonical notice', { scheduleNoticeVerifiedAt: '2026-10-19T20:30:00Z' }],
   ['missing start', { startsAt: undefined }], ['null date', { startsAt: null }],
 ]) {
   test(`synthetic interval rejects ${label} and remains awaiting dates`, () => {
@@ -403,4 +436,9 @@ for (const [label, patch] of [
 test('absent window and invalid observation clock cannot activate the evaluation', () => {
   assert.equal(policy.evaluationPhase(null, new Date()), 'awaiting_dates');
   assert.equal(policy.evaluationPhase(SYNTHETIC_WINDOW, new Date('invalid')), 'awaiting_dates');
+});
+
+test('known acknowledgment timestamp is accepted only as separate evidence before its observation', () => {
+  assert.equal(policy.validEvaluationWindow({ ...SYNTHETIC_WINDOW, clientAcknowledgmentReceivedAt: '2026-10-19T19:59:00.000Z' }), true);
+  assert.equal(policy.getExpiryHold(JA).evaluation.clientAcknowledgmentReceivedAt, null);
 });
