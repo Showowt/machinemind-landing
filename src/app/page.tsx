@@ -21,7 +21,14 @@ interface ElitePlatform {
   descEn: string; descEs: string;
   statEn: string; statEs: string;
   stack: string[];
-  url: string;
+  /**
+   * Omitted when the platform must not be reachable from this site — a public
+   * link is a front door, and some of these hold data that no visitor should
+   * be one click away from. A row without a url renders locked, not broken.
+   */
+  url?: string;
+  /** Why it is not linked. Required reading next to a missing url. */
+  restrictedEn?: string; restrictedEs?: string;
   color: string;
 }
 
@@ -54,7 +61,11 @@ const ELITE_PLATFORMS: ElitePlatform[] = [
     descEs: 'Sistema operativo para un centro oncológico — control de existencias y vencimientos, pronóstico de demanda, análisis de caso clínico, biomarcadores e inteligencia de medicamentos en una sola consola.',
     statEn: 'SUPPLY CHAIN + CLINIC + AI', statEs: 'CADENA + CLÍNICA + IA',
     stack: ['Next.js', 'Supabase', 'Claude AI', 'Forecasting', 'RLS'],
-    url: 'https://life-center-os.vercel.app',
+    // Unlinked 2026-10-19 (Phil): this is an oncology console — clinical cases,
+    // biomarkers and controlled-substance stock. Showcasing the build is fine;
+    // handing the public a route into the patient layer is not.
+    restrictedEn: 'Protected clinical data — walkthrough on request',
+    restrictedEs: 'Datos clínicos protegidos — recorrido a solicitud',
     color: '#14b8a6',
   },
   {
@@ -524,32 +535,53 @@ export default function Home() {
             <p className="section-desc">{t.platforms.desc}</p>
           </div>
           <div className="elite-list">
-            {ELITE_PLATFORMS.map((p, i) => (
-              <a
-                key={p.name}
-                href={p.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="elite-row card-animate"
-                style={{ '--ac': p.color, '--delay': `${i * 0.08}s` } as React.CSSProperties}
-              >
-                <div className="elite-index">
-                  <span className="elite-num">{String(i + 1).padStart(2, '0')}</span>
-                  <span className="elite-badge">{t.platforms.badge}</span>
-                </div>
-                <div className="elite-main">
-                  <span className="elite-cat">{lang === 'es' ? p.categoryEs : p.categoryEn}</span>
-                  <h3 className="elite-name">{p.name}</h3>
-                  <p className="elite-desc">{lang === 'es' ? p.descEs : p.descEn}</p>
-                </div>
-                <div className="elite-side">
-                  <span className="elite-live"><span className="elite-dot" />{t.platforms.live}</span>
-                  <span className="elite-stat">{lang === 'es' ? p.statEs : p.statEn}</span>
-                  <ul className="elite-stack">{p.stack.map(s => <li key={s}>{s}</li>)}</ul>
-                  <span className="elite-enter">{t.platforms.enter} <span className="arr" /></span>
-                </div>
-              </a>
-            ))}
+            {ELITE_PLATFORMS.map((p, i) => {
+              const restricted = !p.url;
+              const inner = (
+                <>
+                  <div className="elite-index">
+                    <span className="elite-num">{String(i + 1).padStart(2, '0')}</span>
+                    <span className="elite-badge">{t.platforms.badge}</span>
+                  </div>
+                  <div className="elite-main">
+                    <span className="elite-cat">{lang === 'es' ? p.categoryEs : p.categoryEn}</span>
+                    <h3 className="elite-name">{p.name}</h3>
+                    <p className="elite-desc">{lang === 'es' ? p.descEs : p.descEn}</p>
+                  </div>
+                  <div className="elite-side">
+                    {restricted ? (
+                      <span className="elite-live elite-live-priv"><span className="elite-lock" />{t.platforms.restricted}</span>
+                    ) : (
+                      <span className="elite-live"><span className="elite-dot" />{t.platforms.live}</span>
+                    )}
+                    <span className="elite-stat">{lang === 'es' ? p.statEs : p.statEn}</span>
+                    <ul className="elite-stack">{p.stack.map(s => <li key={s}>{s}</li>)}</ul>
+                    {restricted ? (
+                      <span className="elite-priv-note">{lang === 'es' ? p.restrictedEs : p.restrictedEn}</span>
+                    ) : (
+                      <span className="elite-enter">{t.platforms.enter} <span className="arr" /></span>
+                    )}
+                  </div>
+                </>
+              );
+              const style = { '--ac': p.color, '--delay': `${i * 0.08}s` } as React.CSSProperties;
+              // No href at all for a restricted platform: an anchor with no
+              // target is still a click surface, and this one leads to patients.
+              return restricted ? (
+                <div key={p.name} className="elite-row elite-row-priv card-animate" style={style}>{inner}</div>
+              ) : (
+                <a
+                  key={p.name}
+                  href={p.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="elite-row card-animate"
+                  style={style}
+                >
+                  {inner}
+                </a>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -916,7 +948,14 @@ section[id]{scroll-margin-top:calc(var(--mm-ib-h,0px) + 72px)}
 .elite-stack li{font-size:8px;letter-spacing:.12em;text-transform:uppercase;padding:6px 10px;border:1px solid var(--gb);color:var(--dim)}
 .elite-enter{font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--gold);margin-top:auto;opacity:.5;transform:translateY(4px);transition:all .35s}
 .elite-row:hover .elite-enter{opacity:1;transform:translateY(0);color:var(--ac,var(--gold))}
-@media(max-width:1024px){.elite-row{grid-template-columns:80px 1fr;gap:28px;padding:44px 32px}.elite-side{grid-column:2;gap:14px}.elite-enter{margin-top:4px}}
+/* Restricted row: keeps the frame and the colour wash, drops every cue that invites a click. */
+.elite-row-priv{cursor:default}
+.elite-row-priv::before{display:none}
+.elite-row-priv:hover{border-color:rgba(240,240,243,0.14)}
+.elite-live-priv{color:var(--dim)}
+.elite-lock{width:7px;height:7px;border:1px solid var(--dim);flex-shrink:0}
+.elite-priv-note{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);margin-top:auto;line-height:1.7;max-width:240px}
+@media(max-width:1024px){.elite-row{grid-template-columns:80px 1fr;gap:28px;padding:44px 32px}.elite-side{grid-column:2;gap:14px}.elite-enter,.elite-priv-note{margin-top:4px}}
 @media(max-width:640px){.elite-row{grid-template-columns:1fr;gap:20px;padding:36px 24px}.elite-index{flex-direction:row;align-items:center}.elite-side{grid-column:auto}}
 
 /* ═══ PROCESS ═══ */

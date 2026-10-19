@@ -80,6 +80,8 @@ export type PlatformsTranslations = {
   badge: string;
   live: string;
   enter: string;
+  /** Replaces `live` on a platform we build but deliberately do not link. */
+  restricted: string;
 };
 
 export type ProcessPhaseTranslations = {
@@ -380,6 +382,7 @@ export const TRANSLATIONS: Record<Lang, SiteTranslations> = {
       badge: "ELITE",
       live: "Live in Production",
       enter: "Enter Platform",
+      restricted: "Private Deployment",
     },
 
     portfolio: {
@@ -633,6 +636,7 @@ export const TRANSLATIONS: Record<Lang, SiteTranslations> = {
       badge: "ÉLITE",
       live: "En Producción",
       enter: "Entrar a la Plataforma",
+      restricted: "Despliegue Privado",
     },
 
     portfolio: {

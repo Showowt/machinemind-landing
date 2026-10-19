@@ -77,24 +77,24 @@ async function collectLinks() {
   const eliteBlock = src.match(/const ELITE_PLATFORMS[\s\S]*?\n\];/)?.[0] ?? '';
   const projectsBlock = src.match(/const PROJECTS[\s\S]*?\n\];/)?.[0] ?? '';
 
-  const extract = (block, tier) => {
-    const out = [];
-    const entry = /name:\s*'((?:[^'\\]|\\.)*)'[\s\S]*?url:\s*'([^']+)'/g;
-    let m;
-    while ((m = entry.exec(block)) !== null) {
-      out.push({ name: m[1].replace(/\\'/g, "'"), url: m[2], tier });
-    }
-    return out;
-  };
+  /**
+   * Split into one chunk per object literal before reading anything out of it.
+   * Entries in BOTH lists may carry no url — private portfolio work, and
+   * platforms we deliberately do not link (Life Center X holds clinical data).
+   * A regex run across the whole block would pair such a name with the NEXT
+   * entry's url and report a URL nobody is showing as healthy, which is the
+   * exact silent failure this script exists to prevent. Neither list nests
+   * braces inside an entry, so a non-greedy brace match is a safe boundary.
+   */
+  const extract = (block, tier) =>
+    (block.match(/\{[^{}]*\}/g) ?? []).flatMap((chunk) => {
+      const name = chunk.match(/name:\s*'((?:[^'\\]|\\.)*)'/)?.[1];
+      const url = chunk.match(/url:\s*'([^']+)'/)?.[1];
+      if (!name || !url) return [];
+      return [{ name: name.replace(/\\'/g, "'"), url, tier }];
+    });
 
-  // A PROJECTS entry may carry no url (private/classified work) — the regex
-  // above would then pair a name with the NEXT entry's url, so split per line.
-  const projects = projectsBlock
-    .split('\n')
-    .filter((line) => line.includes('url:'))
-    .flatMap((line) => extract(line, 'portfolio'));
-
-  return [...extract(eliteBlock, 'elite'), ...projects];
+  return [...extract(eliteBlock, 'elite'), ...extract(projectsBlock, 'portfolio')];
 }
 
 async function checkOne(browser, { name, url, tier }) {
