@@ -1,5 +1,6 @@
 /** Authenticated read-only evidence. This observes state; it never authorizes a write. */
 import { z } from "zod";
+import { getExpiryHold, getExpiryHoldState } from "../expiry-holds";
 import { getDb, SIGNUPS_TABLE, type WebGratisSignup } from "../server";
 import type { SiteRow } from "./db";
 
@@ -36,6 +37,8 @@ export interface SiteReadback {
   capturedAt: string;
   /** Separate reads are not a transaction or a lock on either record. */
   consistency: "sequential_reads_no_lock";
+  /** Observed runtime policy, explicitly separate from persisted site/signup fields. */
+  operationalPolicy?: NonNullable<ReturnType<typeof getExpiryHoldState>> & { observedAt: string };
   site: Pick<SiteRow, typeof READBACK_SITE_FIELDS[number]>;
   signup: Required<Pick<ReadbackSignupRow, typeof READBACK_SIGNUP_FIELDS[number]>>;
 }
@@ -72,7 +75,13 @@ export async function readSiteReadback(site: SiteRow, startedAt: Date): Promise<
   }
   const capturedAt = new Date();
   if (capturedAt.getTime() < startedAt.getTime()) throw new Error("Readback observation clock changed.");
+  const hold = getExpiryHold(signup.id);
+  if (hold && (hold.siteId !== selectedSite.id || hold.referralCode !== signup.referral_code)) {
+    throw new Error("Evaluation hold site/referral identity mismatch.");
+  }
+  const operationalPolicy = getExpiryHoldState(signup.id, capturedAt);
   return {
+    ...(operationalPolicy ? { operationalPolicy: { ...operationalPolicy, observedAt: capturedAt.toISOString() } } : {}),
     kind: "web-gratis-admin-readback", schemaVersion: 1,
     startedAt: startedAt.toISOString(), capturedAt: capturedAt.toISOString(),
     consistency: "sequential_reads_no_lock", site: selectedSite, signup,

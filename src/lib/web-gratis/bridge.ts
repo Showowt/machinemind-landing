@@ -23,6 +23,7 @@ import { enqueueSystem } from "./outbox";
 import { agentScheduleOf, getDb, listDraftFiles, loadSettings, SIGNUPS_TABLE, storage, type SignupStatus, type WebGratisSignup } from "./server";
 import { TEMPLATE_LABEL, type TemplateName } from "./templates";
 import { backoffSeconds, freshKey, MAX_ATTEMPTS, MESSAGES_TABLE, type MessageRow } from "./whatsapp";
+import { getExpiryHoldState } from "./expiry-holds";
 
 // ─── Request schemas ────────────────────────────────────────────────────────
 
@@ -114,6 +115,10 @@ export interface ClientContext {
   status: SignupStatus;
   siteUrl: string | null;
   freeUntil: string | null;
+  /** Historical database date; never a current payment/pause deadline while expiryHold is present. */
+  legacyFreeUntil?: string | null;
+  expiryHold?: NonNullable<ReturnType<typeof getExpiryHoldState>>;
+  paymentRequestsAllowed?: false;
   activated: boolean;
   optedOut: boolean;
   lang: "es" | "en";
@@ -207,6 +212,7 @@ const MEDIA_LABEL: Record<string, string> = {
 
 async function buildContext(primary: OpsSignup): Promise<ClientContext> {
   const db = getDb();
+  const expiryHold = getExpiryHoldState(primary.id, new Date());
   const [settings, last] = await Promise.all([
     loadSettings().catch((error: unknown) => {
       console.error("[WebGratis:bridge] settings", error);
@@ -231,7 +237,8 @@ async function buildContext(primary: OpsSignup): Promise<ClientContext> {
     country: signupCountry(primary),
     status: primary.status,
     siteUrl: primary.site_url,
-    freeUntil: primary.free_until,
+    freeUntil: expiryHold ? null : primary.free_until,
+    ...(expiryHold ? { legacyFreeUntil: primary.free_until, expiryHold, paymentRequestsAllowed: false as const } : {}),
     activated: primary.status === "activa" || !!primary.activated_at,
     optedOut: !!primary.opted_out_at,
     lang: primary.lang,

@@ -6,6 +6,7 @@ import ReviewedSiteEditor from "./ReviewedSiteEditor";
 // Type-only: admin.ts, billing.ts and the billing route are server code (erased from the client bundle).
 import type { BoardCountry, OpsSignup } from "@/lib/web-gratis/admin";
 import type { BillingEvent, BillingState, BillingTimeline } from "@/lib/web-gratis/billing";
+import { getExpiryHold, isLegacyExpiryTemplateHeld } from "@/lib/web-gratis/expiry-holds";
 import type { BillingClientInfo, BillingCounts, BillingPayload } from "@/app/api/web-gratis/admin/billing/route";
 import { countryFromE164, DEFAULT_PAYPAL_LINK, footerSnippet, MONTHLY_PRICE_USD, payUrl, referralLink } from "@/lib/web-gratis/config";
 import { scripts, waLink } from "@/lib/web-gratis/scripts";
@@ -211,9 +212,10 @@ function templatesFor(row: Row, log: LogItem[]): TemplateName[] {
   const status = row.status;
   if (status === "nuevo" || status === "en_construccion") return ["cqv_web_confirm"];
   if (status === "entregada" || status === "compartida") {
-    return ["cqv_web_ready", "cqv_web_day28", "cqv_web_day30", "cqv_web_pause_notice", "cqv_web_rescue"];
+    return (["cqv_web_ready", "cqv_web_day28", "cqv_web_day30", "cqv_web_pause_notice", "cqv_web_rescue"] as TemplateName[])
+      .filter((template) => !isLegacyExpiryTemplateHeld(row.id, template));
   }
-  if (status === "pausada") return ["cqv_web_rescue"];
+  if (status === "pausada") return isLegacyExpiryTemplateHeld(row.id, "cqv_web_rescue") ? [] : ["cqv_web_rescue"];
   // Paid before delivery: "Web lista" is queued when it's delivered — show it so it can be followed / retried.
   if (status === "activa" && log.some((l) => l.template === "cqv_web_ready")) return ["cqv_web_ready"];
   return [];
@@ -237,6 +239,7 @@ const PAID_VIA_LABEL: Record<string, string> = { stripe: "Stripe", paypal: "PayP
 type Mode = "lista" | "cobros";
 
 const BILLING_STATE_LABEL: Record<BillingState, string> = {
+  evaluation_hold: "Vencimiento retenido",
   building: "En construcción",
   free: "Mes gratis",
   due_soon: "Vence pronto",
@@ -401,8 +404,20 @@ function noDueDate(t: BillingTimeline): boolean {
   return (t.state === "free" || t.state === "due_soon") && !t.freeUntil && !t.paidVia;
 }
 
+function expiryHoldDescription(t: BillingTimeline): string {
+  const hold = t.expiryHold;
+  if (!hold) return "";
+  const paymentWarning = hold.paymentStateRequiresReview ? " Hay activación o datos de pago registrados: requieren revisión separada; esta retención no cancela cobros del proveedor." : "";
+  if (!hold.startsAt || !hold.endsAt) return `Fechas de evaluación pendientes; vencimiento legado retenido. Esta retención no activa cobros.${paymentWarning}`;
+  const formatter = new Intl.DateTimeFormat("es-SV", { dateStyle: "medium", timeStyle: "short", timeZone: hold.timezone });
+  const interval = `${formatter.format(new Date(hold.startsAt))} – ${formatter.format(new Date(hold.endsAt))} (El Salvador)`;
+  const phase = hold.phase === "scheduled" ? "Intervalo acordado, aún no iniciado" : hold.phase === "active" ? "Dentro del intervalo acordado" : "Intervalo concluido; revisión manual pendiente";
+  return `${phase}: ${interval}. Esta retención no activa cobros; vencimiento legado retenido.${paymentWarning}`;
+}
+
 /** How the client's month stands, for the "Mes" cell and the card line. */
 function monthStanding(t: BillingTimeline, status: Status | null): { main: string; sub: string | null } {
+  if (t.expiryHold) return { main: "Vencimiento legado retenido", sub: expiryHoldDescription(t) };
   const stripe = t.paidVia === "stripe";
   switch (t.state) {
     case "building":
@@ -433,6 +448,7 @@ function monthStanding(t: BillingTimeline, status: Status | null): { main: strin
 
 /** Compact payment line for a signup card, e.g. "Día 1 de 30 · vence 25 oct · próximo: recordatorio día 28 el 23 oct". */
 function payLineParts(t: BillingTimeline, status: Status | null): { lead: string; rest: string[] } | null {
+  if (t.expiryHold) return { lead: "Vencimiento legado retenido", rest: [expiryHoldDescription(t)] };
   const next = t.next ? `próximo: ${lowerFirst(t.next.label)} el ${billDate(t.next.date)}` : null;
   const rest = (items: (string | null)[]) => items.filter((s): s is string => !!s);
   const due = t.dueDate ? billDate(t.dueDate) : null;
@@ -483,6 +499,7 @@ function payLineParts(t: BillingTimeline, status: Status | null): { lead: string
  * a PayPal payment on top would charge the client twice.
  */
 function paymentMessage(t: BillingTimeline, paypalLink: string, status: Status | null): string {
+  if (t.expiryHold) return "";
   const price = `$${t.monthly} USD al mes`;
   const selfHost = "Si prefiere alojarla usted mismo, con gusto le entregamos los archivos (sin nuestra asistencia).";
   const due = t.dueDate ? formatDateEs(t.dueDate) : null;
@@ -1450,6 +1467,7 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
   const website = safeWebUrl(row.existing_website);
   const email = row.contact_email?.trim() ?? "";
   const freeLeft = daysUntil(row.free_until);
+  const expiryHeld = !!getExpiryHold(row.id);
   const paidLeft = daysUntil(row.paid_through);
   const dayN = sinceDelivered(row.delivered_at);
   const badges = badgesFor(row);
@@ -1467,6 +1485,7 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
       ? "Su número no tiene WhatsApp: corríjalo en «Más detalle»."
       : null;
   const blockedPush = blockedAll ?? (row.declined_at ? "Dijo que no: no se le insiste." : null);
+  const blockedExpiry = expiryHeld ? "Vencimiento legado retenido: requiere revisión y consentimiento separados." : blockedPush;
   const autoSent = (tpl: TemplateName) => log.find((l) => l.template === tpl && (l.status === "queued" || REACHED.includes(l.status)));
 
   async function patch(body: Record<string, unknown>, okText?: string) {
@@ -1525,6 +1544,10 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
   }
 
   async function sendTemplate(template: TemplateName) {
+    if (isLegacyExpiryTemplateHeld(row.id, template)) {
+      say("Vencimiento legado retenido: esta plantilla no se puede enviar.", 5000);
+      return;
+    }
     const m = log.find((l) => l.template === template);
     const unknown = m?.status === "failed" && m.last_error_code === UNKNOWN_OUTCOME_CODE;
     const question = unknown
@@ -1674,9 +1697,9 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
         ) : null}
         {freeLeft !== null && ["entregada", "compartida"].includes(row.status) ? (
           <div>
-            <dt>Gratis hasta</dt>
-            <dd className={freeLeft <= 2 ? styles.warn : ""}>
-              {row.free_until} ({leftLabel(freeLeft)})
+            <dt>{expiryHeld ? "Fecha legada (sin efecto de vencimiento)" : "Gratis hasta"}</dt>
+            <dd className={!expiryHeld && freeLeft <= 2 ? styles.warn : ""}>
+              {row.free_until}{expiryHeld ? " · retenida por revisión de consentimiento" : ` (${leftLabel(freeLeft)})`}
             </dd>
           </div>
         ) : null}
@@ -2032,17 +2055,17 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
             {wa("day7", scripts.day7(), "Día 7", { className: dayN !== null && dayN >= 7 && dayN < 14 ? styles.waDue : styles.waGhost, blocked: blockedPush })}
             {wa("day28", scripts.day28(payPage), "Día 28", {
               className: freeLeft !== null && freeLeft <= 2 && freeLeft >= 1 ? styles.waDue : styles.waGhost,
-              blocked: blockedPush,
+              blocked: blockedExpiry,
               auto: "cqv_web_day28",
             })}
             {wa("day30", scripts.day30(row.business_name, payPage), "Día 30", {
               className: freeLeft !== null && freeLeft <= 0 ? styles.waDue : styles.waGhost,
-              blocked: blockedPush,
+              blocked: blockedExpiry,
               auto: "cqv_web_day30",
             })}
             {wa("last_call", scripts.lastCall(payPage), "Último aviso", {
               className: styles.waGhost,
-              blocked: blockedPush,
+              blocked: blockedExpiry,
               auto: "cqv_web_pause_notice",
             })}
             {row.status === "entregada" ? (
@@ -2050,10 +2073,10 @@ function Card({ row, links, fileInfo, referrer, settings, log, credits, onPatch,
                 → Compartida
               </button>
             ) : null}
-            <button type="button" className={styles.primary} disabled={busy} onClick={() => void move("activa", { paidVia: "manual" })}>
+            <button type="button" className={styles.primary} disabled={busy || expiryHeld} title={expiryHeld ? "La evaluación no registra un pago. Requiere revisión separada." : undefined} onClick={() => void move("activa", { paidVia: "manual" })}>
               → Activa (pagó)
             </button>
-            <button type="button" disabled={busy} onClick={() => void move("activa", { paidVia: "paypal" })}>
+            <button type="button" disabled={busy || expiryHeld} title={expiryHeld ? "La evaluación no registra un pago. Requiere revisión separada." : undefined} onClick={() => void move("activa", { paidVia: "paypal" })}>
               → Activa (PayPal)
             </button>
             <button type="button" disabled={busy} onClick={() => void move("pausada")}>
@@ -2189,11 +2212,12 @@ function BillingRow({ t, info, paypalLink, today, onPatch }: BillingRowProps) {
   const [flash, setFlash] = useState<string | null>(null);
 
   const status = info?.status ?? null;
+  const expiryHeld = !!getExpiryHold(t.signupId);
   const lapsed = stripeLapsed(t, status);
-  const manualPayer = status === "activa" && t.paidVia !== "stripe";
+  const manualPayer = !expiryHeld && status === "activa" && t.paidVia !== "stripe";
   // Owes the plan: a free month (never paid — an 'entregada' row that already paid must not get a
   // second, unpaid month added), a paused site, or a Stripe subscription that ended while still online.
-  const unpaid = status === "pausada" || ((status === "entregada" || status === "compartida") && !t.paidVia) || lapsed;
+  const unpaid = !expiryHeld && (status === "pausada" || ((status === "entregada" || status === "compartida") && !t.paidVia) || lapsed);
   const blocked = info?.optedOut
     ? "Se dio de baja de WhatsApp: no se le escribe."
     : info?.noWhatsapp
@@ -2211,7 +2235,7 @@ function BillingRow({ t, info, paypalLink, today, onPatch }: BillingRowProps) {
   // Stripe charges its subscribers by itself (unless a charge failed) and an unfinished request
   // owes nothing yet: neither gets a "please pay" message or the /pagar link.
   const autoCharged = t.paidVia === "stripe" && t.state !== "overdue" && t.state !== "paused" && !lapsed;
-  const asksForPayment = !autoCharged && t.state !== "building" && (t.state !== "cancelled" || lapsed);
+  const asksForPayment = !expiryHeld && !autoCharged && t.state !== "building" && (t.state !== "cancelled" || lapsed);
   // Where the client can pay: /pagar for unpaid / paused sites; PayPal for a client who already pays
   // (an active site's /pagar only says "ya está activa"); none for a failed Stripe charge (Stripe
   // retries the card — a PayPal payment on top would charge twice).
@@ -2243,6 +2267,7 @@ function BillingRow({ t, info, paypalLink, today, onPatch }: BillingRowProps) {
   }
 
   async function renew() {
+    if (expiryHeld) return;
     const from = t.paidThrough && t.paidThrough > today ? billDate(t.paidThrough, "long") : "hoy";
     const until = billDate(paidThroughAfterPayment(t.paidThrough, today), "long");
     if (!window.confirm(`¿${t.business} pagó otro mes ($${t.monthly} USD)?\n\nSe suman 30 días desde ${from}: queda pagado hasta el ${until}.`)) return;
@@ -2250,6 +2275,7 @@ function BillingRow({ t, info, paypalLink, today, onPatch }: BillingRowProps) {
   }
 
   async function registerPayment(via: "paypal" | "manual") {
+    if (expiryHeld) return;
     const how = via === "paypal" ? "por PayPal" : "a mano (efectivo / transferencia)";
     const until = billDate(paidThroughAfterPayment(t.paidThrough, today), "long");
     // Paying inside the free month: the paid month starts today (PATCH rule), not at the end of the free month.
@@ -2310,13 +2336,13 @@ function BillingRow({ t, info, paypalLink, today, onPatch }: BillingRowProps) {
                 <span className={eventStatusClass(t.next)}>{eventStatusText(t.next)}</span>
               </>
             ) : (
-              <span className={styles.dim}>Nada programado</span>
+              <span className={styles.dim}>{expiryHeld ? "Vencimiento legado retenido; revisión manual" : "Nada programado"}</span>
             )}
           </dd>
         </div>
         <div>
           <dt>Método</dt>
-          <dd>{t.paidVia ? (PAID_VIA_LABEL[t.paidVia] ?? t.paidVia) : <span className={styles.dim}>sin pagar</span>}</dd>
+          <dd>{t.paidVia ? (PAID_VIA_LABEL[t.paidVia] ?? t.paidVia) : <span className={styles.dim}>{expiryHeld ? "Sin activación de pago registrada" : "sin pagar"}</span>}</dd>
         </div>
       </dl>
 

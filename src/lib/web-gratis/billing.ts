@@ -22,6 +22,7 @@
  */
 import { FREE_DAYS, MONTHLY_PRICE_USD, payUrl } from "./config";
 import type { WebGratisSignup } from "./server";
+import { getExpiryHoldState } from "./expiry-holds";
 import {
   addDays,
   daysBetween,
@@ -41,7 +42,7 @@ import {
 
 // ─── Contract ───────────────────────────────────────────────────────────────
 
-export type BillingState = "building" | "free" | "due_soon" | "due_today" | "overdue" | "paused" | "paid" | "renewal_due" | "cancelled";
+export type BillingState = "building" | "free" | "due_soon" | "due_today" | "overdue" | "paused" | "paid" | "renewal_due" | "cancelled" | "evaluation_hold";
 
 export interface BillingEvent {
   /** YYYY-MM-DD in SV time. */
@@ -80,6 +81,8 @@ export interface BillingTimeline {
   history: BillingEvent[];
   payUrl: string;
   monthly: number;
+  /** An operational hold; the raw freeUntil remains historical evidence, not a deadline. */
+  expiryHold?: NonNullable<ReturnType<typeof getExpiryHoldState>> & { paymentStateRequiresReview: boolean };
 }
 
 // ─── Inputs ─────────────────────────────────────────────────────────────────
@@ -301,6 +304,7 @@ export function billingTimeline(
   opts: { hasPaymentMethod: boolean },
 ): BillingTimeline {
   const s = signup;
+  const expiryHold = getExpiryHoldState(s.id, now);
   const today = svDay(now);
   const status: string = s.status;
   const paidVia = s.paid_via ?? null;
@@ -310,6 +314,7 @@ export function billingTimeline(
   const freeDays = span > 0 ? span : FREE_DAYS;
   const paidThrough = s.paid_through ?? null;
   const issue = s.billing_issue ?? null;
+  const paymentStateRequiresReview = !!(s.activated_at || paidVia || paidThrough || issue || status === "activa");
 
   const billingRows = messages.filter((m) => !!m.template && (m.template === "cqv_web_renewal" || m.template === "cqv_web_day28" || m.template === "cqv_web_day30" || m.template === "cqv_web_pause_notice"));
   const freeRows = billingRows.filter((m) => inferCycle(m, s) === null && m.template !== "cqv_web_renewal");
@@ -321,7 +326,9 @@ export function billingTimeline(
   /** Live, unpaid, in (or just past) the free month: the only place "day N" means anything. */
   let freeMonth = false;
 
-  if (status === "cancelada" || status === "descartada") {
+  if (expiryHold && !paymentStateRequiresReview && status !== "pausada" && status !== "cancelada" && status !== "descartada") {
+    state = "evaluation_hold";
+  } else if (status === "cancelada" || status === "descartada") {
     state = "cancelled";
   } else if (status === "pausada") {
     state = "paused";
@@ -359,6 +366,8 @@ export function billingTimeline(
     dueDate = paidThrough;
   }
 
+  // Keep observed payment/closed state visible; only the legacy execution plan is held.
+  if (expiryHold) { flow = null; freeMonth = false; }
   const daysLeft = dueDate ? daysBetween(today, dueDate) : null;
   // Only inside the free month: a PayPal payer's renewal "due_soon" (or a payer with no free_until,
   // e.g. paid before delivery) is not "day 61 of 30".
@@ -414,7 +423,8 @@ export function billingTimeline(
               ? "Aviso de pausa (renovación)"
               : "Aviso de pausa";
     const ev = messageEvent(m, kind, label, today);
-    history.push(ev.status === "queued" || ev.status === "held" ? { ...ev, status: "skipped" } : ev);
+    // Held tenants retain the actual ledger outcome. Never invent an omitted/sent event.
+    history.push(!expiryHold && (ev.status === "queued" || ev.status === "held") ? { ...ev, status: "skipped" } : ev);
   }
 
   if (flow === "free" && dueDate) {
@@ -485,7 +495,8 @@ export function billingTimeline(
     next: planned[0] ?? null,
     history,
     payUrl: payUrl(s.referral_code),
-    monthly: MONTHLY_PRICE_USD,
+    monthly: expiryHold?.monthlyPriceUsd ?? MONTHLY_PRICE_USD,
+    ...(expiryHold ? { expiryHold: { ...expiryHold, paymentStateRequiresReview } } : {}),
   };
 }
 
@@ -509,6 +520,11 @@ export function billingSummary(
   const weekEnd = addDays(today, 6);
   const out = { dueToday: 0, dueThisWeek: 0, overdue: 0, paused: 0, paying: 0, mrr: 0, renewalsDue: 0 };
   for (const t of timelines) {
+    if (t.expiryHold && t.paidVia !== "stripe") {
+      if (t.state === "paused") out.paused++;
+      if (t.paidVia && t.state !== "paused" && t.state !== "cancelled") { out.paying++; out.mrr += t.monthly; }
+      continue;
+    }
     const open = t.state !== "paused" && t.state !== "cancelled" && t.state !== "building";
     if (t.dueDate === today && (t.state === "due_today" || t.state === "renewal_due")) out.dueToday++;
     if (open && t.dueDate && t.paidVia !== "stripe" && t.dueDate >= today && t.dueDate <= weekEnd) out.dueThisWeek++;

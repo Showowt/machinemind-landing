@@ -68,6 +68,7 @@ function harness() {
   }, rpc() { mutationAttempts.push('rpc'); throw new Error('Forbidden RPC'); } };
   const helper = load('src/lib/web-gratis/sites/readback.ts', {
     zod: require('zod'), '../server': { getDb: () => db, SIGNUPS_TABLE: 'web_gratis_signups' },
+    '../expiry-holds': load('src/lib/web-gratis/expiry-holds.ts', {}),
   });
   signup = Object.fromEntries(helper.READBACK_SIGNUP_FIELDS.map(key => [key, null]));
   Object.assign(signup, {
@@ -267,4 +268,42 @@ test('actual GET observes published content without cache invalidation or billin
   assert.deepEqual(body.data.content, h.site.content);
   assert.deepEqual(h.calls.filter(call => call.op === 'statsFor'), [{ op: 'statsFor', id: SITE }]);
   assert.deepEqual(h.mutationAttempts, []);
+});
+
+
+test('JA readback separates source policy from untouched persisted lifecycle fields', async () => {
+  const h = harness();
+  h.site.id = '65005b57-c4bd-4837-8420-8fb6c2d9e283';
+  h.site.signup_id = h.signup.id = '1afdbfc5-8703-4ecd-9405-fa2aebb4d708';
+  h.signup.referral_code = 'E67BBT';
+  h.signup.free_until = '2026-10-26';
+  h.signup.delivered_at = '2026-09-26T18:50:30.114+00:00';
+  const before = clone({ site: h.site, signup: h.signup });
+  const result = await h.read();
+  assert.equal(result.operationalPolicy.storage, 'reviewed_source_policy');
+  assert.equal(result.operationalPolicy.phase, 'awaiting_dates');
+  assert.equal(result.operationalPolicy.observedAt, NOW);
+  assert.equal(result.operationalPolicy.startsAt, null);
+  assert.equal(result.operationalPolicy.endsAt, null);
+  assert.equal(result.operationalPolicy.intervalApproved, false);
+  assert.equal(result.operationalPolicy.doesNotActivateBilling, true);
+  assert.equal(result.operationalPolicy.legacyAutomaticPauseHeld, true);
+  assert.equal(result.signup.free_until, '2026-10-26');
+  assert.equal(result.signup.activated_at, null);
+  assert.deepEqual(clone({ site: h.site, signup: h.signup }), before);
+  assert.deepEqual(h.mutationAttempts, []);
+});
+
+for (const wrong of ['site', 'referral']) test(`JA policy refuses wrong ${wrong} binding`, async () => {
+  const h = harness();
+  h.site.id = wrong === 'site' ? SITE : '65005b57-c4bd-4837-8420-8fb6c2d9e283';
+  h.site.signup_id = h.signup.id = '1afdbfc5-8703-4ecd-9405-fa2aebb4d708';
+  h.signup.referral_code = wrong === 'referral' ? 'ABCDEF' : 'E67BBT';
+  await assert.rejects(h.read(), /identity mismatch/);
+  assert.deepEqual(h.mutationAttempts, []);
+});
+
+test('unrelated tenant readback has no policy field or new behavior', async () => {
+  const h = harness();
+  assert.equal(Object.hasOwn(await h.read(), 'operationalPolicy'), false);
 });
