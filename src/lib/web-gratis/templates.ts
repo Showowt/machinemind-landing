@@ -23,6 +23,7 @@
  * (whatsapp.ts) and the billing timeline (billing.ts, the board) read, so the
  * board always shows what the cron will actually do.
  */
+import { EXPIRY_HOLD_MESSAGE, isLegacyExpiryTemplateHeld } from "./expiry-holds";
 import { DEFAULT_PAYPAL_LINK, demoUrl, FREE_DAYS, MONTHLY_PRICE_USD, payUrl } from "./config";
 import type { SignupStatus } from "./server";
 
@@ -392,6 +393,7 @@ export function isTemplateName(value: string): value is TemplateName {
 
 /** What a person's send (board button, or a queued row they started) is checked against. */
 export interface ManualGuardInput extends TemplateSubject {
+  id?: string;
   status: SignupStatus;
   activated_at: string | null;
   declined_at: string | null;
@@ -420,6 +422,7 @@ export function manualBlock(
   s: ManualGuardInput,
   settings: { pay_link: string | null; paypal_link?: string | null } | null,
 ): string | null {
+  if (isLegacyExpiryTemplateHeld(s.id, t)) return EXPIRY_HOLD_MESSAGE;
   if (s.opted_out_at) return "Se dio de baja: no se le pueden enviar mensajes.";
   if (s.no_whatsapp_at) return "Ese número no tiene WhatsApp: corrija el número en su tarjeta primero.";
   if (CLOSED_STATUSES.includes(s.status)) return "Esta solicitud no está activa.";

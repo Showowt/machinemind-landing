@@ -44,7 +44,8 @@ const shared = load('src/lib/web-gratis/sites/shared.ts', { '../site-content': s
 const contrast = load('src/lib/web-gratis/sites/contrast.ts');
 const vercel = load('src/lib/web-gratis/sites/vercel.ts');
 const config = load('src/lib/web-gratis/config.ts');
-const templates = load('src/lib/web-gratis/templates.ts', { './config': config });
+const expiryHolds = load('src/lib/web-gratis/expiry-holds.ts');
+const templates = load('src/lib/web-gratis/templates.ts', { './config': config, './expiry-holds': expiryHolds });
 const http = load('src/lib/web-gratis/http.ts', { 'next/server': { NextResponse: Response } });
 
 function content() {
@@ -166,7 +167,7 @@ function fixture({ site = {}, signup = {}, adminEnv = { WEB_GRATIS_ADMIN_TOKEN: 
     } },
   });
   const wa = load('src/lib/web-gratis/whatsapp.ts', {
-    crypto: require('node:crypto'), './config': config, './templates': templates, './server': server,
+    crypto: require('node:crypto'), './config': config, './templates': templates, './server': server, './expiry-holds': expiryHolds,
     './outbox': { enqueueSystem: () => { throw new Error('No outbox allowed'); } },
     './rewired': { sendViaRewired: () => { throw new Error('No provider sends allowed'); } },
     './sites/mm-sites': renderer,

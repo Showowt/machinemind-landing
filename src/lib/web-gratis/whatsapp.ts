@@ -38,6 +38,7 @@
  * Time comes from deps.now() so the scheduler can be exercised with a fake
  * clock; alerts, sends and site purges are injectable for the same reason.
  */
+import { EXPIRY_HOLD_CODE, EXPIRY_HOLD_MESSAGE, getExpiryHold, isLegacyExpiryTemplateHeld } from "./expiry-holds";
 import { randomBytes } from "crypto";
 import { MONTHLY_PRICE_USD } from "./config";
 import { enqueueSystem } from "./outbox";
@@ -304,6 +305,7 @@ export function svDateOf(date: string, days: number): string {
 // ─── Eligibility (shared by triggers, retries and manual sends) ─────────────
 
 export interface EligibilityInput {
+  id?: string;
   status: SignupStatus;
   site_url: string | null;
   delivered_at: string | null;
@@ -320,6 +322,7 @@ export interface EligibilityInput {
  * and the pause notice in one burst.
  */
 export function templateStillApplies(t: TemplateName, s: EligibilityInput, now: Date): boolean {
+  if (isLegacyExpiryTemplateHeld(s.id, t)) return false;
   const today = svDate(now);
   const free = s.free_until;
   const live = LIVE_FREE.includes(s.status) && !s.activated_at;
@@ -357,6 +360,7 @@ export function templateStillApplies(t: TemplateName, s: EligibilityInput, now: 
 }
 
 export interface RenewalInput {
+  id?: string;
   status: SignupStatus;
   paid_via: string | null;
   paid_through: string | null;
@@ -380,6 +384,7 @@ export function renewalMessageable(s: RenewalInput): boolean {
  * today is inside that ask's days (RENEWAL_FLOW).
  */
 export function renewalStillApplies(t: TemplateName, s: RenewalInput, cycle: string | null, now: Date): boolean {
+  if (isLegacyExpiryTemplateHeld(s.id, t)) return false;
   if (!cycle || s.status !== "activa" || !(MONTHLY_PAYERS as readonly string[]).includes(s.paid_via ?? "") || s.paid_through !== cycle) return false;
   if (!renewalMessageable(s)) return false;
   const today = svDate(now);
@@ -404,6 +409,11 @@ interface Subject {
  * whether to keep going.
  */
 export async function attemptTemplateSend(row: MessageRow, subject: Subject, deps: WaDeps): Promise<AttemptResult> {
+  // Final guard also covers queued/manual/forced sends and direct callers.
+  if (isLegacyExpiryTemplateHeld(row.signup_id, row.template) || isLegacyExpiryTemplateHeld(subject.id, row.template)) {
+    if (row.signup_id === subject.id) await skipForExpiryHold(row, deps.now());
+    return { sent: false, stopRun: null, skipTemplate: false };
+  }
   const db = getDb();
   const template = row.template as TemplateName;
   const label = TEMPLATE_LABEL[template];
@@ -592,6 +602,7 @@ async function claimNew(
   meta: Record<string, unknown> = {},
   cycle: string | null = null,
 ): Promise<MessageRow | null> {
+  if (isLegacyExpiryTemplateHeld(subject.id, template)) return null;
   const { data, error } = await getDb()
     .from(MESSAGES_TABLE)
     .insert({
@@ -650,6 +661,26 @@ async function leaseDue(rowId: number, now: Date): Promise<MessageRow | null> {
   return (data as MessageRow | null) ?? null;
 }
 
+/** Preserve the previous queued state in metadata; never delete or claim delivery. */
+async function skipForExpiryHold(row: MessageRow, now: Date): Promise<boolean> {
+  const hold = getExpiryHold(row.signup_id);
+  if (!hold || row.status !== "queued") return false;
+  let query = getDb().from(MESSAGES_TABLE).update({
+    status: "skipped", locked_until: null, next_attempt_at: null,
+    last_error_code: EXPIRY_HOLD_CODE, last_error: EXPIRY_HOLD_MESSAGE,
+    meta: { ...(row.meta ?? {}), expiry_hold: {
+      policyId: hold.policyId, heldAt: iso(now), previousStatus: row.status,
+      previousNextAttemptAt: row.next_attempt_at, previousLockedUntil: row.locked_until,
+      previousErrorCode: row.last_error_code, previousError: row.last_error,
+    } },
+  }).eq("id", row.id).eq("signup_id", hold.signupId).eq("status", "queued").eq("attempts", row.attempts);
+  query = row.locked_until === null ? query.is("locked_until", null) : query.eq("locked_until", row.locked_until);
+  query = row.next_attempt_at === null ? query.is("next_attempt_at", null) : query.eq("next_attempt_at", row.next_attempt_at);
+  const { data, error } = await query.select("id").maybeSingle();
+  if (error) throw error;
+  return !!data;
+}
+
 async function markSkipped(rowId: number, reason: string): Promise<void> {
   const { error } = await getDb()
     .from(MESSAGES_TABLE)
@@ -666,6 +697,7 @@ async function markSkipped(rowId: number, reason: string): Promise<void> {
  * False when that template already has a row for this signup.
  */
 export async function queueManualTemplate(signupId: string, template: TemplateName, now: Date, reason: string): Promise<boolean> {
+  if (isLegacyExpiryTemplateHeld(signupId, template)) return false;
   const db = getDb();
   const { data: subject, error } = await db.from(SIGNUPS_TABLE).select(PAYER_COLUMNS).eq("id", signupId).maybeSingle();
   if (error) throw error;
@@ -964,6 +996,7 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
       else {
         const { data: after } = await db.from(MESSAGES_TABLE).select("status").eq("id", row.id).maybeSingle();
         if (after?.status === "failed") report.failed++;
+        else if (after?.status === "skipped") report.skipped++;
         else report.queuedForRetry++;
       }
       if (res.stopRun) report.stopped = res.stopRun;
@@ -1037,6 +1070,11 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
       }
       for (const row of due) {
         if (row.signup_id && testIds.has(row.signup_id)) continue;
+        if (isLegacyExpiryTemplateHeld(row.signup_id, row.template)) {
+          if (await skipForExpiryHold(row, now)) report.skipped++;
+          else report.deferred++;
+          continue;
+        }
         const template = row.template as TemplateName;
         const manual = row.meta?.manual === true;
         const payer = row.signup_id ? direct.get(row.signup_id) : undefined;
@@ -1235,6 +1273,7 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
     );
     const asks = await templateRowsOf(candidates.map((c) => c.id), REMINDER_TEMPLATES, null);
     for (const s of candidates) {
+      if (getExpiryHold(s.id)) { report.pauseHeld++; continue; }
       if (!s.free_until) continue;
       const messageable = !s.opted_out_at && !s.no_whatsapp_at && !s.declined_at;
       const decision = pauseDecision(FREE_MONTH_FLOW, { due: s.free_until, messageable, ...asksOf(asks.get(s.id) ?? []) }, now);
@@ -1354,6 +1393,7 @@ export async function runWhatsAppScheduler(deps: WaDeps, options: SchedulerOptio
         report.errors.push(`T9 ${p.id}: ${errText(freshError)}`);
         continue;
       }
+      if (getExpiryHold(p.id)) { report.pauseHeld++; continue; }
       const decision = pauseDecision(RENEWAL_FLOW, { due: cycle, messageable: renewalMessageable(p), ...asksOf((fresh ?? []) as MessageRow[]) }, now);
       if (decision.action === "held") {
         neverAsked.push(`${p.business_name} (${p.whatsapp}, renovación vencida ${cycle})`);
@@ -1447,6 +1487,7 @@ export async function sendTemplateManually(
   deps: WaDeps,
   options: { force?: boolean } = {},
 ): Promise<ManualResult> {
+  if (isLegacyExpiryTemplateHeld(signupId, template)) return { ok: false, error: "not_eligible", message: EXPIRY_HOLD_MESSAGE };
   const db = getDb();
   const now = deps.now();
   const { data: subject, error } = await db.from(SIGNUPS_TABLE).select(PAYER_COLUMNS).eq("id", signupId).maybeSingle();
