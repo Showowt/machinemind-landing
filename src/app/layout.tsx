@@ -19,6 +19,14 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "MachineMind" }],
   creator: "MachineMind",
+  // Google Search Console ownership. Required before Play Console will let the
+  // developer account convert from Personal to Organization — the "Change account
+  // type" control stays disabled until this domain is verified. Do not remove: Google
+  // re-checks periodically and un-verifies the property if the tag disappears.
+  // Belt and braces, public/googlee662c3ff93afd708.html carries the file method too.
+  verification: {
+    google: "HTD6CMluyKm15iNW_VeW2yVWUvryVYR8rOMi_msqr70",
+  },
   openGraph: {
     title: "MachineMind | AI Automation Consultancy",
     description: "We build AI systems that think.",
