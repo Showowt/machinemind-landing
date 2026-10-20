@@ -35,10 +35,13 @@ export const metadata: Metadata = {
     siteName: "MachineMind",
     images: [
       {
-        url: "/og-image.png",
+        // Filename carries the brand revision on purpose: Facebook, WhatsApp
+        // and LinkedIn cache a preview image by URL and will keep serving a
+        // stale card for weeks. A new path is the only reliable cache bust.
+        url: "/og-image-brand.png",
         width: 1200,
         height: 630,
-        alt: "MachineMind - AI Automation Consultancy",
+        alt: "MachineMind Consulting",
       },
     ],
   },
@@ -71,7 +74,7 @@ const STRUCTURED_DATA = {
       alternateName: "MachineMind",
       url: "https://machinemindconsulting.com",
       logo: "https://machinemindconsulting.com/logo-stacked.png",
-      image: "https://machinemindconsulting.com/og-image.png",
+      image: "https://machinemindconsulting.com/og-image-brand.png",
       description:
         "AI automation consultancy building autonomous intelligence infrastructure — WhatsApp AI concierges, cinematic web platforms, and full-stack software for hospitality, real estate, and private capital.",
       founder: { "@type": "Person", name: "Phil McGill" },
