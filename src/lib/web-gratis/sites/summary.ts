@@ -8,6 +8,7 @@ import { exportUrl, generatorEnv, mmSitesEnv, previewUrl, SITE_EVENTS_TABLE, SIT
 import { unreadFiles } from "./generate";
 import { guardLines } from "./pipeline";
 import { publicSiteUrl, type SiteStats, type SiteSummary, type SitesConfig } from "./shared";
+import { JA_ANALYTICS_SITE_ID } from "./analytics-shared";
 
 /** Every column except the (large) content JSON. */
 export const SUMMARY_COLUMNS =
@@ -47,13 +48,18 @@ export function toSummary(row: Omit<SiteRow, "content">, stats: SiteStats | null
 }
 
 async function countEvents(siteId: string, kind: "view" | "whatsapp_click", since: string): Promise<number> {
-  const { count, error } = await getDb()
+  let query = getDb()
     .from(SITE_EVENTS_TABLE)
     .select("id", { count: "exact", head: true })
     .eq("site_id", siteId)
     .eq("kind", kind)
     .gte("created_at", since);
+  // SQL LIKE's underscore is a wildcard: escape it so similar real paths stay
+  // counted. Keep pre-existing null paths (NOT LIKE alone would drop them).
+  if (siteId === JA_ANALYTICS_SITE_ID) query = query.or("path.is.null,path.not.like./\\_\\_mm\\_qa\\_\\_/ja/%");
+  const { count, error } = await query;
   if (error) throw error;
+  if (siteId === JA_ANALYTICS_SITE_ID && (count === null || !Number.isSafeInteger(count) || count < 0)) throw new Error("JA analytics count unavailable");
   return count ?? 0;
 }
 

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import styles from "./board.module.css";
 import ReviewedSiteEditor from "./ReviewedSiteEditor";
+import JaAnalyticsPanel from "./JaAnalyticsPanel";
+import { isJaAnalyticsBinding } from "@/lib/web-gratis/sites/analytics-shared";
 // Type-only: admin.ts, billing.ts and the billing route are server code (erased from the client bundle).
 import type { BoardCountry, OpsSignup } from "@/lib/web-gratis/admin";
 import type { BillingEvent, BillingState, BillingTimeline } from "@/lib/web-gratis/billing";
@@ -1273,9 +1275,14 @@ function SitePanel({ row, site, config, siteApi, onSite, onReload }: SitePanelPr
 
       {site?.stats ? (
         <p className={styles.siteStats}>
-          <b>{site.stats.views30}</b> visitas · <b>{site.stats.whatsapp30}</b> clics a WhatsApp <span className={styles.dim}>(últimos 30 días)</span>
+          <b>{site.stats.views30}</b> {isJaAnalyticsBinding(site.id, row.id) ? "cargas de página" : "visitas"} · <b>{site.stats.whatsapp30}</b> clics a WhatsApp <span className={styles.dim}>(últimos 30 días{isJaAnalyticsBinding(site.id, row.id) ? "; excluye QA" : ""})</span>
         </p>
       ) : null}
+      {site && isJaAnalyticsBinding(site.id, row.id) ? <>
+        {!site.stats && site.publishedAt ? <p className={styles.siteErr}>Métricas del negocio no disponibles; no equivale a cero eventos.</p> : null}
+        <p className={styles.dim}>Las cargas de página no son personas únicas. Los clics no confirman mensajes, pedidos ni ventas.</p>
+        <JaAnalyticsPanel site={site} signupId={row.id} siteApi={siteApi} />
+      </> : null}
 
       {site && (site.notes || site.unread.length || site.guards.length) ? (
         <details className={styles.siteDetails}>

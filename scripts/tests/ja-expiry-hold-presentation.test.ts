@@ -36,6 +36,7 @@ function loadPrivate(relative: string, names: string[], stubs: Record<string, un
 
 const board = loadPrivate("src/app/admin/web-gratis/BoardClient.tsx", ["BillingRow", "expiryHoldDescription"], {
   "./ReviewedSiteEditor": { __esModule: true, default: () => null },
+  "./JaAnalyticsPanel": { __esModule: true, default: () => null },
 });
 const BillingRow = board.BillingRow as ComponentType<{ t: BillingTimeline; info: { status: BillingSignup["status"] }; paypalLink: string; today: string; onPatch: () => Promise<boolean> }>;
 const renderRow = (id: string, overrides: Partial<BillingSignup> = {}) => renderToStaticMarkup(createElement(BillingRow, {
