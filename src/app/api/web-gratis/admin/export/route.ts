@@ -102,6 +102,10 @@ const COLUMNS: Column[] = [
   ["sin_whatsapp", (r) => r.no_whatsapp_at],
   ["consentimiento_whatsapp", (r) => r.whatsapp_consent_at],
   ["notas", (r) => r.notes],
+  ["signup_id", (r) => r.id],
+  ["proximo_seguimiento", (r) => r.next_follow_up_at],
+  ["nota_seguimiento", (r) => r.follow_up_note],
+  ["resultado_ultima_llamada", (r) => r.last_call_outcome],
 ];
 
 function cell(value: unknown): string {
