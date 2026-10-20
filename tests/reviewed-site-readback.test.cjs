@@ -9,9 +9,13 @@ const ROOT = path.resolve(__dirname, '..');
 const compile = source => ts.transpileModule(source, { compilerOptions: {
   module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
 } }).outputText;
+const policyModule = {};
+vm.runInNewContext(compile(fs.readFileSync(path.join(ROOT, 'src/lib/web-gratis/expiry-holds.ts'), 'utf8')), {
+  exports: policyModule, require() { assert.fail('Policy must stay pure'); },
+});
 const exported = {};
 vm.runInNewContext(compile(fs.readFileSync(path.join(ROOT, 'src/app/admin/web-gratis/reviewed-site-readback.ts'), 'utf8')), {
-  exports: exported, require() { assert.fail('No runtime dependency allowed'); },
+  exports: exported, require(name) { assert.equal(name, '@/lib/web-gratis/expiry-holds'); return policyModule; },
 });
 const tree = ts.createSourceFile('ReviewedSiteEditor.tsx', fs.readFileSync(path.join(ROOT, 'src/app/admin/web-gratis/ReviewedSiteEditor.tsx'), 'utf8'), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 function find(node, predicate) {
@@ -145,4 +149,49 @@ test('snapshot is hidden when current site version or revision changed', () => {
   const evaluate = current => vm.runInNewContext(node.initializer.getText(tree), { readback: value, site: current });
   assert.equal(evaluate(site), value); assert.equal(evaluate({ ...site, version: 1 }), null);
   assert.equal(evaluate({ ...site, updatedAt: 'changed' }), null);
+});
+
+function jaResult() {
+  const r = result();
+  const ja = { ...site, id: '65005b57-c4bd-4837-8420-8fb6c2d9e283', signupId: '1afdbfc5-8703-4ecd-9405-fa2aebb4d708' };
+  Object.assign(r.data.site, ja);
+  Object.assign(r.data.readback.site, { id: ja.id, signup_id: ja.signupId });
+  Object.assign(r.data.readback.signup, { id: ja.signupId, referral_code: 'E67BBT' });
+  r.data.readback.operationalPolicy = {
+    ...policyModule.getExpiryHoldState(ja.signupId, new Date(r.data.readback.capturedAt)),
+    observedAt: r.data.readback.capturedAt,
+  };
+  return { r, ja };
+}
+test('JA snapshot accepts the exact optional reviewed policy without changing native fields', () => {
+  const { r, ja } = jaResult();
+  const before = JSON.stringify(r);
+  const value = exported.reviewedReadback(r.data, ja);
+  assert.ok(value);
+  const decoded = JSON.parse(value.json);
+  assert.deepEqual(decoded, r.data.readback);
+  assert.equal(decoded.operationalPolicy.phase, 'scheduled');
+  assert.equal(decoded.signup.paid_via, null);
+  assert.equal(JSON.stringify(r), before);
+});
+for (const [name, mutate] of [
+  ['null policy', r => { r.data.readback.operationalPolicy = null; }],
+  ['undefined policy', r => { r.data.readback.operationalPolicy = undefined; }],
+  ['array policy', r => { r.data.readback.operationalPolicy = []; }],
+  ['wrong referral', r => { r.data.readback.signup.referral_code = 'WRONG'; }],
+  ['wrong observed time', r => { r.data.readback.operationalPolicy.observedAt = r.data.readback.startedAt; }],
+  ['wrong phase', r => { r.data.readback.operationalPolicy.phase = 'active'; }],
+  ['wrong date', r => { r.data.readback.operationalPolicy.startsAt = '2026-10-01T15:00:00.000Z'; }],
+  ['coerced boolean', r => { r.data.readback.operationalPolicy.intervalApproved = 'true'; }],
+  ['invented activation', r => { r.data.readback.operationalPolicy.actualActivationObservedAt = r.data.readback.capturedAt; }],
+  ['omitted evidence', r => { delete r.data.readback.operationalPolicy.clientEvidenceReceiptSha256; }],
+  ['nested capability', r => { r.data.readback.operationalPolicy.previewUrl = 'PRIVATE'; }],
+  ['policy in extra top-level field', r => { r.data.readback.policy = r.data.readback.operationalPolicy; }],
+]) test(`JA snapshot rejects ${name}`, () => {
+  const { r, ja } = jaResult(); mutate(r);
+  assert.equal(exported.reviewedReadback(r.data, ja), null);
+});
+test('JA policy cannot be attached to an unrelated tenant snapshot', () => {
+  const r = result(); r.data.readback.operationalPolicy = jaResult().r.data.readback.operationalPolicy;
+  assert.equal(exported.reviewedReadback(r.data, site), null);
 });

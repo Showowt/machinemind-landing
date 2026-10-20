@@ -313,3 +313,24 @@ test('unrelated tenant readback has no policy field or new behavior', async () =
   const h = harness();
   assert.equal(Object.hasOwn(await h.read(), 'operationalPolicy'), false);
 });
+
+test('serialized real JA server readback passes the real client parser with policy and raw fields intact', async () => {
+  const h = harness();
+  h.site.id = '65005b57-c4bd-4837-8420-8fb6c2d9e283';
+  h.site.signup_id = h.signup.id = '1afdbfc5-8703-4ecd-9405-fa2aebb4d708';
+  h.signup.referral_code = 'E67BBT';
+  h.signup.free_until = '2026-10-26';
+  h.site.status = 'published'; h.site.version = 6;
+  const parser = load('src/app/admin/web-gratis/reviewed-site-readback.ts', {
+    '@/lib/web-gratis/expiry-holds': load('src/lib/web-gratis/expiry-holds.ts', {}),
+  });
+  const raw = await h.read();
+  const summary = { id: h.site.id, signupId: h.site.signup_id, version: h.site.version, updatedAt: h.site.updated_at };
+  const data = clone({ site: summary, content: h.site.content, readback: raw });
+  const value = parser.reviewedReadback(data, summary);
+  assert.ok(value, 'Optional operationalPolicy must not hide an otherwise valid JA snapshot');
+  assert.deepEqual(JSON.parse(value.json), data.readback);
+  assert.equal(JSON.parse(value.json).signup.free_until, '2026-10-26');
+  assert.equal(JSON.parse(value.json).signup.activated_at, null);
+  assert.deepEqual(h.mutationAttempts, []);
+});
