@@ -124,6 +124,7 @@ export type AboutTranslations = {
   p1: string;
   p2: string;
   location: string;
+  stats: { value: string; suffix: string; label: string }[];
 };
 
 export type ContactTranslations = {
@@ -448,6 +449,11 @@ export const TRANSLATIONS: Record<Lang, SiteTranslations> = {
       p2: "We specialize in hospitality, real estate, private capital, and high-touch service industries where every missed message is lost revenue.",
       location:
         "Based in Cartagena, Colombia — deploying worldwide for clients across the Americas, Europe, and the Middle East.",
+      stats: [
+        { value: "12", suffix: "+", label: "Industries Served" },
+        { value: "3", suffix: "", label: "Continents Deployed" },
+        { value: "24", suffix: "/7", label: "Always-On Autonomy" },
+      ],
     },
 
     contact: {
@@ -702,6 +708,11 @@ export const TRANSLATIONS: Record<Lang, SiteTranslations> = {
       p2: "Nos especializamos en hospitalidad, bienes raíces, capital privado e industrias de servicio de alto contacto, donde cada mensaje perdido es ingreso perdido.",
       location:
         "Con base en Cartagena, Colombia — desplegando en todo el mundo para clientes en las Américas, Europa y Medio Oriente.",
+      stats: [
+        { value: "12", suffix: "+", label: "Industrias Atendidas" },
+        { value: "3", suffix: "", label: "Continentes Desplegados" },
+        { value: "24", suffix: "/7", label: "Autonomía Siempre Activa" },
+      ],
     },
 
     contact: {

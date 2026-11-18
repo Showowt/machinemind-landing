@@ -682,21 +682,31 @@ export default function Home() {
 
       {/* ═══ ABOUT ═══ */}
       <section id="about" className="section-dark">
-        <div className="section-inner about-grid">
-          <div className="about-left reveal-up">
-            <p className="eyebrow">{t.about.eyebrow}</p>
-            <h2>{t.about.headingPrefix} <em>{t.about.headingItalic1}</em>{t.about.headingMiddle} <em>{t.about.headingItalic2}</em>.</h2>
-          </div>
-          <div className="about-right reveal-up">
-            <p className="about-founder">{t.about.founder}</p>
-            <p>{t.about.p1}</p>
-            <p>{t.about.p2}</p>
-            <p className="about-location">{t.about.location}</p>
-            <div className="stack-tags">
-              {['Next.js 16', 'TypeScript', 'Supabase', 'Claude AI', 'Twilio', 'Vercel', 'GSAP', 'Three.js'].map(tag => (
-                <span key={tag} className="stack-tag">{tag}</span>
-              ))}
+        <div className="section-inner">
+          <div className="about-grid">
+            <div className="about-left reveal-up">
+              <p className="eyebrow">{t.about.eyebrow}</p>
+              <h2>{t.about.headingPrefix} <em>{t.about.headingItalic1}</em>{t.about.headingMiddle} <em>{t.about.headingItalic2}</em>.</h2>
             </div>
+            <div className="about-right reveal-up">
+              <p className="about-founder">{t.about.founder}</p>
+              <p>{t.about.p1}</p>
+              <p>{t.about.p2}</p>
+              <p className="about-location">{t.about.location}</p>
+              <div className="stack-tags">
+                {['Next.js 16', 'TypeScript', 'Supabase', 'Claude AI', 'Twilio', 'Vercel', 'GSAP', 'Three.js'].map(tag => (
+                  <span key={tag} className="stack-tag">{tag}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="about-stats reveal-up">
+            {t.about.stats.map((s, i) => (
+              <div key={i} className="about-stat">
+                <span className="about-stat-value counter" data-target={s.value} data-suffix={s.suffix}>0</span>
+                <span className="about-stat-label">{s.label}</span>
+              </div>
+            ))}
           </div>
         </div>
       </section>
@@ -995,6 +1005,12 @@ section[id]{scroll-margin-top:calc(var(--mm-ib-h,0px) + 72px)}
 .stack-tags{display:flex;flex-wrap:wrap;gap:8px;margin-top:28px}
 .stack-tag{font-size:9px;letter-spacing:.15em;text-transform:uppercase;padding:8px 14px;border:1px solid var(--gb);color:var(--dim);transition:all .3s}
 .stack-tag:hover{border-color:var(--gold);color:var(--gold)}
+.about-stats{display:grid;grid-template-columns:repeat(3,1fr);margin-top:72px;border-top:1px solid var(--gb)}
+.about-stat{padding:40px 24px 0;text-align:center;border-right:1px solid var(--gb)}
+.about-stat:last-child{border-right:none}
+.about-stat-value{font-family:var(--fd);font-size:clamp(34px,4.5vw,52px);font-weight:600;color:var(--gold);display:block;line-height:1}
+.about-stat-label{font-size:9px;letter-spacing:.35em;text-transform:uppercase;color:var(--dim);margin-top:14px;display:block}
+@media(max-width:768px){.about-stats{margin-top:48px}.about-stat{padding:28px 8px 0}.about-stat-value{font-size:28px}.about-stat-label{letter-spacing:.18em;font-size:8px}}
 
 /* ═══ CONTACT ═══ */
 .contact-section{text-align:center}
