@@ -35,7 +35,11 @@ const nextConfig: NextConfig = {
   // This (case-insensitive) rewrite only runs after no page matched, so "/web"
   // itself is untouched while "/Web" and "/WEB" serve the same page.
   async rewrites() {
-    return [{ source: "/web", destination: "/web" }];
+    return [
+      { source: "/web", destination: "/web" },
+      // Clean URL for the self-contained Operator demo landing (static file in /public/demo)
+      { source: "/demo", destination: "/demo/index.html" },
+    ];
   },
   // CORS headers for API routes
   async headers() {

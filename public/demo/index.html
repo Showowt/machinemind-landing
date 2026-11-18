@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MachineMind — Su recepcionista de IA en WhatsApp | Reservas 24/7</title>
+<meta name="description" content="Un asistente de inteligencia artificial que atiende su WhatsApp, reserva citas y reduce las ausencias — las 24 horas, en su propio número. Pruebe el demo en vivo." />
+
+<!-- Open Graph -->
+<meta property="og:title" content="MachineMind — Su recepcionista de IA en WhatsApp" />
+<meta property="og:description" content="Reserva citas 24/7 en su WhatsApp. Menos ausencias. Sus datos, su número, sin permanencia. Pruebe el demo en vivo." />
+<meta property="og:type" content="website" />
+<meta property="og:image" content="./logo-stacked.png" />
+<meta name="theme-color" content="#06060a" />
+<link rel="icon" href="./logo-stacked.png" />
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://api.fontshare.com" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://api.fontshare.com/v2/css?f[]=clash-display@400,500,600,700&f[]=satoshi@400,500,700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+
+<style>
+:root{
+  --void:#06060a; --surface:#0a0a11; --elevated:#0e0e17;
+  --glass:rgba(255,255,255,.03); --line:rgba(255,255,255,.08);
+  --cyan:#00e5ff; --gold:#c9a96e; --white:#e8e0d0;
+  --muted:rgba(232,224,208,.55); --dim:rgba(232,224,208,.32);
+  --wa:#25d366;
+  --fd:"Clash Display",system-ui,sans-serif;
+  --fb:"Satoshi",system-ui,-apple-system,sans-serif;
+  --fs:"Instrument Serif",Georgia,serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:var(--fb);background:var(--void);color:var(--white);line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:inherit;text-decoration:none}
+img{max-width:100%;display:block}
+.wrap{width:100%;max-width:1140px;margin:0 auto;padding:0 1.4rem}
+section{position:relative}
+
+/* skip link + focus */
+.skip{position:absolute;left:-999px;top:0;background:var(--cyan);color:#000;padding:.6rem 1rem;z-index:2000}
+.skip:focus{left:0}
+a:focus-visible,button:focus-visible{outline:2px solid var(--cyan);outline-offset:3px}
+
+/* cinematic overlays */
+.grain{position:fixed;inset:0;pointer-events:none;z-index:1000;opacity:.03;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+.vignette{position:fixed;inset:0;pointer-events:none;z-index:0;
+  background:radial-gradient(ellipse 130% 115% at 50% 40%,transparent 80%,rgba(0,0,0,.35) 100%)}
+main,header.nav,footer{position:relative;z-index:5}
+.progress{position:fixed;left:0;bottom:0;height:3px;width:0;z-index:1001;
+  background:linear-gradient(90deg,var(--gold),var(--cyan));transition:width .1s linear}
+
+/* nav */
+header.nav{position:fixed;top:0;left:0;right:0;z-index:900;
+  background:rgba(6,6,10,.72);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+.nav-in{display:flex;align-items:center;justify-content:space-between;height:64px}
+.brand{display:flex;align-items:center;gap:.7rem}
+.brand img{height:30px;width:auto;-webkit-mask-image:linear-gradient(90deg,#000 88%,transparent 100%);mask-image:linear-gradient(90deg,#000 88%,transparent 100%)}
+.brand b{font-family:var(--fb);font-size:.64rem;letter-spacing:.24em;text-transform:uppercase;color:var(--dim);border-left:1px solid var(--line);padding-left:.7rem}
+.nav-cta{display:flex;align-items:center;gap:1rem}
+.nav-link{font-size:.9rem;color:var(--muted)}
+.nav-link:hover{color:var(--cyan)}
+
+/* buttons */
+.btn{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:.55rem;
+  font-family:var(--fb);font-weight:600;font-size:.94rem;letter-spacing:.01em;
+  padding:.85rem 1.5rem;border:1px solid var(--cyan);color:var(--cyan);background:transparent;
+  cursor:pointer;transition:color .25s ease;z-index:0}
+.btn::before{content:"";position:absolute;inset:0;background:var(--cyan);transform:translateY(101%);transition:transform .25s ease;z-index:-1}
+.btn:hover{color:var(--void)} .btn:hover::before{transform:translateY(0)}
+.btn.gold{border-color:var(--gold);color:var(--gold)} .btn.gold::before{background:var(--gold)}
+.btn.wa{border-color:var(--wa);color:var(--wa)} .btn.wa::before{background:var(--wa)}
+.btn.solid{background:var(--cyan);color:#00171b;border-color:var(--cyan)} .btn.solid::before{background:#7ff0ff}
+.btn.sm{padding:.62rem 1.05rem;font-size:.86rem}
+
+/* Reveal: default is FULLY VISIBLE. Animation only applies when .js is set
+   (added synchronously in <head>), and a hard timeout guarantees visibility. */
+.reveal{opacity:1;transform:none}
+.js .reveal{opacity:0;transform:translateY(34px);transition:opacity .7s ease,transform .7s ease}
+.js .reveal.in{opacity:1;transform:none}
+
+/* hero */
+.hero{padding:9rem 0 5rem;text-align:center;
+  background:radial-gradient(circle at 50% 0%,rgba(0,229,255,.08) 0%,transparent 55%),var(--void)}
+.eyebrow{display:inline-block;font-size:.7rem;letter-spacing:.26em;text-transform:uppercase;color:var(--cyan);
+  border:1px solid var(--line);padding:.42rem 1rem;margin-bottom:1.6rem}
+.hero h1{font-family:var(--fd);font-weight:600;font-size:clamp(2.1rem,5.6vw,4rem);line-height:1.03;letter-spacing:-.015em;max-width:16ch;margin:0 auto 1.3rem}
+.hero h1 .s{font-family:var(--fs);font-style:italic;font-weight:400;color:var(--cyan)}
+.hero p.lead{font-size:clamp(1.05rem,2.2vw,1.28rem);color:var(--muted);max-width:56ch;margin:0 auto 2.2rem}
+.hero .cta-row{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap}
+.trust-row{display:flex;gap:1.6rem;justify-content:center;flex-wrap:wrap;margin-top:2.6rem;color:var(--dim);font-size:.82rem}
+.trust-row span{display:inline-flex;align-items:center;gap:.45rem}
+.trust-row .dot{color:var(--cyan)}
+
+/* section heading */
+.sec{padding:5.5rem 0}
+.sec-tag{font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--cyan);margin-bottom:.9rem}
+.sec h2{font-family:var(--fd);font-weight:600;font-size:clamp(1.7rem,3.8vw,2.7rem);line-height:1.08;letter-spacing:-.01em;max-width:22ch}
+.sec h2 .s{font-family:var(--fs);font-style:italic;font-weight:400;color:var(--gold)}
+.sec .sub{color:var(--muted);max-width:60ch;margin-top:1rem;font-size:1.02rem}
+
+/* problem strip */
+.problem{background:linear-gradient(180deg,var(--void),#080810)}
+.pain-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1.1rem;margin-top:2.6rem}
+.pain{border:1px solid var(--line);border-top:2px solid rgba(201,169,110,.5);padding:1.6rem;background:var(--glass)}
+.pain h3{font-family:var(--fd);font-weight:500;font-size:1.15rem;margin-bottom:.5rem;color:var(--white)}
+.pain p{color:var(--muted);font-size:.94rem}
+
+/* steps */
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:1.4rem;margin-top:3rem;counter-reset:s}
+.step{position:relative;padding:1.8rem;border:1px solid var(--line);background:var(--glass);counter-increment:s}
+.step::before{content:"0" counter(s);font-family:var(--fd);font-size:2.2rem;font-weight:600;color:var(--cyan);opacity:.9;display:block;margin-bottom:.7rem}
+.step h3{font-family:var(--fd);font-weight:500;font-size:1.2rem;margin-bottom:.5rem}
+.step p{color:var(--muted);font-size:.95rem}
+
+/* demo band */
+.demo{background:radial-gradient(circle at 80% 20%,rgba(0,229,255,.07),transparent 45%),#080810;text-align:center}
+.demo .card{border:1px solid var(--line);background:var(--surface);padding:3rem 2rem;position:relative;overflow:hidden}
+.demo .card::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent)}
+.demo h2{margin:0 auto}
+.demo .sub{margin:1rem auto 2rem}
+.demo .cta-row{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap}
+.demo .mock{display:flex;gap:.5rem;justify-content:center;flex-wrap:wrap;margin-top:2.4rem;font-family:var(--fb)}
+.chat-mini{width:min(360px,92vw);text-align:left;background:#0b141a;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.chat-mini .h{background:#202c33;padding:.7rem .9rem;display:flex;align-items:center;gap:.6rem;font-size:.86rem}
+.chat-mini .h .a{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#128c7e,#075e54);display:grid;place-items:center;font-size:.9rem}
+.chat-mini .b{padding:.9rem;display:flex;flex-direction:column;gap:.4rem}
+.bub{max-width:82%;padding:.5rem .7rem;border-radius:8px;font-size:.85rem;line-height:1.35}
+.bub.i{background:#202c33;align-self:flex-start;border-top-left-radius:2px}
+.bub.o{background:#005c4b;align-self:flex-end;border-top-right-radius:2px}
+
+/* features */
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:1.1rem;margin-top:3rem}
+.feat{padding:1.6rem;border:1px solid var(--line);background:var(--glass);border-top:2px solid transparent;transition:border-top-color .25s,transform .25s}
+.feat:hover{border-top-color:var(--cyan);transform:translateY(-3px)}
+.feat .ic{font-size:1.4rem;margin-bottom:.7rem;filter:grayscale(.1)}
+.feat h3{font-family:var(--fd);font-weight:500;font-size:1.08rem;margin-bottom:.4rem}
+.feat p{color:var(--muted);font-size:.92rem}
+
+/* ROI */
+.roi{background:linear-gradient(180deg,#080810,var(--void))}
+.roi-box{border:1px solid var(--line);background:var(--surface);padding:2.4rem;margin-top:2.4rem;display:grid;grid-template-columns:1fr 1fr;gap:2rem}
+.roi-box .big{font-family:var(--fd);font-weight:600;font-size:clamp(2.2rem,6vw,3.4rem);color:var(--cyan);line-height:1}
+.roi-box .lbl{color:var(--muted);font-size:.9rem;margin-top:.5rem}
+.roi-box .vs{border-left:1px solid var(--line);padding-left:2rem}
+.roi-note{color:var(--dim);font-size:.86rem;margin-top:1.2rem}
+
+/* pricing */
+.price-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.3rem;margin-top:3rem}
+.price{padding:2rem;border:1px solid var(--line);background:var(--glass);display:flex;flex-direction:column}
+.price.feature{border-color:rgba(0,229,255,.4);background:linear-gradient(180deg,rgba(0,229,255,.05),var(--glass))}
+.price .name{font-family:var(--fb);font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-size:.78rem;color:var(--cyan)}
+.price .amt{font-family:var(--fd);font-weight:600;font-size:2.4rem;margin:.6rem 0 .2rem}
+.price .amt small{font-size:.9rem;color:var(--muted);font-weight:400}
+.price .delivery{color:var(--gold);font-size:.85rem;margin-bottom:1.1rem}
+.price ul{list-style:none;display:flex;flex-direction:column;gap:.55rem;margin:0 0 1.5rem;font-size:.92rem;color:var(--muted)}
+.price li{display:flex;gap:.55rem;align-items:flex-start}
+.price li::before{content:"✓";color:var(--cyan);font-weight:700}
+.price .btn{margin-top:auto;justify-content:center}
+.price-tag-badge{align-self:flex-start;font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:#00171b;background:var(--cyan);padding:.2rem .6rem;margin-bottom:.9rem}
+
+/* faq */
+.faq{margin-top:2.6rem;border-top:1px solid var(--line)}
+details{border-bottom:1px solid var(--line);padding:1.15rem .2rem}
+summary{font-family:var(--fd);font-weight:500;font-size:1.06rem;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:1rem}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";color:var(--cyan);font-size:1.4rem;transition:transform .2s}
+details[open] summary::after{transform:rotate(45deg)}
+details p{color:var(--muted);margin-top:.8rem;font-size:.96rem;max-width:70ch}
+
+/* trust */
+.trust{text-align:center;background:radial-gradient(circle at 50% 100%,rgba(201,169,110,.06),transparent 50%)}
+.trust-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1.1rem;margin-top:2.6rem}
+.tcard{padding:1.5rem;border:1px solid var(--line);background:var(--glass)}
+.tcard .ic{font-size:1.3rem;margin-bottom:.5rem}
+.tcard h3{font-family:var(--fd);font-weight:500;font-size:1rem;margin-bottom:.35rem}
+.tcard p{color:var(--muted);font-size:.88rem}
+
+/* final cta */
+.final{text-align:center;padding:6rem 0}
+.final h2{font-family:var(--fd);font-weight:600;font-size:clamp(1.9rem,4.5vw,3.1rem);line-height:1.05;max-width:20ch;margin:0 auto 1.2rem}
+.final h2 .s{font-family:var(--fs);font-style:italic;font-weight:400;color:var(--cyan)}
+.final p{color:var(--muted);max-width:52ch;margin:0 auto 2.2rem}
+.final .cta-row{display:flex;gap:1rem;justify-content:center;flex-wrap:wrap}
+
+/* footer */
+footer{border-top:1px solid var(--line);padding:3rem 0 2.4rem;color:var(--muted)}
+.foot-in{display:flex;justify-content:space-between;gap:2rem;flex-wrap:wrap;align-items:flex-start}
+.foot-in img{height:30px;-webkit-mask-image:linear-gradient(90deg,#000 88%,transparent 100%);mask-image:linear-gradient(90deg,#000 88%,transparent 100%)}
+.foot-links{display:flex;gap:1.4rem;flex-wrap:wrap;font-size:.9rem}
+.foot-links a:hover{color:var(--cyan)}
+.foot-legal{margin-top:2rem;font-size:.78rem;color:var(--dim);max-width:70ch}
+
+@media (max-width:640px){
+  .roi-box{grid-template-columns:1fr;gap:1.4rem}
+  .roi-box .vs{border-left:none;border-top:1px solid var(--line);padding-left:0;padding-top:1.4rem}
+  .nav-cta .nav-link{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .js .reveal{opacity:1!important;transform:none!important}
+  *{transition:none!important}
+}
+</style>
+<script>
+  // Set synchronously so reveal start-state applies before first paint (no flash).
+  // Only enable the hidden start-state if motion is allowed.
+  if (!window.matchMedia || !window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    document.documentElement.className += ' js';
+  }
+</script>
+</head>
+<body>
+<a class="skip" href="#demo">Saltar al demo</a>
+<div class="grain" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
+<div class="progress" id="progress" aria-hidden="true"></div>
+
+<!-- NAV -->
+<header class="nav">
+  <div class="wrap nav-in">
+    <a class="brand" href="/" aria-label="MachineMind Consulting — Inicio">
+      <img src="/logo-horizontal.png" alt="MachineMind Consulting" />
+      <b>Operator</b>
+    </a>
+    <div class="nav-cta">
+      <a class="nav-link" href="/">Inicio</a>
+      <a class="nav-link" href="#como-funciona">Cómo funciona</a>
+      <a class="nav-link" href="#precios">Precios</a>
+      <a class="btn sm" href="https://operator-demo-phi.vercel.app/chat" target="_blank" rel="noopener">Ver demo en vivo</a>
+    </div>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- HERO -->
+<section class="hero">
+  <div class="wrap">
+    <span class="eyebrow reveal">Recepcionista de IA · WhatsApp</span>
+    <h1 class="reveal">Cada mensaje sin responder es una <span class="s">reserva perdida</span>.</h1>
+    <p class="lead reveal">MachineMind pone un asistente de inteligencia artificial en el WhatsApp de su negocio. Responde al instante, muestra horarios reales, agenda la cita y reduce las ausencias — <strong>las 24 horas, los 7 días</strong>. En su mismo número. Sin que el cliente descargue nada.</p>
+    <div class="cta-row reveal">
+      <a class="btn solid" href="https://operator-demo-phi.vercel.app/chat" target="_blank" rel="noopener">Probar el demo en vivo →</a>
+      <a class="btn wa" href="https://wa.me/19542790889?text=Hola%2C%20vi%20el%20demo%20de%20MachineMind%20y%20quiero%20saber%20m%C3%A1s." target="_blank" rel="noopener">Hablar por WhatsApp</a>
+    </div>
+    <div class="trust-row reveal">
+      <span><span class="dot">●</span> Su número, sus datos</span>
+      <span><span class="dot">●</span> Sin permanencia</span>
+      <span><span class="dot">●</span> Entrega en 1 semana</span>
+      <span><span class="dot">●</span> Español + Inglés</span>
+    </div>
+  </div>
+</section>
+
+<!-- PROBLEM -->
+<section class="sec problem">
+  <div class="wrap">
+    <p class="sec-tag reveal">El costo de no contestar</p>
+    <h2 class="reveal">Sus clientes escriben cuando usted <span class="s">no puede responder</span>.</h2>
+    <p class="sub reveal">De noche, en hora pico, en su día libre. Si no reciben respuesta en minutos, reservan en otro lado. No es falta de interés — es falta de tiempo. Eso es exactamente lo que resolvemos.</p>
+    <div class="pain-grid">
+      <div class="pain reveal"><h3>Fuera de horario</h3><p>La mayoría de las consultas llegan cuando el local está cerrado o el equipo está ocupado atendiendo. Sin respuesta, el cliente se va.</p></div>
+      <div class="pain reveal"><h3>Ausencias (no-shows)</h3><p>Citas que nadie confirma y que se pierden. Un recordatorio automático a tiempo recupera esa silla vacía.</p></div>
+      <div class="pain reveal"><h3>Agenda en la cabeza</h3><p>Reservas en papel, en notas, en tres chats distintos. Dobles reservas y confusión que cuestan dinero y reputación.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="sec" id="como-funciona">
+  <div class="wrap">
+    <p class="sec-tag reveal">Cómo funciona</p>
+    <h2 class="reveal">Tres pasos. <span class="s">Cero</span> fricción para su cliente.</h2>
+    <div class="steps">
+      <div class="step reveal"><h3>El cliente escribe</h3><p>A su WhatsApp de siempre. No hay app nueva, no hay formularios. Escribe como le escribiría a un amigo.</p></div>
+      <div class="step reveal"><h3>La IA atiende y reserva</h3><p>Entiende el pedido, muestra horarios reales disponibles, confirma los detalles y agenda la cita — en segundos, en español natural.</p></div>
+      <div class="step reveal"><h3>Usted lo ve todo</h3><p>Cada reserva aparece en su panel en vivo, con el historial del cliente. Recordatorios automáticos salen solos. Usted solo atiende.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- LIVE DEMO -->
+<section class="sec demo" id="demo">
+  <div class="wrap">
+    <div class="card reveal">
+      <p class="sec-tag">No nos crea — pruébelo</p>
+      <h2>Es un demo real, <span class="s">no un video</span>.</h2>
+      <p class="sub">Abra el chat, pida una cita como lo haría un cliente, y véala aparecer en el panel del dueño al instante. Funciona ahora mismo, desde su teléfono.</p>
+      <div class="cta-row">
+        <a class="btn solid" href="https://operator-demo-phi.vercel.app/chat" target="_blank" rel="noopener">Reservar como cliente →</a>
+        <a class="btn" href="https://operator-demo-phi.vercel.app/dashboard" target="_blank" rel="noopener">Ver el panel del dueño</a>
+      </div>
+      <div class="mock" aria-hidden="true">
+        <div class="chat-mini">
+          <div class="h"><div class="a">💈</div><div><div style="font-weight:600">Barbería El Corte</div><div style="font-size:.7rem;color:#8696a0">en línea</div></div></div>
+          <div class="b">
+            <div class="bub o">Hola, quiero corte + barba el sábado con Marco</div>
+            <div class="bub i">¡Con gusto! Tengo disponible el sábado a las 9:00, 9:15 o 10:00 AM con Marco. ¿Cuál le queda mejor?</div>
+            <div class="bub o">10:00 AM, soy Andrea</div>
+            <div class="bub i">✅ Cita confirmada: Corte + barba con Marco, sábado 10:00 AM. ¡Le esperamos!</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="sec">
+  <div class="wrap">
+    <p class="sec-tag reveal">Todo cubierto</p>
+    <h2 class="reveal">Una recepcionista que <span class="s">nunca</span> duerme, nunca falla.</h2>
+    <div class="feat-grid">
+      <div class="feat reveal"><div class="ic">🕐</div><h3>Reservas 24/7</h3><p>Atiende a cualquier hora, en segundos, incluso mientras usted trabaja o descansa.</p></div>
+      <div class="feat reveal"><div class="ic">🔔</div><h3>Recordatorios automáticos</h3><p>Avisos a –24h y –2h que confirman la cita y reducen las ausencias.</p></div>
+      <div class="feat reveal"><div class="ic">📅</div><h3>Sin dobles reservas</h3><p>La agenda es única y en tiempo real. El sistema nunca agenda dos citas en el mismo horario.</p></div>
+      <div class="feat reveal"><div class="ic">📇</div><h3>Su base de clientes</h3><p>Cada cliente que escribe queda registrado — nombre, contacto, historial. Suyo. Exportable cuando quiera.</p></div>
+      <div class="feat reveal"><div class="ic">🙋</div><h3>Traspaso a una persona</h3><p>Si el cliente pide hablar con alguien o surge una queja, la IA lo escala a su equipo al instante.</p></div>
+      <div class="feat reveal"><div class="ic">🌎</div><h3>Español e inglés</h3><p>Atiende a locales y a turistas en su idioma, con un tono cálido y profesional.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ROI -->
+<section class="sec roi">
+  <div class="wrap">
+    <p class="sec-tag reveal">La cuenta simple</p>
+    <h2 class="reveal">Se paga solo con las reservas que <span class="s">hoy se le escapan</span>.</h2>
+    <div class="roi-box reveal">
+      <div>
+        <div class="big">1</div>
+        <div class="lbl">reserva recuperada al mes ya cubre buena parte del costo. Todo lo demás es ganancia que antes se perdía.</div>
+      </div>
+      <div class="vs">
+        <div class="big">–30%</div>
+        <div class="lbl">menos ausencias es un objetivo realista con recordatorios automáticos. Cada silla vacía que se llena es dinero directo a caja.</div>
+      </div>
+    </div>
+    <p class="roi-note reveal">Le ayudamos a medir su propio número antes y después. Sin promesas infladas — datos reales de su negocio.</p>
+  </div>
+</section>
+
+<!-- PRICING -->
+<section class="sec" id="precios">
+  <div class="wrap">
+    <p class="sec-tag reveal">Precios claros</p>
+    <h2 class="reveal">Sin letra chica. <span class="s">Sin</span> sorpresas.</h2>
+    <p class="sub reveal">Un precio de arranque, entrega en una semana, y nosotros nos encargamos de todo el montaje técnico — incluida la verificación con WhatsApp.</p>
+    <div class="price-grid">
+      <div class="price feature reveal">
+        <span class="price-tag-badge">Más popular</span>
+        <div class="name">Asistente de IA · WhatsApp</div>
+        <div class="amt">$490 <small>arranque</small></div>
+        <div class="delivery">Entrega en 1 semana</div>
+        <ul>
+          <li>Asistente de IA en su WhatsApp</li>
+          <li>Reservas, reprogramación y cancelación</li>
+          <li>Recordatorios automáticos anti-ausencias</li>
+          <li>Panel del dueño en vivo</li>
+          <li>Su base de clientes, exportable</li>
+          <li>Montaje y verificación de WhatsApp incluidos</li>
+        </ul>
+        <a class="btn solid" href="https://wa.me/19542790889?text=Quiero%20el%20Asistente%20de%20IA%20para%20mi%20WhatsApp.%20%C2%BFC%C3%B3mo%20empezamos%3F" target="_blank" rel="noopener">Empezar ahora</a>
+      </div>
+      <div class="price reveal">
+        <div class="name">Base Digital</div>
+        <div class="amt">$1,100</div>
+        <div class="delivery">Sitio + WhatsApp IA + 30 días de soporte</div>
+        <ul>
+          <li>Todo lo del Asistente de IA</li>
+          <li>Sitio web cinematográfico a la medida</li>
+          <li>Integración de reservas al sitio</li>
+          <li>30 días de soporte y ajustes</li>
+        </ul>
+        <a class="btn" href="https://wa.me/19542790889?text=Me%20interesa%20la%20Base%20Digital%20(sitio%20%2B%20WhatsApp%20IA)." target="_blank" rel="noopener">Consultar</a>
+      </div>
+      <div class="price reveal">
+        <div class="name">A la medida</div>
+        <div class="amt">Personalizado</div>
+        <div class="delivery">Restaurante · Hotel · Tours · Clínica</div>
+        <ul>
+          <li>Motor de reservas para su sector</li>
+          <li>Integraciones (pagos, facturación, CRM)</li>
+          <li>Multi-sede y marca blanca</li>
+          <li>Acompañamiento dedicado</li>
+        </ul>
+        <a class="btn" href="https://wa.me/19542790889?text=Quiero%20una%20soluci%C3%B3n%20a%20la%20medida%20para%20mi%20negocio." target="_blank" rel="noopener">Hablar con el equipo</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="sec">
+  <div class="wrap">
+    <p class="sec-tag reveal">Preguntas honestas</p>
+    <h2 class="reveal">Lo que todo dueño <span class="s">se pregunta</span>.</h2>
+    <div class="faq reveal">
+      <details><summary>¿De quién son los datos de mis clientes?</summary><p>Suyos. Siempre. Su base de contactos e historial le pertenece y puede exportarla cuando quiera, en cualquier momento. Nosotros no la vendemos ni la usamos para otra cosa.</p></details>
+      <details><summary>¿Mi cliente tiene que descargar una app?</summary><p>No. Todo pasa en el WhatsApp que ya usa. Su cliente simplemente escribe, como le escribiría a cualquier persona. Cero fricción.</p></details>
+      <details><summary>¿Y si el cliente quiere hablar con una persona?</summary><p>La IA lo detecta y traspasa la conversación a su equipo de inmediato — igual que ante una queja o una urgencia. La tecnología atiende lo repetitivo; las personas atienden lo que importa.</p></details>
+      <details><summary>¿Uso mi número actual? ¿Es complicado montarlo?</summary><p>Trabajamos sobre el número de su negocio y nosotros hacemos todo el montaje técnico, incluida la verificación oficial con WhatsApp. Usted no toca código ni configuraciones.</p></details>
+      <details><summary>¿Cuánto tarda en estar funcionando?</summary><p>El asistente base queda listo en aproximadamente una semana. Parte de ese tiempo es la verificación con Meta/WhatsApp, que es un trámite — nosotros lo gestionamos por usted.</p></details>
+      <details><summary>¿Hay permanencia o contratos largos?</summary><p>No. Sin ataduras. Si en algún momento decide irse, se lleva sus datos. Preferimos que se quede porque funciona, no porque esté amarrado.</p></details>
+      <details><summary>¿Cómo sé que no es un invento?</summary><p>Por eso el demo es real y público. Pruébelo ahora mismo desde su teléfono, reserve una cita y véala aparecer en el panel. Lo que ve es exactamente lo que su negocio tendría.</p></details>
+    </div>
+  </div>
+</section>
+
+<!-- TRUST -->
+<section class="sec trust">
+  <div class="wrap">
+    <p class="sec-tag reveal">Por qué confiar</p>
+    <h2 class="reveal" style="margin:0 auto">Hecho para hospitalidad <span class="s">en Latinoamérica</span>.</h2>
+    <div class="trust-grid">
+      <div class="tcard reveal"><div class="ic">🔒</div><h3>Sus datos protegidos</h3><p>Aislamiento por negocio y buenas prácticas de seguridad en cada capa.</p></div>
+      <div class="tcard reveal"><div class="ic">🤝</div><h3>Sin permanencia</h3><p>Se queda porque le sirve. Exporta y se va cuando quiera.</p></div>
+      <div class="tcard reveal"><div class="ic">⚙️</div><h3>Nosotros montamos todo</h3><p>Verificación de WhatsApp, configuración y puesta en marcha incluidas.</p></div>
+      <div class="tcard reveal"><div class="ic">💬</div><h3>Soporte real</h3><p>Personas de verdad, por WhatsApp, hablando su idioma.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final">
+  <div class="wrap">
+    <h2 class="reveal">Deje de perder reservas <span class="s">esta misma noche</span>.</h2>
+    <p class="reveal">Pruebe el demo en 30 segundos. Si le convence — y le va a convencer — lo tenemos funcionando en su negocio en una semana.</p>
+    <div class="cta-row reveal">
+      <a class="btn solid" href="https://operator-demo-phi.vercel.app/chat" target="_blank" rel="noopener">Probar el demo en vivo →</a>
+      <a class="btn wa" href="https://wa.me/19542790889?text=Vi%20el%20demo%20y%20quiero%20MachineMind%20para%20mi%20negocio." target="_blank" rel="noopener">Quiero esto para mi negocio</a>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap foot-in">
+    <div>
+      <img src="/logo-horizontal.png" alt="MachineMind Consulting" />
+      <p style="margin-top:.9rem;max-width:34ch;font-size:.9rem">Automatización con IA para hospitalidad y negocios en Latinoamérica.</p>
+    </div>
+    <div class="foot-links">
+      <a href="#como-funciona">Cómo funciona</a>
+      <a href="#precios">Precios</a>
+      <a href="https://operator-demo-phi.vercel.app/chat" target="_blank" rel="noopener">Demo en vivo</a>
+      <a href="https://wa.me/19542790889" target="_blank" rel="noopener">WhatsApp</a>
+    </div>
+  </div>
+  <div class="wrap">
+    <p class="foot-legal">MachineMind Consulting · Cartagena, Colombia · El Salvador. WhatsApp es una marca de Meta Platforms, Inc.; MachineMind no está afiliado a Meta. El demo mostrado usa un negocio ficticio con fines ilustrativos.</p>
+  </div>
+</footer>
+
+<!-- No external JS dependencies. Reveal + progress bar are self-contained. -->
+<script>
+(function(){
+  function revealAll(){
+    document.querySelectorAll('.reveal').forEach(function(el){ el.classList.add('in'); });
+  }
+  // Hard safety net: no matter what, everything is visible within 2.5s.
+  setTimeout(revealAll, 2500);
+
+  function init(){
+    // scroll progress bar
+    var bar = document.getElementById('progress');
+    if (bar){
+      var onScroll = function(){
+        var h = document.documentElement;
+        var max = h.scrollHeight - h.clientHeight;
+        bar.style.width = (max > 0 ? (h.scrollTop / max) * 100 : 0) + '%';
+      };
+      window.addEventListener('scroll', onScroll, {passive:true}); onScroll();
+    }
+
+    if (!('IntersectionObserver' in window)){ revealAll(); return; }
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if (e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); }
+      });
+    }, { threshold: 0.06, rootMargin: '0px 0px -6% 0px' });
+    document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else { init(); }
+})();
+</script>
+</body>
+</html>
